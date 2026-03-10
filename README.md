@@ -1,359 +1,164 @@
-# MS Cinema
+# MS Cinema - Microservices Ticket Booking Platform
 
-REST API authentication & authorization using JWT (JSON Web Tokens) with Spring Boot 2.6.4 and Spring Security.
+Enterprise-grade cinema ticket booking system built on Spring Boot 3.4.3 microservices with Kafka event streaming, JWT authentication, Stripe payments, Redis caching, and comprehensive monitoring.
 
-**Current Version:** 0.0.1-SNAPSHOT
-**Java:** 21 LTS
-**Spring Boot:** 3.4.3
-**Database:** PostgreSQL 16
-**Docker:** Eclipse Temurin 21 JRE on Alpine Linux
-**License:** Proprietary
+**Version:** 0.0.1-SNAPSHOT | **Java:** 21 LTS | **Spring Boot:** 3.4.3 | **Spring Cloud:** 2024.0.1
+
+## Architecture Overview
+
+**11 Maven modules:**
+- 5 Business Services (auth, movie, booking, payment, notification)
+- 3 Infrastructure Services (eureka-server, config-server, api-gateway)
+- 2 Shared Libraries (jwt-auth starter, kafka-events)
+- 1 Frontend (Angular 18)
 
 ## Quick Start
 
 ### Prerequisites
-- Java 21 LTS (or Docker for containerized setup)
+- Java 21 LTS
 - Maven 3.8+
-- PostgreSQL 16 (or use docker-compose for automated setup)
+- Docker & Docker Compose (recommended)
 
-### Build & Run
-
-**Local Setup:**
+### Option 1: Docker Compose (Recommended)
 ```bash
-# Set database credentials in src/main/resources/application.yml
-# Default: postgres/123456 at localhost:5432/testdb
-
-mvn clean install
-mvn spring-boot:run
-```
-
-**Docker Compose:**
-```bash
-# Starts PostgreSQL (5432) + API (8080) with network bridge
 docker-compose up --build
+# Starts: PostgreSQL, Kafka, Redis, Prometheus, Grafana, Loki, all 8 services
 ```
 
-Server runs on `http://localhost:8080`
+### Option 2: Local Setup
+```bash
+# Start infrastructure (PostgreSQL, Kafka, Redis)
+docker-compose up postgres kafka redis
+
+# In separate terminals, build & run each service:
+mvn -pl eureka-server spring-boot:run           # port 8761
+mvn -pl config-server spring-boot:run           # port 8888
+mvn -pl api-gateway spring-boot:run             # port 8080
+mvn -pl auth-service spring-boot:run            # port 8081
+mvn -pl movie-service spring-boot:run           # port 8082
+mvn -pl booking-service spring-boot:run         # port 8083
+mvn -pl payment-service spring-boot:run         # port 8084
+mvn -pl notification-service spring-boot:run    # port 8085
+```
+
+## Services at a Glance
+
+| Service | Port | Purpose | Key Features |
+|---------|------|---------|--------------|
+| eureka-server | 8761 | Service discovery | Dynamic registration |
+| config-server | 8888 | Centralized config | Git/classpath profiles |
+| api-gateway | 8080 | Request routing | OpenAPI aggregation, logging |
+| auth-service | 8081 | Authentication | JWT, email activation, account lockout |
+| movie-service | 8082 | Movie/theater data | Showtimes, auto seat grids |
+| booking-service | 8083 | Seat reservation | Redis locking, lifecycle states |
+| payment-service | 8084 | Payment processing | Stripe, webhook verification |
+| notification-service | 8085 | Email notifications | Kafka consumer, Redis dedup |
+| cinema-frontend | 4200→80 | Web UI | Angular 18, Material, Stripe.js |
 
 ## API Documentation
 
-### Interactive Swagger UI
+**Swagger UI:** http://localhost:8080/swagger-ui.html (aggregated by gateway)
 
-All services expose OpenAPI 3.0 documentation via Swagger UI:
+**Individual service docs:**
+- Auth: http://localhost:8081/swagger-ui.html
+- Movie: http://localhost:8082/swagger-ui.html
+- Booking: http://localhost:8083/swagger-ui.html
+- Payment: http://localhost:8084/swagger-ui.html
 
-**Aggregated API Gateway (Primary):**
-- http://localhost:8080/swagger-ui.html — All service APIs combined
+See [docs/api-documentation.md](./docs/api-documentation.md) for full endpoint reference.
 
-**Individual Service Docs:**
-- auth-service: http://localhost:8081/swagger-ui.html
-- movie-service: http://localhost:8082/swagger-ui.html
-- booking-service: http://localhost:8083/swagger-ui.html
-- payment-service: http://localhost:8084/swagger-ui.html
+## Key Technologies
 
-Download OpenAPI JSON: `/v3/api-docs` on any service for tool integration.
+**Backend:** Spring Boot 3.4.3, Spring Cloud 2024.0.1, Spring Security, Spring Data JPA
 
-## API Reference
+**Data:** PostgreSQL 16 (per-service databases), Redis 7, Kafka 3.7 KRaft
 
-### Authentication Endpoints
+**Authentication:** JJWT 0.12.6 (HS512), JWT refresh rotation, Redis token blacklist
 
-**POST /api/auth/login** - Authenticate user
-```json
-Request:
-{
-  "email": "john@example.com",
-  "password": "password123"
-}
+**Payments:** Stripe (idempotency, webhook verification)
 
-Response (200 OK):
-{
-  "id": 1,
-  "token": "eyJhbGc...",
-  "refreshToken": "eyJhbGc...",
-  "email": "john@example.com",
-  "username": "john",
-  "name": "John Doe",
-  "roles": ["ROLE_USER"]
-}
+**Monitoring:** Prometheus (9090), Grafana (3000), Loki 3.0 (3100)
 
-Response (423 Locked):
-"Account is locked. Try again in X minutes."
-```
+**Frontend:** Angular 18, TypeScript 5.5, Material 18, Stripe.js 8.9
 
-Note: After 5 consecutive failed login attempts (configurable), the account is locked for 15 minutes. Successful login resets the failed attempt counter.
+## Database Schema
 
-**POST /api/auth/register** - Create new user
-```json
-Request:
-{
-  "username": "jane",
-  "password": "secure123",
-  "email": "jane@example.com",
-  "fullName": "Jane Doe",
-  "roles": [
-    {"name": "ROLE_USER"},
-    {"name": "ROLE_PM"}
-  ]
-}
+Each service has own database (auth→testdb, movie→moviedb, booking→bookingdb, payment→paymentdb):
 
-Response (200 OK):
-"User registered successfully! Please check your email to activate your account."
-```
+**auth-service:** users, roles, user_roles, refresh_tokens, password_reset_tokens, activation_tokens, blacklisted_tokens
 
-**GET /api/auth/activate** - Activate account via email link
-```
-Request:
-GET /api/auth/activate?token=<activation-token-from-email>
+**movie-service:** movies, theaters, seats, showtimes
 
-Response (200 OK):
-"Account activated successfully."
+**booking-service:** bookings, booking_seats
 
-Response (400 Bad Request):
-"Invalid or expired activation token."
-```
+**payment-service:** payments, payment_intents
 
-**POST /api/auth/resend-activation** - Resend activation email
-```json
-Request:
-{
-  "email": "jane@example.com"
-}
+## Kafka Event Flow
 
-Response (200 OK):
-"If the email exists and is not yet activated, a new activation link has been sent."
-```
+| Topic | Producer | Consumer | Events |
+|-------|----------|----------|--------|
+| movie-events | movie-service | (future) | MovieCreatedEvent, ShowtimeCreatedEvent |
+| payment-events | payment-service | booking-service | PaymentCompletedEvent, PaymentFailedEvent |
+| notification-events | auth-service | notification-service | NotificationRequestedEvent |
 
-**POST /api/auth/forgot-password** - Request password reset
-```json
-Request:
-{
-  "email": "jane@example.com"
-}
+Error handling: 3 retries, exponential backoff, DLT for failures.
 
-Response (200 OK):
-"If the email exists, a password reset link has been sent."
-```
+## Documentation
 
-**POST /api/auth/reset-password** - Reset password with token
-```json
-Request:
-{
-  "token": "reset-token-from-email",
-  "newPassword": "newSecure123"
-}
-
-Response (200 OK):
-"Password reset successful."
-```
-
-**POST /api/auth/refresh-token** - Get new access token
-```json
-Request:
-{
-  "refreshToken": "eyJhbGc..."
-}
-
-Response (200 OK):
-{
-  "accessToken": "eyJhbGc...",
-  "refreshToken": "eyJhbGc..."
-}
-```
-
-**POST /api/auth/logout** - Logout and blacklist token
-```
-Request Headers:
-Authorization: Bearer <token>
-
-Response (200 OK):
-"Logged out successfully."
-```
-
-### Protected Endpoints
-
-Add `Authorization: Bearer <token>` header to access protected resources.
-
-```bash
-curl -H "Authorization: Bearer eyJhbGc..." http://localhost:8080/api/protected
-```
-
-## Architecture
-
-**Stack:**
-- Spring Boot 3.4.3
-- Spring Security 6.x + JWT (JJWT 0.12.6: api, impl, jackson)
-- Spring Data JPA + Hibernate
-- PostgreSQL 16 (manual DDL)
-- Spring Mail (for password reset emails, jakarta.mail)
-- BCrypt password encoding
-- Lombok (BOM-managed, JDK 21 compatible)
-- Maven JAR packaging (streamlined deployment)
-- Eclipse Temurin JDK 21 Docker image
-
-**Security:**
-- Stateless JWT authentication with refresh tokens
-- HS512 signature algorithm
-- 15-minute access token expiration (900000 ms, configurable)
-- 7-day refresh token rotation on each use
-- JTI-based token blacklisting for logout
-- Password reset flow via email
-- Role-based access control (@PreAuthorize)
-- Account lockout after 5 failed login attempts (auto-unlocks after 15 minutes)
-- CORS enabled
-- CSRF disabled (appropriate for JWT API)
-
-**Authentication Flow:**
-1. User registers → account created with `active=false`, activation email sent
-2. User clicks activation link → GET /api/auth/activate?token=xxx → account activated
-3. User submits email + password → pre-auth check: account locked? → 423 if so
-4. AuthenticationManager validates credentials + checks `active` flag
-5. Failed credentials → increment `failedAttempts`; lock account if threshold reached
-6. Successful auth → reset `failedAttempts` to 0, clear `lockTime`
-7. Inactive accounts receive 401 "Account not activated"
-8. JwtService generates HS512 access token + refresh token
-9. Client stores both tokens, sends access token in Authorization header
-10. JwtAuthenticationFilter validates token on each request
-11. SecurityContext populated with UserDetails/roles
-12. On token expiration, client uses refresh token to obtain new pair
-13. Logout blacklists current token by JTI and deletes refresh token
+- [Project Overview & PDR](./docs/project-overview-pdr.md) — Phases & requirements
+- [Codebase Summary](./docs/codebase-summary.md) — Module structure & key classes
+- [Code Standards](./docs/code-standards.md) — Spring 3.x patterns, project conventions
+- [System Architecture](./docs/system-architecture.md) — Flows, data model, deployment
+- [API Documentation](./docs/api-documentation.md) — All endpoints & examples
+- [Deployment Guide](./docs/deployment-guide.md) — Docker, AWS, troubleshooting
+- [Project Roadmap](./docs/project-roadmap.md) — Phases & progress
 
 ## Configuration
 
-**src/main/resources/application.yml:**
-```yaml
-server.port: 8080                          # Server port
-spring.datasource.url: jdbc:postgresql://localhost:5432/testdb
-spring.data.redis.host: localhost          # Changed from spring.redis.host (SB 3.x)
-spring.data.redis.port: 6379               # Changed from spring.redis.port (SB 3.x)
-spring.mail.host: smtp.gmail.com           # SMTP server for password reset emails
-spring.mail.port: 587
-namnd.app.jwtSecret: ${JWT_SECRET:bezKoderSecretKey}  # Base64-encoded with env var
-namnd.app.jwtExpiration: 900000            # 15 minutes in milliseconds
-namnd.app.jwtRefreshExpiration: 604800000  # 7 days in milliseconds
-namnd.app.passwordResetBaseUrl: http://localhost:3000/reset-password
-namnd.app.activationBaseUrl: http://localhost:8080/api/auth/activate
-namnd.app.maxFailedAttempts: 5                    # Lock account after N failed logins
-namnd.app.lockDurationMs: 900000                  # Lock duration (default 15 minutes)
-```
-**Key Changes from Spring Boot 2.x to 3.x:**
-- `spring.redis.*` → `spring.data.redis.*` (naming convention)
-- All `javax.*` imports → `jakarta.*` namespace
-- JWT secret now supports Base64 encoding with env var override
+**Service Configuration:** `config-server` loads from `classpath:/config-repo/` + Git (if enabled)
 
-**Override via environment:**
+**Key Environment Variables:**
 ```bash
--Dnamnd.app.jwtSecret=your-secret-key
--Dnamnd.app.jwtExpiration=900000
--Dnamnd.app.jwtRefreshExpiration=604800000
--DMAIL_USERNAME=your-email@gmail.com
--DMAIL_PASSWORD=your-app-password
+JWT_SECRET=<base64-encoded-key>
+MAIL_USERNAME=<gmail-account>
+MAIL_PASSWORD=<gmail-app-password>
+STRIPE_SECRET_KEY=<stripe-secret>
+STRIPE_WEBHOOK_SECRET=<stripe-webhook-secret>
+KAFKA_BROKERS=localhost:9092
+REDIS_HOST=localhost
+REDIS_PORT=6379
 ```
 
-## Project Structure
-
-```
-src/main/java/com/namnd/cinema/
-├── CinemaAuthApplication.java          Main entry point
-├── config/
-│   ├── security/SecurityConfig.java   Filter chain, encoder, session policy
-│   ├── filter/JwtAuthenticationFilter.java  Token extraction & validation
-│   └── custom/CustomAccesDeniedHandler.java 403 error responses
-├── controller/
-│   └── AuthController.java            Login/register endpoints
-├── model/
-│   ├── User.java                      User entity
-│   ├── Role.java                      Role entity
-│   └── UserPrinciple.java             UserDetails adapter
-├── dto/
-│   ├── JwtResponseDto.java            Login response
-│   ├── RegisterDto.java               Registration request
-│   └── mapper/RegisterDtoMapper.java  DTO conversion
-├── service/
-│   ├── JwtService.java                Token generation/validation
-│   ├── UserService.java               Interface
-│   ├── RoleService.java               Interface
-│   └── impl/                          Service implementations
-└── repository/
-    ├── UserRepository.java            User data access
-    └── RoleRepository.java            Role data access
-```
-
-## Database
-
-**Schema:** PostgreSQL 13.1
-- **users** table: id, username, email (unique), password, full_name, active (boolean, default false)
-- **roles** table: id, name
-- **user_roles** junction: user_id (FK), role_id (FK)
-- **refresh_tokens** table: id, token, expiry_date, user_id (FK)
-- **password_reset_tokens** table: id, token, expiry_date, user_id (FK)
-- **activation_tokens** table: id, token (unique), expiry_date, user_id (FK), used (boolean)
-- **blacklisted_tokens** table: id, jti (JWT ID), expiry_date
-
-**Default Roles:** ROLE_USER, ROLE_PM, ROLE_ADMIN (from roles.sql)
-
-**Note:** Hibernate DDL auto is `create-drop` (for development) - enable `none` for production.
+See individual service `application.yml` for service-specific config.
 
 ## Testing
 
 ```bash
-mvn test
+mvn test                    # Unit tests
+mvn integration-test        # Integration tests
+mvn verify                  # Full verification
 ```
-
-## Documentation
-
-- [Project Overview & PDR](./docs/project-overview-pdr.md)
-- [Codebase Summary](./docs/codebase-summary.md)
-- [Code Standards](./docs/code-standards.md)
-- [System Architecture](./docs/system-architecture.md)
-- [Deployment Guide](./docs/deployment-guide.md)
-
-## Troubleshooting
-
-**Connection refused (database)**
-- Ensure PostgreSQL runs on localhost:5432
-- Check credentials in application.yml
-- Use docker-compose for automatic setup
-
-**401 Invalid token**
-- Access token expired? Default: 15 minutes - use refresh endpoint
-- Verify jwtSecret matches between server & client
-- Check Authorization header format: `Bearer <token>`
-- Token blacklisted (logged out)? Must re-login
-
-**403 Access denied**
-- User lacks required role? Check @PreAuthorize annotation
-- Default test roles: ROLE_USER, ROLE_PM, ROLE_ADMIN
-
-**Refresh token invalid**
-- Refresh token expired? Default: 7 days - must re-login
-- Refresh token already rotated? Obtain new pair from /api/auth/refresh-token
-- User logged out? Refresh token deleted - must re-login
-
-**401 Account not activated**
-- After registration, check inbox for activation email
-- Click the activation link (valid for 24 hours)
-- Use POST /api/auth/resend-activation with your email if link expired
-
-**Activation link not working**
-- Link valid for 24 hours - request a new one via POST /api/auth/resend-activation
-- Check ACTIVATION_BASE_URL environment variable
-- Verify MAIL_USERNAME and MAIL_PASSWORD for Gmail SMTP
-
-**Password reset link not working**
-- Check PASSWORD_RESET_BASE_URL environment variable
-- Verify MAIL_USERNAME and MAIL_PASSWORD for Gmail SMTP
-- Ensure email address exists in database
-
-**423 Account locked**
-- Account locked after 5 consecutive failed login attempts
-- Auto-unlocks after 15 minutes (configurable via `namnd.app.lockDurationMs`)
-- Lock duration shown in response: "Account is locked. Try again in X minutes."
-- Successful login resets the failed attempt counter
 
 ## Development
 
-[See development rules in .claude/rules/development-rules.md]
-
-- Follow kebab-case file naming
-- Keep code files under 200 lines (modularize if needed)
-- Run `mvn compile` before committing
+Follow [.claude/rules/development-rules.md](./.claude/rules/development-rules.md):
+- Kebab-case file naming
+- Keep code files <200 lines
+- Run `mvn clean compile` before commit
 - No secrets in git (use environment variables)
+
+## Troubleshooting
+
+**Services won't start:** Check `config-server` logs; ensure PostgreSQL/Kafka/Redis are running.
+
+**API returns 401:** JWT expired (use refresh token) or invalid secret; verify Authorization header.
+
+**Stripe webhook fails:** Check webhook secret in config-server; validate signature.
+
+**Booking fails:** Redis lock timeout (increase TTL) or seat already reserved; check booking-service logs.
+
+See [docs/deployment-troubleshooting.md](./docs/deployment-troubleshooting.md) for detailed troubleshooting.
+
+## License
+
+Proprietary

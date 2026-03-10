@@ -2,252 +2,165 @@
 
 **Project:** ms-cinema
 **Version:** 0.0.1-SNAPSHOT
-**Updated:** February 2026
+**Updated:** March 2026
 **Status:** Active Development
 
 ## Vision
 
-MS Cinema is a foundational authentication service providing stateless JWT-based authentication for Spring Boot applications. The roadmap focuses on progressing from a basic implementation to a robust, enterprise-ready authentication platform supporting microservices architectures.
+MS Cinema is a comprehensive cinema ticket booking platform built on Spring Boot 3.4.3 microservices. The roadmap progresses from single authentication service to a distributed system with event-driven notifications, payment processing, and production-grade observability.
 
 ## Roadmap Phases
 
-### Phase 0: Foundation (COMPLETE ✓)
+### Phase 1: Core Authentication (COMPLETE ✓)
 
 **Status:** Complete
 **Timeline:** Past
-**Focus:** Core JWT authentication implementation
+**Focus:** Stateless JWT authentication
 
 **Completed Features:**
-- ✓ User authentication (login/register)
-- ✓ JWT token generation (HS512)
-- ✓ Token validation on protected endpoints
+- ✓ User login/register with BCrypt encoding
+- ✓ JWT token generation (JJWT 0.12.6 HS512)
+- ✓ Token validation with JTI uniqueness
 - ✓ Role-based access control (@PreAuthorize)
-- ✓ BCrypt password encoding
-- ✓ PostgreSQL data persistence
-- ✓ Docker containerization
-- ✓ Basic test coverage
-
-**Artifacts:**
-- AuthController with /login, /register endpoints
-- JwtService with token generation/validation
-- SecurityConfig with filter chain
-- User/Role entities with many-to-many relationship
-- docker-compose with PostgreSQL + Spring Boot service
-- Basic documentation (README, architecture overview)
-
-**Lessons Learned:**
-- Stateless JWT design enables horizontal scaling
-- HS512 signature validation is fast (no DB calls)
-- BCrypt password hashing provides secure storage
-- EAGER loading of roles necessary for SecurityContext
+- ✓ Refresh token rotation (7-day TTL)
+- ✓ Logout with Redis token blacklist
+- ✓ Email activation flow with 24-hour tokens
+- ✓ Password reset flow via email
+- ✓ Account lockout after 5 failed attempts (15-min auto-unlock)
 
 ---
 
-### Phase 1: Enhancement (IN PROGRESS)
+### Phase 2: Microservice Integration (COMPLETE ✓)
+
+**Status:** Complete
+**Timeline:** December 2025 - February 2026
+**Focus:** Multi-module architecture with service discovery & event streaming
+
+**Completed Features:**
+- ✓ 11-module Maven structure (5 business services, 3 infrastructure, 2 shared libs, 1 frontend)
+- ✓ Spring Cloud Eureka service discovery (:8761)
+- ✓ Spring Cloud Config Server (:8888, classpath:/config-repo/)
+- ✓ Spring Cloud Gateway MVC (:8080, OpenAPI aggregation)
+- ✓ JWT tokens embed roles+userId claims for downstream use
+- ✓ POST /api/auth/validate-token (microservice JWT validation, no DB hit)
+- ✓ GET /api/users/me (authenticated user profile retrieval)
+- ✓ jwt-auth-spring-boot-starter library (plug-in JWT auth for all services)
+- ✓ **OpenAPI 3.0 documentation (Swagger UI, SpringDoc 2.8.4)**
+- ✓ movie-service (CRUD movies/theaters/showtimes, auto-seat generation)
+- ✓ booking-service (Redis locking, lifecycle states, Feign to movie-service)
+- ✓ payment-service (Stripe integration, idempotency keys, webhook verification)
+- ✓ notification-service (Kafka consumer, SMTP email, Redis dedup)
+- ✓ kafka-events shared library (EventEnvelope, domain events)
+- ✓ Kafka topics (movie-events, payment-events, notification-events)
+- ✓ Prometheus (:9090, 15s scrape) + Grafana (:3000, 2 dashboards) + Loki (:3100)
+
+**Success Metrics:**
+- 11 services successfully deployed via docker-compose
+- Cross-service JWT validation < 50ms
+- Booking-to-payment event latency < 2s (p95)
+- All endpoints documented in OpenAPI (0 manual docs needed)
+
+---
+
+### Phase 3: Features & Enhancements (IN PROGRESS)
 
 **Status:** In Progress
-**Timeline:** February - April 2026
-**Focus:** Improve user experience and add foundational features
+**Timeline:** March - May 2026
+**Focus:** Business features and user experience
 
 **Planned Features:**
 
-**FR-1.1: Token Refresh Mechanism**
-- Implement refresh token endpoint: POST /api/auth/refresh
-- Store refresh tokens in database with expiration
-- Return new access token + refresh token on refresh
-- Invalidate refresh tokens on logout
+**FR-3.1: Seat Grid Display & Booking UI**
+- Frontend seat map visualization (theater layout A-Z rows)
+- Interactive seat selection with hover/highlight
+- Real-time seat availability updates
+- Multiple seat selection for group bookings
 - **Priority:** HIGH
-- **Effort:** Medium (3-5 days)
-- **Acceptance Criteria:**
-  - Access token expires after 15 minutes
-  - Refresh token valid for 7 days
-  - Client can get new access token without re-login
-  - Revoked refresh tokens return 401
-
-**FR-1.2: User Profile Endpoints**
-- GET /api/users/me - Fetch current user profile
-- PUT /api/users/me - Update profile (email, phone, etc)
-- GET /api/users/{id} - Get user by ID (admin only)
-- DELETE /api/users/{id} - Delete user (admin only)
-- **Priority:** HIGH
-- **Effort:** Medium (3-4 days)
-- **Acceptance Criteria:**
-  - Protected by @PreAuthorize("isAuthenticated()")
-  - /me endpoint requires valid JWT
-  - Update validates email format
-  - Admin endpoints require ROLE_ADMIN
-
-**FR-1.3: Password Reset Flow**
-- POST /api/auth/forgot-password - Request password reset
-- POST /api/auth/reset-password - Complete reset with token
-- Send reset link via email (integration point)
-- Token expires after 1 hour
-- **Priority:** MEDIUM
 - **Effort:** Medium (4-5 days)
-- **Acceptance Criteria:**
-  - Reset token is cryptographically random
-  - Single-use tokens (consumed on reset)
-  - Email with reset link sent to user
-  - Expired tokens return 400
 
-**FR-1.4: Input Validation**
-- Add @Valid annotations to DTOs
-- Implement custom validators (username format, password strength)
-- Return detailed validation error messages
-- Sanitize inputs to prevent injection
-- **Priority:** MEDIUM
-- **Effort:** Small (2-3 days)
-- **Acceptance Criteria:**
-  - Password >= 8 chars, 1 uppercase, 1 number
-  - Username alphanumeric + underscore only, 3-20 chars
-  - Email valid format
-  - 400 Bad Request with field-level error details
-
-**FR-1.5: Rate Limiting**
-- Implement rate limiter on /api/auth/login (5 attempts per minute)
-- Implement rate limiter on /api/auth/register (1 per IP per hour)
-- Return 429 Too Many Requests on limit exceeded
-- Add X-RateLimit headers to responses
-- **Priority:** MEDIUM
-- **Effort:** Small (2-3 days)
-- **Acceptance Criteria:**
-  - Blocking after 5 failed logins from same IP
-  - Blocking after 1 register from same IP per hour
-  - Clear headers showing limit, remaining, reset time
-  - Distributed rate limiting via Redis (optional, phase 2)
-
-**Phase 1 Success Metrics:**
-- Token refresh success rate: > 99%
-- Login endpoint response time: < 200ms (p95)
-- 70%+ code coverage (unit tests)
-- Zero security vulnerabilities in dependencies
-- All endpoints documented in OpenAPI/Swagger
-
----
-
-### Phase 2: Security Hardening (PLANNED)
-
-**Status:** Planned
-**Timeline:** April - June 2026
-**Focus:** Enterprise security standards and compliance
-
-**Planned Features:**
-
-**FR-2.1: JWT Advanced Claims**
-- Add issuer (iss) claim to all tokens
-- Add audience (aud) claim (resource identifier)
-- Add JWT ID (jti) claim for token uniqueness
-- Validate all claims on token verification
-- **Priority:** MEDIUM
-- **Effort:** Small (1-2 days)
-
-**FR-2.2: Token Revocation & Logout**
-- Implement logout endpoint: POST /api/auth/logout
-- Maintain token blacklist (Redis or database)
-- Check blacklist on every token validation
-- Clean up expired tokens periodically (cron job)
+**FR-3.2: Booking Payment Integration**
+- Complete Stripe checkout flow in frontend
+- Client secret exchange for payment confirmation
+- Error handling for failed payments
+- Refund API for admin (ADMIN role only)
 - **Priority:** HIGH
 - **Effort:** Medium (3-4 days)
-- **Acceptance Criteria:**
-  - Logout endpoint invalidates refresh token
-  - Blacklisted tokens return 401 immediately
-  - Expired tokens auto-cleaned after expiration + buffer
 
-**FR-2.3: Two-Factor Authentication (2FA)**
-- Support TOTP (Time-based One-Time Password) via authenticator apps
-- POST /api/auth/2fa/enable - Enable 2FA
-- POST /api/auth/2fa/disable - Disable 2FA
-- POST /api/auth/2fa/verify - Submit OTP during login
+**FR-3.3: User Booking History**
+- GET /api/bookings/user (all user bookings with statuses)
+- GET /api/bookings/{bookingId} (booking details + payment status)
+- GET /api/payments/user (payment history)
+- Cancel booking API (PENDING/CONFIRMED bookings)
+- **Priority:** MEDIUM
+- **Effort:** Small (2-3 days)
+
+**FR-3.4: Admin Dashboard**
+- Movie management (CRUD, featured movies)
+- Theater management (capacity, location)
+- Showtime scheduling (bulk create, recurring)
+- Payment analytics (total revenue, success rate)
+- Booking analytics (occupancy, cancellation rate)
 - **Priority:** MEDIUM
 - **Effort:** Large (5-7 days)
 
-**FR-2.4: Audit Logging**
-- Log all authentication events (login, register, logout, 2FA)
-- Log all access to sensitive endpoints
-- Include IP address, user agent, timestamp
-- Store audit logs separately with rotation
-- Endpoint: GET /api/admin/audit-logs (admin only)
+**FR-3.5: Rate Limiting on Sensitive Endpoints**
+- /api/auth/login: 5 attempts per IP per minute
+- /api/auth/register: 1 per IP per hour
+- /api/auth/forgot-password: 3 per IP per hour
+- Return 429 Too Many Requests
+- **Priority:** MEDIUM
+- **Effort:** Small (2-3 days)
+
+---
+
+### Phase 4: Security & Operations (PLANNED)
+
+**Status:** Planned
+**Timeline:** May - July 2026
+**Focus:** Production hardening and compliance
+
+**Planned Features:**
+
+**FR-4.1: Audit Logging**
+- Log all authentication events (IP, user agent, timestamp)
+- Log sensitive operations (payment confirmation, refund)
+- Separate audit log table (immutable, 1-year retention)
+- GET /api/admin/audit-logs (admin only, paginated)
 - **Priority:** HIGH
 - **Effort:** Medium (3-4 days)
 
-**FR-2.5: OAuth2 Integration**
-- Add OAuth2 provider support (Google, GitHub)
-- Endpoints: GET /api/auth/oauth2/{provider}/callback
-- Link social account to existing user account
+**FR-4.2: Two-Factor Authentication (2FA)**
+- TOTP support via authenticator apps
+- POST /api/auth/2fa/enable (generate QR code)
+- POST /api/auth/2fa/disable (requires password)
+- Backup codes for account recovery
+- **Priority:** MEDIUM
+- **Effort:** Large (6-8 days)
+
+**FR-4.3: OAuth2 Integration**
+- Google OAuth2 login
+- GitHub OAuth2 login
 - Auto-create user on first OAuth2 login
-- **Priority:** MEDIUM
-- **Effort:** Large (5-7 days)
+- Link OAuth2 account to existing user
+- **Priority:** LOW
+- **Effort:** Large (7-10 days)
 
-**FR-2.6: Dependency Security Scanning**
-- Add OWASP Dependency Check to Maven build
-- Upgrade JJWT from 0.9.0 to 0.12.x
-- Upgrade Spring Boot to latest LTS (if compatible)
-- Address CVEs in transitive dependencies
-- **Priority:** HIGH
-- **Effort:** Medium (2-3 days)
-
-**Phase 2 Success Metrics:**
-- OWASP Top 10 compliance verified
-- Zero security warnings in dependency scan
-- Audit logs retained for 90 days
-- 80%+ code coverage (unit + integration tests)
-- PII data masked in logs
-
----
-
-### Phase 3: Operations & Monitoring (PLANNED)
-
-**Status:** Planned
-**Timeline:** June - August 2026
-**Focus:** Production readiness and observability
-
-**Planned Features:**
-
-**FR-3.1: Health Check Endpoint**
-- GET /actuator/health - Overall system health
-- GET /actuator/health/db - Database connectivity
-- GET /actuator/health/livenessProbe - Kubernetes liveness
-- GET /actuator/health/readinessProbe - Kubernetes readiness
-- **Priority:** HIGH
-- **Effort:** Small (1-2 days)
-
-**FR-3.2: Metrics & Observability**
-- Expose Micrometer metrics on /actuator/metrics
-- Track authentication success/failure rates
-- Track endpoint response times (percentiles)
-- Track database connection pool utilization
-- Export to Prometheus format
-- **Priority:** MEDIUM
-- **Effort:** Medium (2-3 days)
-
-**FR-3.3: Distributed Tracing**
-- Integrate OpenTelemetry for request tracing
-- Add correlation IDs to all requests
-- Trace database queries through JPA
+**FR-4.4: Distributed Tracing**
+- OpenTelemetry integration
+- Correlation IDs on all requests (X-Correlation-ID)
 - Export traces to Jaeger
+- Trace async Kafka messages
 - **Priority:** MEDIUM
 - **Effort:** Medium (3-4 days)
 
-**FR-3.4: Request Logging Middleware**
-- Log all HTTP requests with method, path, status, duration
-- Include user ID in structured logs (when authenticated)
-- Separate logs: application, security, database
-- Implement structured logging (JSON format)
+**FR-4.5: Kubernetes Deployment**
+- Helm charts for all services
+- Liveness/readiness probes
+- Resource limits & requests
+- ConfigMaps for environment config
+- Secrets for sensitive data
 - **Priority:** MEDIUM
-- **Effort:** Small (2-3 days)
-
-**FR-3.5: Database Migrations**
-- Implement Flyway for schema versioning
-- Create migration scripts for all DDL
-- Support zero-downtime migrations
-- Track schema version in database
-- **Priority:** HIGH
-- **Effort:** Medium (2-3 days)
-
-**FR-3.6: Configuration Management**
-- Move secrets from application.yml to environment variables
-- Support environment-specific configs (dev, staging, prod)
-- Implement Config Server integration (optional)
+- **Effort:** Large (5-7 days)
 - Document all configuration parameters
 - **Priority:** HIGH
 - **Effort:** Small (1-2 days)

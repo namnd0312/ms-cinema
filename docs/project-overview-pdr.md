@@ -8,23 +8,22 @@
 
 ## Executive Summary
 
-MS Cinema is an **8-module Spring Cloud microservice platform** providing stateless JWT authentication with event-driven notifications. The system is organized as a multi-module Maven project with dedicated infrastructure services (Eureka, Config Server, API Gateway, Kafka), business services, and a reusable JWT starter library.
+MS Cinema is an **11-module Spring Cloud microservices platform** for cinema ticket booking with event-driven architecture, JWT authentication, Stripe payments, and comprehensive monitoring. The system consists of infrastructure services (Eureka, Config Server, API Gateway), 5 business services, 2 shared libraries, and Angular frontend.
 
 **Key Characteristics:**
 - Single external entry point: API Gateway (port 8080)
-- Auth-service (port 8081) with full JWT auth lifecycle; publishes notification events to Kafka
-- Business services: movie (:8082), booking (:8083), payment (:8084)
-- Notification-service (port 8085): Kafka consumer; sends emails via SMTP (replaces direct email sending)
-- kafka-events module: Shared domain event records (NotificationRequestedEvent)
-- Spring Cloud Eureka for service discovery
-- Config Server distributes shared JWT secret to all services
-- JWT tokens embed roles + userId for downstream use
-- JWT validation starter library (`jwt-auth-spring-boot-starter`)
-- POST /api/auth/validate-token for microservice token validation
-- GET /api/users/me for authenticated user profile retrieval
-- BCrypt password hashing, Redis blacklist, PostgreSQL persistence
-- Apache Kafka event streaming (notification-events topic)
-- Prometheus (:9090) + Grafana (:3000) observability stack
+- **Auth-service** (port 8081): JWT auth lifecycle, email activation, account lockout (5 attempts/15min), token rotation
+- **Movie-service** (port 8082): Movies, theaters, showtimes; auto-generates seat grids (A-Z rows)
+- **Booking-service** (port 8083): Seat reservation with Redis locking (5-min TTL), lifecycle states (PENDING→CONFIRMED/CANCELLED/EXPIRED)
+- **Payment-service** (port 8084): Stripe integration, idempotent payment intents, webhook verification
+- **Notification-service** (port 8085): Kafka consumer, SMTP email delivery, Redis dedup (24h TTL)
+- **kafka-events module:** Shared domain events (PaymentCompletedEvent, BookingCreatedEvent, etc.)
+- **jwt-auth-spring-boot-starter:** Reusable JWT validator for all services (JJWT 0.12.6, HS512)
+- Spring Cloud Eureka for service discovery, Config Server for centralized configuration
+- **Kafka topics:** payment-events, movie-events, notification-events (3 retries, exponential backoff, DLT)
+- Redis for token blacklist, booking locks, notification dedup
+- PostgreSQL per-service (auth→testdb, movie→moviedb, booking→bookingdb, payment→paymentdb)
+- Prometheus (9090) + Grafana (3000) + Loki 3.0 (3100) observability stack
 
 ## Functional Requirements
 
@@ -420,21 +419,24 @@ Response (403 Forbidden):
 - ✓ Email verification (activation link)
 - ✓ Account lockout after N failed attempts (auto-unlock)
 
-### Phase 3: Microservice Integration (IN PROGRESS)
-- ✓ Single-module → multi-module Maven project (8 modules: auth, 3 business services, 2 infra, 2 libs)
+### Phase 3: Microservice Integration (COMPLETE)
+- ✓ 11-module Maven project: 5 business services, 3 infrastructure, 2 shared libs, 1 frontend
 - ✓ Spring Cloud Eureka (service registry, :8761)
-- ✓ Spring Cloud Config Server (shared JWT secret, :8888)
-- ✓ Spring Cloud Gateway MVC (single entry :8080, routes to downstream services)
-- ✓ JWT tokens include `roles` + `userId` claims
-- ✓ POST /api/auth/validate-token (microservice token validation, no DB hit)
-- ✓ GET /api/users/me (fresh user profile for downstream services)
-- ✓ jwt-auth-spring-boot-starter library (plug-in JWT auth for any service)
-- ✓ Prometheus + Grafana monitoring stack (Micrometer metrics, 2 dashboards)
-- ✓ notification-service (Kafka consumer, SMTP email delivery)
-- ✓ kafka-events module (shared NotificationRequestedEvent domain model)
-- ✓ Auth-service publishes events instead of sending emails directly
-- [ ] OpenAPI/Swagger documentation
-- [ ] Rate limiting on login/forgot-password
+- ✓ Spring Cloud Config Server (shared JWT secret, :8888, classpath:/config-repo/)
+- ✓ Spring Cloud Gateway MVC (single entry :8080, routes, OpenAPI aggregation, HttpLoggingFilter)
+- ✓ JWT tokens include `roles` + `userId` claims for downstream use
+- ✓ POST /api/auth/validate-token (microservice validation, no DB lookup)
+- ✓ GET /api/users/me (authenticated user profile retrieval)
+- ✓ jwt-auth-spring-boot-starter (JJWT 0.12.6, reusable JWT validator, @ConditionalOnProperty)
+- ✓ **OpenAPI 3.0 documentation** (Swagger UI on all services, aggregated at gateway)
+- ✓ notification-service (Kafka consumer, SMTP via Spring Mail, fail-open on Redis)
+- ✓ kafka-events module (PaymentCompletedEvent, BookingCreatedEvent, MovieCreatedEvent, etc.)
+- ✓ Auth-service publishes NotificationRequestedEvent (no direct email sending)
+- ✓ Prometheus (15s scrape, 7-day retention) + Grafana (3000, 2 dashboards) + Loki 3.0 logs
+- ✓ Movie-service auto-generates seat grids (A-Z rows) on theater creation
+- ✓ Booking-service Redis locking (5-min TTL, key pattern: seat:lock:{showtimeId}:{seatId})
+- ✓ Payment-service Stripe integration (idempotency key, webhook signature verification)
+- [ ] Rate limiting on login/forgot-password endpoints
 
 ### Phase 4: Security Hardening (Planned)
 - [ ] Audit logging on sensitive actions (IP, timestamp)
@@ -465,7 +467,10 @@ Response (403 Forbidden):
 | Spring Mail | via Spring Boot | SMTP email delivery (notification-service) |
 | Spring Boot Actuator | via Spring Boot | Metrics endpoint /actuator/prometheus |
 | Micrometer | via Actuator | JVM + HTTP + custom business metrics |
-| JJWT | 0.12.6 (jjwt-api, jjwt-impl, jjwt-jackson) | JWT handling |
+| JJWT | 0.12.6 (api, impl, jackson) | JWT handling (HS512) |
+| Spring Cloud | 2024.0.1 | Eureka, Config, Gateway, LoadBalancer |
+| Stripe Java SDK | latest | Payment processing, webhooks |
+| Feign Client | via Spring Cloud | Service-to-service HTTP calls |
 | PostgreSQL Driver | latest | Database (auth-service) |
 | Lombok | BOM-managed | Boilerplate reduction |
 | BCrypt | via Spring Security | Password encoding |

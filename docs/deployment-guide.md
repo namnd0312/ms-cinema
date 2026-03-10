@@ -41,13 +41,13 @@
 ### Software Dependencies
 
 ```bash
-# Java (local development)
+# Java 21 LTS (local development)
 java -version
-# Output: openjdk version "1.8.0" or higher
+# Output: openjdk version "21" or higher
 
 # Maven (local builds)
 mvn -version
-# Output: Apache Maven 3.6.0 or higher
+# Output: Apache Maven 3.8.0 or higher
 
 # PostgreSQL Client (optional, for direct DB access)
 psql --version
@@ -77,7 +77,7 @@ docker-compose --version
 **AWS Example:**
 ```
 Internet → Load Balancer (443) → Security Group (8080)
-           └─ ms-authentication-service
+           └─ auth-service
               └─ Security Group (5432) ← PostgreSQL RDS
 ```
 
@@ -224,13 +224,13 @@ curl -X GET http://localhost:8080/api/protected \
 
 ```bash
 # Build locally
-docker build -t ms-authentication-service:latest .
+docker build -t auth-service:latest .
 
 # Or with version tag
-docker build -t ms-authentication-service:0.0.1-SNAPSHOT .
+docker build -t auth-service:0.0.1-SNAPSHOT .
 
 # Verify image
-docker images | grep ms-authentication-service
+docker images | grep auth-service
 ```
 
 ### 2. Run with Docker Compose (Recommended)
@@ -278,7 +278,7 @@ LOG_LEVEL=DEBUG
 **Update docker-compose.yml** to use env file:
 ```yaml
 services:
-  ms-authentication-service:
+  auth-service:
     build: ./
     ports:
       - "8080:8080"
@@ -298,7 +298,7 @@ docker-compose down
 docker-compose down -v
 
 # Remove images
-docker rmi ms-authentication-service:latest
+docker rmi auth-service:latest
 ```
 
 ### 5. Docker Networking
@@ -310,7 +310,7 @@ docker network ls | grep my-net
 # Inspect network
 docker network inspect ms-cinema_my-net
 
-# Services can communicate: postgres-service:5432 from ms-authentication-service
+# Services can communicate: postgres-service:5432 from auth-service
 ```
 
 ---
@@ -589,7 +589,7 @@ java -jar auth-service.jar
 # Via Docker
 docker run -e SPRING_PROFILES_ACTIVE=prod \
   -e JWT_SECRET=xxxx \
-  ms-authentication-service:latest
+  auth-service:latest
 ```
 
 ### Configuration Parameters
