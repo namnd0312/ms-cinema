@@ -1,6 +1,6 @@
 # System Design — Cinema Booking Platform
 
-> Last updated: 2026-03-08
+> Last updated: 2026-03-10
 
 ---
 
@@ -30,10 +30,11 @@ graph TD
     MovieSvc["movie-service\n:8082"]
     BookingSvc["booking-service\n:8083"]
     PaymentSvc["payment-service\n:8084"]
+    NotifSvc["notification-service\n:8085"]
 
-    PG[("PostgreSQL :5432\ntestdb | moviedb | bookingdb")]
+    PG[("PostgreSQL :5432\ntestdb | moviedb | bookingdb | paymentdb")]
     Redis[("Redis :6379")]
-    Kafka[["Kafka :9092\npayment-events | movie-events"]]
+    Kafka[["Kafka :9092 (KRaft)\npayment-events | movie-events | notification-events"]]
     Stripe["Stripe API\n(external)"]
     SMTP["SMTP\n(external)"]
 
@@ -52,13 +53,16 @@ graph TD
 
     AuthSvc --> PG
     AuthSvc --> Redis
-    AuthSvc --> SMTP
+    AuthSvc --> Kafka
     MovieSvc --> PG
     BookingSvc --> PG
     BookingSvc --> Redis
     BookingSvc -->|Feign| MovieSvc
     PaymentSvc --> PG
     PaymentSvc --> Stripe
+    NotifSvc --> SMTP
+    NotifSvc --> Redis
+    NotifSvc --> Kafka
 
     MovieSvc --> Kafka
     PaymentSvc --> Kafka
@@ -68,24 +72,29 @@ graph TD
     MovieSvc -.->|register| Eureka
     BookingSvc -.->|register| Eureka
     PaymentSvc -.->|register| Eureka
+    NotifSvc -.->|register| Eureka
 
     AuthSvc -.->|fetch config| Config
     MovieSvc -.->|fetch config| Config
     BookingSvc -.->|fetch config| Config
     PaymentSvc -.->|fetch config| Config
+    NotifSvc -.->|fetch config| Config
 
     MovieSvc -.->|metrics| Prometheus
     BookingSvc -.->|metrics| Prometheus
     PaymentSvc -.->|metrics| Prometheus
     AuthSvc -.->|metrics| Prometheus
+    NotifSvc -.->|metrics| Prometheus
     Prometheus --> Grafana
 
     JwtStarter -.->|autoconfigure| MovieSvc
     JwtStarter -.->|autoconfigure| BookingSvc
     JwtStarter -.->|autoconfigure| PaymentSvc
+    JwtStarter -.->|autoconfigure| NotifSvc
     KafkaEvents -.->|shared DTOs| MovieSvc
     KafkaEvents -.->|shared DTOs| BookingSvc
     KafkaEvents -.->|shared DTOs| PaymentSvc
+    KafkaEvents -.->|shared DTOs| NotifSvc
 ```
 
 ---
@@ -95,15 +104,16 @@ graph TD
 | Service | Port | Database | Dependencies | Kafka Topics | Key Endpoints |
 |---|---|---|---|---|---|
 | api-gateway | 8080 | — | Eureka, config-server | — | All routes |
-| auth-service | 8081 | testdb (PostgreSQL), Redis | SMTP | — | /api/auth/**, /api/users/**, /api/auth/validate-token |
+| auth-service | 8081 | testdb (PostgreSQL), Redis | — | Produces: notification-events | /api/auth/**, /api/users/**, /api/auth/validate-token |
 | movie-service | 8082 | moviedb (PostgreSQL) | — | Produces: movie-events | /api/movies/**, /api/showtimes/**, /api/theaters/** |
-| booking-service | 8083 | bookingdb (PostgreSQL), Redis | movie-service (Feign) | Consumes: payment-events; Produces: — | /api/bookings/** |
+| booking-service | 8083 | bookingdb (PostgreSQL), Redis | movie-service (Feign) | Consumes: payment-events | /api/bookings/** |
 | payment-service | 8084 | paymentdb (PostgreSQL) | Stripe API | Produces: payment-events | /api/payments/** |
+| notification-service | 8085 | Redis (dedup) | SMTP (Gmail) | Consumes: notification-events | — (Kafka consumer only) |
 | eureka-server | 8761 | — | — | — | /eureka |
 | config-server | 8888 | — | Config repo | — | /actuator |
 | PostgreSQL | 5432 | testdb, moviedb, bookingdb | — | — | — |
 | Redis | 6379 | — | — | — | — |
-| Kafka | 9092 | — | — | payment-events, movie-events | — |
+| Kafka (KRaft) | 9092 | — | — | payment-events, movie-events, notification-events | — |
 | Prometheus | 9090 | — | — | — | /metrics |
 | Grafana | 3000 | — | Prometheus | — | Dashboards |
 
@@ -130,8 +140,7 @@ graph LR
         subgraph infra["Infrastructure"]
             PG[("postgres\n:5432")]
             Redis[("redis\n:6379")]
-            Kafka[["kafka\n:9092"]]
-            Zookeeper["zookeeper\n:2181"]
+            Kafka[["kafka\n:9092 (KRaft)"]]
             Config["config-server\n:8888"]
             Eureka["eureka-server\n:8761"]
         end
@@ -141,21 +150,24 @@ graph LR
             Movie["movie-service\n:8082"]
             Booking["booking-service\n:8083"]
             Payment["payment-service\n:8084"]
+            Notif["notification-service\n:8085"]
             Gateway["api-gateway\n:8080"]
+            Frontend["cinema-frontend\n:4200"]
         end
 
         subgraph observability["Observability"]
             Prometheus["prometheus\n:9090"]
             Grafana["grafana\n:3000"]
+            Loki["loki\n:3100"]
         end
     end
 
-    Zookeeper --> Kafka
     Config --> Eureka
     Config --> Auth
     Config --> Movie
     Config --> Booking
     Config --> Payment
+    Config --> Notif
     Config --> Gateway
     Eureka --> Gateway
     PG --> Auth
@@ -164,18 +176,24 @@ graph LR
     PG --> Payment
     Redis --> Auth
     Redis --> Booking
+    Redis --> Notif
+    Kafka --> Auth
     Kafka --> Movie
     Kafka --> Booking
     Kafka --> Payment
+    Kafka --> Notif
     Auth --> Gateway
     Movie --> Gateway
     Booking --> Gateway
     Payment --> Gateway
+    Frontend --> Gateway
     Auth --> Prometheus
     Movie --> Prometheus
     Booking --> Prometheus
     Payment --> Prometheus
+    Notif --> Prometheus
     Prometheus --> Grafana
+    Loki --> Grafana
 ```
 
 ---
@@ -216,7 +234,8 @@ sequenceDiagram
     participant RegisterDtoMapper
     participant RoleService
     participant ActivationService
-    participant EmailService
+    participant Kafka
+    participant NotificationService
     participant PostgreSQL
     participant SMTP
 
@@ -241,8 +260,10 @@ sequenceDiagram
     ActivationService->>PostgreSQL: save ActivationToken (UUID, expiresAt)
     PostgreSQL-->>ActivationService: token
 
-    ActivationService->>EmailService: sendActivationEmail(email, token)
-    EmailService->>SMTP: send HTML email with activation link
+    ActivationService->>Kafka: publish NotificationRequestedEvent (activation email)
+    Note over Kafka: topic: notification-events
+    Kafka->>NotificationService: consume NotificationRequestedEvent
+    NotificationService->>SMTP: send activation email
 
     UserService-->>AuthController: success
     AuthController-->>APIGateway: 201 Created
@@ -407,7 +428,8 @@ sequenceDiagram
     participant AuthController
     participant PasswordResetService
     participant UserService
-    participant EmailService
+    participant Kafka
+    participant NotificationService
     participant PostgreSQL
     participant SMTP
 
@@ -424,8 +446,10 @@ sequenceDiagram
     PasswordResetService->>PostgreSQL: save PasswordResetToken (UUID, expiresAt = now+24h)
     PostgreSQL-->>PasswordResetService: token
 
-    PasswordResetService->>EmailService: sendPasswordResetEmail(email, token)
-    EmailService->>SMTP: send HTML email with reset link
+    PasswordResetService->>Kafka: publish NotificationRequestedEvent (password reset email)
+    Note over Kafka: topic: notification-events
+    Kafka->>NotificationService: consume NotificationRequestedEvent
+    NotificationService->>SMTP: send password reset email
     AuthController-->>Client: 200 OK "Reset email sent"
 
     Note over Client,SMTP: --- Step 2: Reset Password ---
@@ -1114,6 +1138,7 @@ sequenceDiagram
 |---|---|---|---|---|
 | `KafkaTopics.PAYMENT_EVENTS` | `payment-events` | — | payment-service | booking-service |
 | `KafkaTopics.MOVIE_EVENTS` | `movie-events` | — | movie-service | — (future consumers) |
+| `KafkaTopics.NOTIFICATION_EVENTS` | `notification-events` | — | auth-service | notification-service |
 | *(DLT)* | `payment-events.DLT` | — | DefaultErrorHandler | manual inspection |
 
 ---
@@ -1126,6 +1151,7 @@ sequenceDiagram
 | `payment.failed` | `PaymentFailedEvent` | `payment-events` | payment-service | booking-service |
 | `movie.created` | `MovieCreatedEvent` | `movie-events` | movie-service | *(future)* |
 | `showtime.created` | `ShowtimeCreatedEvent` | `movie-events` | movie-service | *(future)* |
+| `notification.requested` | `NotificationRequestedEvent` | `notification-events` | auth-service | notification-service |
 
 ---
 
@@ -1135,6 +1161,7 @@ sequenceDiagram
 |---|---|---|---|
 | `blacklist:{jti}` | auth-service | Remaining JWT expiry | Access token blacklist (RedisKeyPrefix.BLACKLIST) |
 | `seat:lock:{showtimeId}:{seatId}` | booking-service | 300s (5 min) | Temporary seat reservation lock (SETNX) |
+| `notification:processed:{eventId}` | notification-service | 24h | Event deduplication (SETNX, fail-open) |
 
 > **Note:** Account locking uses database fields (`User.lockTime`, `User.failedAttempts`), not Redis.
 
