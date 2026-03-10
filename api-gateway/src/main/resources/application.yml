@@ -1,0 +1,97 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  config:
+    import: "optional:configserver:http://${CONFIG_SERVER_HOST:localhost}:8888"
+  cloud:
+    gateway:
+      mvc:
+        routes:
+          - id: auth-service
+            uri: lb://auth-service
+            predicates:
+              - Path=/api/auth/**
+          - id: auth-service-users
+            uri: lb://auth-service
+            predicates:
+              - Path=/api/users/**
+          - id: movie-service
+            uri: lb://movie-service
+            predicates:
+              - Path=/api/movies/**
+          - id: movie-service-showtimes
+            uri: lb://movie-service
+            predicates:
+              - Path=/api/showtimes/**
+          - id: movie-service-theaters
+            uri: lb://movie-service
+            predicates:
+              - Path=/api/theaters/**
+          - id: booking-service
+            uri: lb://booking-service
+            predicates:
+              - Path=/api/bookings/**
+          - id: payment-service
+            uri: lb://payment-service
+            predicates:
+              - Path=/api/payments/**
+
+          # Swagger api-docs routes
+          - id: auth-service-docs
+            uri: lb://auth-service
+            predicates:
+              - Path=/auth-service/v3/api-docs/**
+            filters:
+              - StripPrefix=1
+          - id: movie-service-docs
+            uri: lb://movie-service
+            predicates:
+              - Path=/movie-service/v3/api-docs/**
+            filters:
+              - StripPrefix=1
+          - id: booking-service-docs
+            uri: lb://booking-service
+            predicates:
+              - Path=/booking-service/v3/api-docs/**
+            filters:
+              - StripPrefix=1
+          - id: payment-service-docs
+            uri: lb://payment-service
+            predicates:
+              - Path=/payment-service/v3/api-docs/**
+            filters:
+              - StripPrefix=1
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    urls:
+      - name: Auth Service
+        url: /auth-service/v3/api-docs
+      - name: Movie Service
+        url: /movie-service/v3/api-docs
+      - name: Booking Service
+        url: /booking-service/v3/api-docs
+      - name: Payment Service
+        url: /payment-service/v3/api-docs
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://${EUREKA_HOST:localhost}:8761/eureka/
+  instance:
+    prefer-ip-address: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway,prometheus
+  metrics:
+    tags:
+      application: ${spring.application.name}

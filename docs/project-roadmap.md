@@ -1,13 +1,13 @@
 # Project Roadmap
 
-**Project:** jwt-spring-security
+**Project:** ms-cinema
 **Version:** 0.0.1-SNAPSHOT
 **Updated:** February 2026
 **Status:** Active Development
 
 ## Vision
 
-JWT Spring Security is a foundational authentication service providing stateless JWT-based authentication for Spring Boot applications. The roadmap focuses on progressing from a basic implementation to a robust, enterprise-ready authentication platform supporting microservices architectures.
+MS Cinema is a foundational authentication service providing stateless JWT-based authentication for Spring Boot applications. The roadmap focuses on progressing from a basic implementation to a robust, enterprise-ready authentication platform supporting microservices architectures.
 
 ## Roadmap Phases
 

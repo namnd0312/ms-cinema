@@ -1,0 +1,39 @@
+
+// Cinema dark theme using Angular Material
+@use '@angular/material' as mat;
+
+@include mat.core();
+
+// Cinema theme: deep indigo primary, amber accent, dark background
+$cinema-frontend-theme: mat.define-theme((
+  color: (
+    theme-type: dark,
+    primary: mat.$violet-palette,
+    tertiary: mat.$orange-palette,
+  ),
+  density: (
+    scale: 0,
+  )
+));
+
+:root {
+  @include mat.all-component-themes($cinema-frontend-theme);
+
+  // Cinema brand colors
+  --cinema-primary: #1a237e;
+  --cinema-accent: #ffc107;
+  --cinema-bg: #121212;
+  --cinema-surface: #1e1e1e;
+  --cinema-on-surface: #e0e0e0;
+}
+
+html, body {
+  height: 100%;
+  background-color: var(--cinema-bg);
+  color: var(--cinema-on-surface);
+}
+
+body {
+  margin: 0;
+  font-family: Roboto, "Helvetica Neue", sans-serif;
+}

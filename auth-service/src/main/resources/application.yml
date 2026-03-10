@@ -1,0 +1,73 @@
+server:
+  port: ${SERVER_PORT:8081}
+spring:
+  application:
+    name: auth-service
+  config:
+    import: "optional:configserver:http://${CONFIG_SERVER_HOST:localhost}:8888"
+  cloud:
+    config:
+      fail-fast: false
+      retry:
+        max-attempts: 3
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+  datasource:
+    url: jdbc:postgresql://localhost:5432/testdb
+    username: postgres
+    password: postgres
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+  kafka:
+    bootstrap-servers: ${KAFKA_HOST:localhost}:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+namnd:
+  app:
+    jwtSecret: ${JWT_SECRET:kBJb8FEOvTCWEcfZB6RLMM5BLoI8p0FWOWEu7FSZBYn+ItVi7mHRePYCvum5Ic6l4M2nFw+kdl8du99Bxnb7zg==}
+    jwtExpiration: 900000
+    jwtRefreshExpiration: 604800000
+    passwordResetBaseUrl: ${PASSWORD_RESET_BASE_URL:http://localhost:4200/auth/reset-password}
+    activationBaseUrl: ${ACTIVATION_BASE_URL:http://localhost:8080/api/auth/activate}
+    maxFailedAttempts: ${MAX_FAILED_ATTEMPTS:5}
+    lockDurationMs: ${LOCK_DURATION_MS:900000}
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://${EUREKA_HOST:localhost}:8761/eureka/
+    register-with-eureka: true
+    fetch-registry: true
+  instance:
+    prefer-ip-address: true
+    instance-id: ${spring.application.name}:${server.port}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+# logging levels moved to logback-spring.xml (structured JSON via logstash-logback-encoder)

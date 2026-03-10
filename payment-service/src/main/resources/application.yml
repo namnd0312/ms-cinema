@@ -1,0 +1,65 @@
+server:
+  port: ${SERVER_PORT:8084}
+
+spring:
+  application:
+    name: payment-service
+  config:
+    import: "optional:configserver:http://${CONFIG_SERVER_HOST:localhost}:8888"
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:5432/paymentdb
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+  kafka:
+    bootstrap-servers: ${KAFKA_HOST:localhost}:9092
+    producer:
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    consumer:
+      group-id: payment-service
+
+jwt:
+  auth:
+    secret: ${JWT_SECRET:kBJb8FEOvTCWEcfZB6RLMM5BLoI8p0FWOWEu7FSZBYn+ItVi7mHRePYCvum5Ic6l4M2nFw+kdl8du99Bxnb7zg==}
+    public-paths:
+      - /api/payments/webhook
+      - /api/payments/fake-success
+      - /error
+      - /actuator/health
+      - /actuator/prometheus
+      - /swagger-ui/**
+      - /v3/api-docs/**
+      - /swagger-ui.html
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+stripe:
+  api-key: ${STRIPE_API_KEY:sk_test_51O4nq6JasULoPDKqIHl2vL6vmmYhcNxXTVLpgQOkj7nZluIRtO36qbylQeHtAqV09CeHgZeacGTw20y6M5tdlIyx00hfdmO8Ry}
+  webhook-secret: ${STRIPE_WEBHOOK_SECRET:acct_1O4nq6JasULoPDKq}
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://${EUREKA_HOST:localhost}:8761/eureka/
+  instance:
+    prefer-ip-address: true
+    instance-id: ${spring.application.name}:${server.port}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    tags:
+      application: ${spring.application.name}

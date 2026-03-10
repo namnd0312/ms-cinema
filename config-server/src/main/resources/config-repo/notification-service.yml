@@ -1,0 +1,13 @@
+# Notification-service specific config — SMTP credentials for email delivery
+spring:
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${MAIL_USERNAME:nghiemducnam0312@gmail.com}
+    password: ${MAIL_PASSWORD:sdxm fmia vuzf bvmq}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true

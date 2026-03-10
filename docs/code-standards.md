@@ -1,12 +1,12 @@
 # Code Standards & Guidelines
 
-**Project:** jwt-spring-security
+**Project:** ms-cinema
 **Version:** 1.0
 **Last Updated:** February 2026
 
 ## Purpose
 
-This document establishes coding conventions, architectural patterns, and quality standards for the jwt-spring-security project. All contributors must adhere to these standards to maintain consistency, readability, and maintainability.
+This document establishes coding conventions, architectural patterns, and quality standards for the ms-cinema project. All contributors must adhere to these standards to maintain consistency, readability, and maintainability.
 
 ## Principles
 
@@ -30,7 +30,7 @@ This document establishes coding conventions, architectural patterns, and qualit
 ### Package Structure
 
 ```
-com.namnd.springjwt
+com.namnd.cinema
 ├── config/              # Configuration classes
 │   ├── security/        # Spring Security config
 │   ├── filter/          # Security filters
@@ -119,7 +119,7 @@ public ResponseEntity<?> authenticateUser(@RequestBody User user) {
 | Methods | camelCase | generateToken, validateUser |
 | Variables | camelCase | userDetails, jwtToken |
 | Constants | UPPER_SNAKE_CASE | DEFAULT_ROLE, MAX_TOKEN_AGE |
-| Packages | lowercase.dot.separated | com.namnd.springjwt.service |
+| Packages | lowercase.dot.separated | com.namnd.cinema.service |
 
 **Visibility & Access Modifiers**
 - Default to `private`, expand only when necessary
@@ -440,7 +440,7 @@ namnd:
 
 logging:
   level:
-    com.namnd.springjwt: debug
+    com.namnd.cinema: debug
 ```
 
 **Environment Variables**
@@ -646,6 +646,32 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 ```
+
+## Redis Standards
+
+**Key Patterns:**
+- Use descriptive prefixes separated by colons: `namespace:entity:identifier`
+- Examples: `blacklist:jti:abc123`, `notification:processed:event-uuid`
+- Document TTL expectations in comments (auto-expiration strategy)
+
+**Error Handling (Fail-Open vs Fail-Closed):**
+```java
+// Fail-Closed: reject on Redis unavailable (conservative, security-first)
+// Example: token blacklist check — rather send 401 than skip blacklist
+return redisTemplate.opsForValue().get(key) != null;  // false on error = blocked
+
+// Fail-Open: proceed on Redis unavailable (availability-first)
+// Example: event deduplication — rather send duplicate than lose notification
+try {
+    Boolean result = redisTemplate.opsForValue().setIfAbsent(key, "1", ttl);
+    return Boolean.TRUE.equals(result);
+} catch (Exception e) {
+    log.warn("Redis unavailable, proceeding: {}", e.getMessage());
+    return true;  // fail-open: allow processing
+}
+```
+
+Document which strategy each service uses and rationale in comments.
 
 ## Deprecated Patterns (Avoid)
 

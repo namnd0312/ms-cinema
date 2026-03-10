@@ -1,4 +1,7 @@
-# spring-boot-docker/docker-compose.yml
+x-java-timezone: &java-tz
+  TZ: Asia/Ho_Chi_Minh
+  JAVA_OPTS: -Duser.timezone=Asia/Ho_Chi_Minh
+
 services:
   postgres-service:
     image: 'postgres:16-alpine'
@@ -6,12 +9,34 @@ services:
       - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      - ./init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql
     networks:
       - my-net
     restart: unless-stopped
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
+
+  kafka:
+    image: 'apache/kafka:3.7.0'
+    ports:
+      - "9092:9092"
+    networks:
+      - my-net
+    restart: unless-stopped
+    environment:
+      - KAFKA_NODE_ID=0
+      - KAFKA_PROCESS_ROLES=broker,controller
+      - KAFKA_CONTROLLER_QUORUM_VOTERS=0@kafka:9093
+      - KAFKA_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      - KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+      - KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1
+      - KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1
+      - CLUSTER_ID=MkU3OEVBNTcwNTJENDM2Qk
+
   redis-service:
     image: 'redis:7-alpine'
     ports:
@@ -19,28 +44,238 @@ services:
     networks:
       - my-net
     restart: unless-stopped
-  ms-authentication-service:
+
+  eureka-server:
     build:
-      context: ./
+      context: ./eureka-server
+      dockerfile: Dockerfile
+    ports:
+      - "8761:8761"
+    networks:
+      - my-net
+    environment:
+      <<: *java-tz
+    restart: unless-stopped
+
+  config-server:
+    build:
+      context: ./config-server
+      dockerfile: Dockerfile
+    ports:
+      - "8888:8888"
+    networks:
+      - my-net
+    depends_on:
+      - eureka-server
+    environment:
+      <<: *java-tz
+      EUREKA_HOST: eureka-server
+    restart: unless-stopped
+
+  api-gateway:
+    build:
+      context: ./api-gateway
       dockerfile: Dockerfile
     ports:
       - "8080:8080"
     networks:
       - my-net
     depends_on:
+      - eureka-server
+      - config-server
+    environment:
+      <<: *java-tz
+      EUREKA_HOST: eureka-server
+      CONFIG_SERVER_HOST: config-server
+    restart: unless-stopped
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8081"
+    networks:
+      - my-net
+    depends_on:
       - postgres-service
       - redis-service
-#  angular:
-#    image: angular-test
-#    ports:
-#      - "4200:80"
-#    expose:
-#      - "80"
-#    networks:
-#      - my-net
+      - eureka-server
+      - config-server
+      - kafka
+    environment:
+      <<: *java-tz
+      SERVER_PORT: 8081
+      EUREKA_HOST: eureka-server
+      CONFIG_SERVER_HOST: config-server
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-service:5432/testdb
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+      REDIS_HOST: redis-service
+      KAFKA_HOST: kafka
+    restart: unless-stopped
+
+  movie-service:
+    build:
+      context: ./movie-service
+      dockerfile: Dockerfile
+    ports:
+      - "8082:8082"
+    networks:
+      - my-net
+    depends_on:
+      - postgres-service
+      - eureka-server
+      - config-server
+      - kafka
+    environment:
+      <<: *java-tz
+      SERVER_PORT: 8082
+      EUREKA_HOST: eureka-server
+      CONFIG_SERVER_HOST: config-server
+      DB_HOST: postgres-service
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      KAFKA_HOST: kafka
+    restart: unless-stopped
+
+  booking-service:
+    build:
+      context: ./booking-service
+      dockerfile: Dockerfile
+    ports:
+      - "8083:8083"
+    networks:
+      - my-net
+    depends_on:
+      - postgres-service
+      - redis-service
+      - eureka-server
+      - config-server
+      - kafka
+    environment:
+      <<: *java-tz
+      SERVER_PORT: 8083
+      EUREKA_HOST: eureka-server
+      CONFIG_SERVER_HOST: config-server
+      DB_HOST: postgres-service
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      REDIS_HOST: redis-service
+      KAFKA_HOST: kafka
+    restart: unless-stopped
+
+  payment-service:
+    build:
+      context: ./payment-service
+      dockerfile: Dockerfile
+    ports:
+      - "8084:8084"
+    networks:
+      - my-net
+    depends_on:
+      - postgres-service
+      - eureka-server
+      - config-server
+      - kafka
+    environment:
+      <<: *java-tz
+      SERVER_PORT: 8084
+      EUREKA_HOST: eureka-server
+      CONFIG_SERVER_HOST: config-server
+      DB_HOST: postgres-service
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      KAFKA_HOST: kafka
+      STRIPE_API_KEY: ${STRIPE_API_KEY:-sk_test_51O4nq6JasULoPDKqIHl2vL6vmmYhcNxXTVLpgQOkj7nZluIRtO36qbylQeHtAqV09CeHgZeacGTw20y6M5tdlIyx00hfdmO8Ry}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-whsec_7df692974e96a694944751bcabfc16ffd0e19d504f9803f3eae1ced2e2989c10}
+    restart: unless-stopped
+
+  notification-service:
+    build:
+      context: ./notification-service
+      dockerfile: Dockerfile
+    ports:
+      - "8085:8085"
+    networks:
+      - my-net
+    depends_on:
+      - eureka-server
+      - config-server
+      - kafka
+      - redis-service
+    environment:
+      <<: *java-tz
+      SERVER_PORT: 8085
+      EUREKA_HOST: eureka-server
+      CONFIG_SERVER_HOST: config-server
+      KAFKA_HOST: kafka
+      REDIS_HOST: redis-service
+      MAIL_USERNAME: ${MAIL_USERNAME:-nghiemducnam0312@gmail.com}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-sdxm fmia vuzf bvmq}
+    restart: unless-stopped
+
+  cinema-frontend:
+    build:
+      context: ./cinema-frontend
+      dockerfile: Dockerfile
+    ports:
+      - "4200:80"
+    networks:
+      - my-net
+    depends_on:
+      - api-gateway
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=7d'
+    networks:
+      - my-net
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana-oss:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - grafana-data:/var/lib/grafana
+    networks:
+      - my-net
+    depends_on:
+      - prometheus
+      - loki
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:3.0.0
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./monitoring/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki-data:/loki
+    command: -config.file=/etc/loki/loki-config.yml
+    networks:
+      - my-net
+    restart: unless-stopped
+
 networks:
   my-net:
     driver: bridge
 
 volumes:
   postgres-data:
+  prometheus-data:
+  grafana-data:
+  loki-data:

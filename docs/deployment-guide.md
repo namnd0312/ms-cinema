@@ -1,6 +1,6 @@
 # Deployment Guide
 
-**Project:** jwt-spring-security
+**Project:** ms-cinema
 **Version:** 0.0.1-SNAPSHOT
 **Updated:** February 2026
 
@@ -88,8 +88,8 @@ Internet → Load Balancer (443) → Security Group (8080)
 ### 1. Clone Repository
 
 ```bash
-git clone https://github.com/your-org/jwt-spring-security.git
-cd jwt-spring-security
+git clone https://github.com/your-org/ms-cinema.git
+cd ms-cinema
 ```
 
 ### 2. Configure Local Database
@@ -156,7 +156,7 @@ mvn clean install
 
 # Expected output:
 # BUILD SUCCESS
-# Target: target/spring-jwt.jar, target/spring-jwt.war
+# Target: target/auth-service.jar
 
 # Verify compilation
 mvn compile
@@ -172,11 +172,11 @@ mvn spring-boot:run
 
 **Option B: Direct JAR Execution**
 ```bash
-java -jar target/spring-jwt.jar
+java -jar target/auth-service.jar
 ```
 
 **Option C: IDE Execution**
-- IntelliJ IDEA: Right-click SpringJwtApplication.java → Run
+- IntelliJ IDEA: Right-click CinemaAuthApplication.java → Run
 - Eclipse: Run as → Spring Boot App
 
 **Verify Running:**
@@ -236,22 +236,24 @@ docker images | grep ms-authentication-service
 ### 2. Run with Docker Compose (Recommended)
 
 ```bash
-# Start all services (postgres + app)
+# Start all services (postgres, redis, kafka, eureka, config-server, auth-service, notification-service)
 docker-compose up -d
 
 # Verify services running
 docker-compose ps
-# Output:
-# NAME                              STATUS
-# jwt-spring-security-postgres-service-1        Up 30 seconds
-# jwt-spring-security-ms-authentication-service-1  Up 10 seconds
+# Output: All services (auth-service, notification-service, postgres, redis, kafka, etc.) should show UP
 
 # View logs
-docker-compose logs -f ms-authentication-service
+docker-compose logs -f auth-service
+docker-compose logs -f notification-service
 
 # Test app
 curl http://localhost:8080/api/auth/register
 ```
+
+**Service Dependencies:**
+- auth-service: postgres, redis (token blacklist), kafka, eureka, config-server
+- notification-service: kafka, redis (event dedup), eureka, config-server
 
 ### 3. Environment Variables for Docker
 
@@ -306,7 +308,7 @@ docker rmi ms-authentication-service:latest
 docker network ls | grep my-net
 
 # Inspect network
-docker network inspect jwt-spring-security_my-net
+docker network inspect ms-cinema_my-net
 
 # Services can communicate: postgres-service:5432 from ms-authentication-service
 ```
@@ -350,7 +352,7 @@ export JWT_SECRET="production-secret-key-min-32-chars"
 export SPRING_DATASOURCE_PASSWORD="db-password"
 export SPRING_DATASOURCE_URL="jdbc:postgresql://prod-db.internal:5432/authdb"
 
-java -jar spring-jwt.jar
+java -jar auth-service.jar
 ```
 
 **Secrets via Docker Secrets (Swarm):**
@@ -388,7 +390,7 @@ env:
 
 ```bash
 # 1. Copy JAR to server
-scp target/spring-jwt.jar user@prod-server:/opt/app/
+scp target/auth-service.jar user@prod-server:/opt/app/
 
 # 2. Create systemd service (for auto-start)
 # /etc/systemd/system/jwt-auth.service
@@ -399,7 +401,7 @@ After=network.target
 [Service]
 User=appuser
 WorkingDirectory=/opt/app
-ExecStart=/usr/bin/java -jar spring-jwt.jar
+ExecStart=/usr/bin/java -jar auth-service.jar
 Restart=on-failure
 RestartSec=10
 StandardOutput=journal
@@ -433,10 +435,10 @@ sudo yum install docker -y
 sudo systemctl start docker
 
 # Copy application
-scp -i key.pem spring-jwt.jar ec2-user@instance-ip:/opt/app/
+scp -i key.pem auth-service.jar ec2-user@instance-ip:/opt/app/
 
 # Run with environment variables
-java -jar /opt/app/spring-jwt.jar \
+java -jar /opt/app/auth-service.jar \
   -DJWT_SECRET=$JWT_SECRET \
   -Dspring.datasource.url=$DB_URL
 ```
@@ -578,11 +580,11 @@ namnd:
 **Activate Profile**
 ```bash
 # Via command line
-java -jar spring-jwt.jar --spring.profiles.active=prod
+java -jar auth-service.jar --spring.profiles.active=prod
 
 # Via environment variable
 export SPRING_PROFILES_ACTIVE=prod
-java -jar spring-jwt.jar
+java -jar auth-service.jar
 
 # Via Docker
 docker run -e SPRING_PROFILES_ACTIVE=prod \
@@ -707,7 +709,7 @@ spring:
   "timestamp": "2026-02-10T15:30:45.123Z",
   "level": "INFO",
   "thread": "http-nio-8080-exec-1",
-  "logger": "com.namnd.springjwt.controller.AuthController",
+  "logger": "com.namnd.cinema.controller.AuthController",
   "message": "User login successful",
   "user_id": 123,
   "username": "john",
@@ -738,7 +740,7 @@ input {
 }
 
 filter {
-  if [logger] =~ /com.namnd.springjwt/ {
+  if [logger] =~ /com.namnd.cinema/ {
     # Parse custom fields
     mutate {
       add_field => { "service" => "jwt-auth" }

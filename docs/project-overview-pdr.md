@@ -1,23 +1,30 @@
 # Project Overview & Product Development Requirements
 
-**Project:** JWT Spring Security
+**Project:** MS Cinema
 **Version:** 0.0.1-SNAPSHOT
 **Group:** com.namnd
-**Status:** Active Development
-**Last Updated:** February 2026
+**Status:** Active Development — Microservice Integration Phase
+**Last Updated:** March 2026
 
 ## Executive Summary
 
-JWT Spring Security is a Spring Boot-based REST API providing stateless authentication and authorization via JSON Web Tokens (JWT). Designed for secure, scalable microservices architectures, it combines Spring Security with JJWT library to deliver HS512-signed tokens with role-based access control.
+MS Cinema is an **8-module Spring Cloud microservice platform** providing stateless JWT authentication with event-driven notifications. The system is organized as a multi-module Maven project with dedicated infrastructure services (Eureka, Config Server, API Gateway, Kafka), business services, and a reusable JWT starter library.
 
 **Key Characteristics:**
-- Stateless JWT authentication (no session storage)
-- BCrypt password hashing
-- Role-based authorization (@PreAuthorize annotations)
-- PostgreSQL data persistence
-- Docker containerization
-- RESTful login/register endpoints
-- CORS-enabled for cross-origin requests
+- Single external entry point: API Gateway (port 8080)
+- Auth-service (port 8081) with full JWT auth lifecycle; publishes notification events to Kafka
+- Business services: movie (:8082), booking (:8083), payment (:8084)
+- Notification-service (port 8085): Kafka consumer; sends emails via SMTP (replaces direct email sending)
+- kafka-events module: Shared domain event records (NotificationRequestedEvent)
+- Spring Cloud Eureka for service discovery
+- Config Server distributes shared JWT secret to all services
+- JWT tokens embed roles + userId for downstream use
+- JWT validation starter library (`jwt-auth-spring-boot-starter`)
+- POST /api/auth/validate-token for microservice token validation
+- GET /api/users/me for authenticated user profile retrieval
+- BCrypt password hashing, Redis blacklist, PostgreSQL persistence
+- Apache Kafka event streaming (notification-events topic)
+- Prometheus (:9090) + Grafana (:3000) observability stack
 
 ## Functional Requirements
 
@@ -43,9 +50,10 @@ JWT Spring Security is a Spring Boot-based REST API providing stateless authenti
   - Rotate refresh token (delete old, create new)
   - Return new token pair in TokenRefreshResponseDto
 
-- **Password Reset:** Email-driven password reset flow
-  - Forgot Password: Accept email, generate 24-hour reset token, send email
+- **Password Reset:** Email-driven password reset flow via Kafka notifications
+  - Forgot Password: Accept email, generate 24-hour reset token, publish Kafka event
   - Reset Password: Accept reset token + new password, validate token, update password
+  - notification-service consumes event, sends SMTP email
   - Security: Returns generic message regardless of email existence
 
 - **Logout:** Blacklist token and delete refresh token
@@ -78,6 +86,13 @@ JWT Spring Security is a Spring Boot-based REST API providing stateless authenti
   - Role name (ROLE_USER, ROLE_PM, ROLE_ADMIN)
   - Many-to-many relationship with User
 
+### Notification Management (FR-004)
+- **Event-Driven Email:** Kafka-based async notifications
+  - Publish NotificationRequestedEvent on account activation, password reset
+  - notification-service (port 8085) consumes events from Kafka
+  - Sends HTML-formatted emails via SMTP (no direct email sending in auth-service)
+  - Decouples auth-service from email delivery concerns
+
 ## Non-Functional Requirements
 
 ### Security (NFR-001)
@@ -102,9 +117,10 @@ JWT Spring Security is a Spring Boot-based REST API providing stateless authenti
 
 ### Scalability (NFR-003)
 - **Stateless Architecture:** No session affinity required
-- **Horizontal Scaling:** Multiple instances share same JWT secret
-- **Database:** PostgreSQL 13.1 with standard replication/failover
-- **Token Signature:** Consistent across all instances via shared jwtSecret
+- **Service Discovery:** Eureka enables load-balanced multi-instance auth-service
+- **Shared Config:** JWT secret distributed via Config Server (all instances consistent)
+- **JWT claims:** roles + userId embedded, downstream services avoid DB lookups
+- **Gateway routing:** `lb://auth-service` uses Eureka for load balancing
 
 ### Availability (NFR-004)
 - **Database Dependency:** PostgreSQL required for startup
@@ -115,7 +131,15 @@ JWT Spring Security is a Spring Boot-based REST API providing stateless authenti
 - **Code Organization:** Package structure by layer (controller, service, model, repository)
 - **Logging:** DEBUG level for app package, SQL query logging
 - **Configuration:** YAML-based with environment variable overrides
-- **Dependencies:** Minimal, well-maintained (Spring 2.6.4, JJWT 0.9.0)
+- **Dependencies:** Minimal, well-maintained (Spring Boot 3.4.3, JJWT 0.12.6)
+
+### Observability (NFR-006)
+- **Metrics Collection:** Micrometer auto-instrumentation on all services; exported at `/actuator/prometheus`
+- **Scrape Interval:** 15 seconds (Prometheus `global.scrape_interval`)
+- **Service Tagging:** All metrics tagged with `application=${spring.application.name}`
+- **Dashboards:** JVM Micrometer dashboard (memory, GC, threads, CPU); Spring Boot HTTP Overview (req rate, error rate, latency, HikariCP, business counters)
+- **Business Counters:** auth.login/register/logout, booking.created/confirmed/cancelled, payment.initiated/completed/failed
+- **Actuator Security:** `/actuator/**` permitted within Docker `my-net` only; not exposed via API Gateway
 
 ## Technical Constraints
 
@@ -126,6 +150,8 @@ JWT Spring Security is a Spring Boot-based REST API providing stateless authenti
 | Spring Security | 6.x | New SecurityFilterChain pattern, @EnableMethodSecurity |
 | Database | PostgreSQL 16 | Advanced features, JSON/JSONB, improved performance |
 | JWT Library | JJWT 0.12.6 (3 artifacts) | Modular design, modern API, async support |
+| Message Broker | Apache Kafka | Event streaming; decouples auth from email delivery |
+| Email Service | Spring Mail SMTP | async email delivery via notification-service |
 | Packaging | JAR | Streamlined deployment, embedded Tomcat |
 | Token Algorithm | HS512 | Deterministic, fast, symmetric |
 | Session Policy | STATELESS | Matches JWT stateless design |
@@ -279,6 +305,53 @@ Error (400 Bad Request):
 - No token provided
 - Invalid token
 
+### Validate Token Endpoint (NEW — microservice use)
+**POST /api/auth/validate-token**
+- Consumes: application/json
+- Auth: None (called by other services)
+
+Request:
+```json
+{
+  "token": "eyJhbGciOiJIUzUxMiJ9..."
+}
+```
+
+Response (200 OK — valid token):
+```json
+{
+  "valid": true,
+  "userId": 1,
+  "email": "john@example.com",
+  "roles": ["ROLE_USER", "ROLE_PM"]
+}
+```
+
+Response (200 OK — invalid/expired/blacklisted):
+```json
+{
+  "valid": false
+}
+```
+
+### Get Current User Endpoint (NEW)
+**GET /api/users/me**
+- Auth: JWT Bearer token required
+- Header: `Authorization: Bearer <accessToken>`
+
+Response (200 OK):
+```json
+{
+  "id": 1,
+  "email": "john@example.com",
+  "username": "john",
+  "fullName": "John Doe",
+  "roles": ["ROLE_USER", "ROLE_PM"]
+}
+```
+
+Error (401 Unauthorized): missing/invalid/expired token
+
 ### Protected Endpoint Example
 **GET /api/protected** (or any non-auth endpoint)
 - Auth: JWT Bearer token required
@@ -343,65 +416,76 @@ Response (403 Forbidden):
 ### Phase 2: Token Management (COMPLETE)
 - ✓ Token refresh mechanism with rotation
 - ✓ Password reset flow via email
-- ✓ Logout with token blacklisting
-- ✓ Scheduled cleanup of expired tokens
-- ✓ Email validation on registration
+- ✓ Logout with token blacklisting (Redis JTI, auto-TTL)
+- ✓ Email verification (activation link)
+- ✓ Account lockout after N failed attempts (auto-unlock)
 
-### Phase 3: Enhancement (Planned)
-- [ ] User profile endpoints (GET /api/users/me)
-- [ ] Email verification (confirmation link)
-- [ ] Rate limiting on login endpoint
-- [ ] OAuth2/social login integration
-- [ ] Two-factor authentication (SMS/authenticator)
-- [ ] Account lockout after N failed attempts
+### Phase 3: Microservice Integration (IN PROGRESS)
+- ✓ Single-module → multi-module Maven project (8 modules: auth, 3 business services, 2 infra, 2 libs)
+- ✓ Spring Cloud Eureka (service registry, :8761)
+- ✓ Spring Cloud Config Server (shared JWT secret, :8888)
+- ✓ Spring Cloud Gateway MVC (single entry :8080, routes to downstream services)
+- ✓ JWT tokens include `roles` + `userId` claims
+- ✓ POST /api/auth/validate-token (microservice token validation, no DB hit)
+- ✓ GET /api/users/me (fresh user profile for downstream services)
+- ✓ jwt-auth-spring-boot-starter library (plug-in JWT auth for any service)
+- ✓ Prometheus + Grafana monitoring stack (Micrometer metrics, 2 dashboards)
+- ✓ notification-service (Kafka consumer, SMTP email delivery)
+- ✓ kafka-events module (shared NotificationRequestedEvent domain model)
+- ✓ Auth-service publishes events instead of sending emails directly
+- [ ] OpenAPI/Swagger documentation
+- [ ] Rate limiting on login/forgot-password
 
 ### Phase 4: Security Hardening (Planned)
-- [ ] Add JWT claim validation (issuer, audience)
-- [ ] Audit logging on sensitive actions
-- [ ] Request signing for sensitive operations
+- [ ] Audit logging on sensitive actions (IP, timestamp)
+- [ ] JWT claim validation (issuer, audience)
+- [ ] Secret rotation mechanism
 - [ ] IP whitelisting
 - [ ] Token encryption at rest
-- [ ] Secret rotation mechanism
 
-### Phase 5: Operations (Planned)
-- [ ] Health check endpoint (/actuator/health)
-- [ ] Metrics collection (Micrometer)
-- [ ] Centralized logging (ELK stack integration)
+### Phase 5: Operations (IN PROGRESS)
 - [ ] CI/CD pipeline (GitHub Actions)
-- [ ] Load testing & performance optimization
+- ✓ Metrics collection (Micrometer/Prometheus) — all 7 services instrumented
+- ✓ Grafana dashboards — JVM Micrometer + Spring Boot HTTP Overview
+- ✓ Custom business counters — auth, booking, payment events
+- [ ] Alerting rules (Prometheus alertmanager)
+- [ ] Centralized logging (ELK/Loki stack)
 - [ ] Kubernetes deployment manifests
+- [ ] Load testing & performance benchmarks
 
 ## Dependencies
 
 | Library | Version | Purpose |
 |---------|---------|---------|
 | Spring Boot | 3.4.3 | Framework |
+| Spring Cloud | 2024.0.1 | Eureka, Config, Gateway |
 | Spring Security | 6.x (via Spring Boot) | Authentication/Authorization |
 | Spring Data JPA | via Spring Boot | ORM |
-| JJWT | 0.12.6 (jjwt-api, jjwt-impl, jjwt-jackson) | JWT handling (3 split artifacts) |
-| PostgreSQL Driver | latest | Database |
-| Lombok | BOM-managed | Boilerplate reduction (JDK 21 compatible) |
+| Spring Kafka | via Spring Boot | Message broker integration |
+| Spring Mail | via Spring Boot | SMTP email delivery (notification-service) |
+| Spring Boot Actuator | via Spring Boot | Metrics endpoint /actuator/prometheus |
+| Micrometer | via Actuator | JVM + HTTP + custom business metrics |
+| JJWT | 0.12.6 (jjwt-api, jjwt-impl, jjwt-jackson) | JWT handling |
+| PostgreSQL Driver | latest | Database (auth-service) |
+| Lombok | BOM-managed | Boilerplate reduction |
 | BCrypt | via Spring Security | Password encoding |
-| Jakarta EE | 10+ | Namespace migration from javax.* |
-
-**Key Upgrades:**
-- Java 1.8 → 21: LTS release with significant performance & language improvements
-- Spring Boot 2.6.4 → 3.4.3: Jakarta EE namespace, new security patterns, virtual thread support
-- Spring Security 5.x → 6.x: SecurityFilterChain bean pattern, @EnableMethodSecurity replaces @EnableGlobalMethodSecurity
-- JJWT 0.9.0 → 0.12.6: Modular artifacts (api, impl, jackson), modern async API
-- PostgreSQL 13.1 → 16: Performance improvements, JSON enhancements
-- Docker: openjdk:11 → eclipse-temurin:21-jre-alpine
+| Jakarta EE | 10+ | Namespace (javax.* → jakarta.*) |
 
 ## Configuration Parameters
 
-| Parameter | Default | Type | Scope |
-|-----------|---------|------|-------|
-| server.port | 8080 | int | Spring Boot |
-| namnd.app.jwtSecret | bezKoderSecretKey | string | Custom |
-| namnd.app.jwtExpiration | 86400000 | long | Custom (ms) |
-| spring.datasource.url | jdbc:postgresql://localhost:5432/testdb | string | JPA |
-| spring.datasource.username | postgres | string | JPA |
-| spring.datasource.password | 123456 | string | JPA (should use env var) |
+| Parameter | Default | Scope | Notes |
+|-----------|---------|-------|-------|
+| server.port (auth-service) | 8081 | Spring Boot | Changed from 8080 |
+| server.port (api-gateway) | 8080 | Spring Boot | External entry point |
+| server.port (eureka-server) | 8761 | Spring Boot | Service registry |
+| server.port (config-server) | 8888 | Spring Boot | Shared config |
+| namnd.app.jwtSecret | (Base64 key) | Custom | Shared via Config Server |
+| namnd.app.jwtExpiration | 900000 | Custom (ms) | 15 min |
+| namnd.app.jwtRefreshExpiration | 604800000 | Custom (ms) | 7 days |
+| jwt.auth.secret | (from namnd.app.jwtSecret) | Starter lib | For downstream services |
+| jwt.auth.enabled | true | Starter lib | Disable with false |
+| jwt.auth.publicPaths | [] | Starter lib | Paths that skip auth |
+| spring.datasource.url | jdbc:postgresql://localhost:5432/testdb | JPA | auth-service only |
 
 ## Acceptance Criteria
 
@@ -430,22 +514,28 @@ Response (403 Forbidden):
 
 ## Implementation Notes
 
-### Email Configuration
-- Uses Spring Mail with Gmail SMTP (smtp.gmail.com:587)
-- Requires environment variables:
-  - MAIL_USERNAME: Gmail address
-  - MAIL_PASSWORD: App-specific password (not account password)
-- passwordResetBaseUrl: Configure for frontend redirect after email click
+### Multi-Module Build Order
+Config Server and Eureka must be running before auth-service and api-gateway start.
+Config Server loads `config-repo/application.yml` (shared JWT secret) and per-service configs.
 
-### Database Changes
-- Added columns to users: email (UNIQUE)
-- New tables: refresh_tokens, password_reset_tokens, blacklisted_tokens
-- Recommend running schema migrations for production
+### JWT Starter Library Usage
+Downstream services add `jwt-auth-spring-boot-starter` as a dependency, configure:
+```yaml
+jwt:
+  auth:
+    secret: ${namnd.app.jwtSecret}  # received from Config Server
+    publicPaths: ["/public/**"]
+```
+Auto-configuration wires `JwtAuthenticationFilter` and stateless `SecurityFilterChain`.
 
-### Scheduled Tasks
-- JwtService.cleanupExpiredBlacklistedTokens() runs hourly
-- Removes entries where expiryDate < now
-- Prevents unbounded growth of blacklist table
+### Email Configuration (auth-service)
+- Gmail SMTP (smtp.gmail.com:587)
+- Env vars: MAIL_USERNAME, MAIL_PASSWORD (app-specific password)
+- `activationBaseUrl` / `passwordResetBaseUrl` — configure for your frontend
+
+### Token Blacklist
+- Redis auto-TTL: no cleanup job needed
+- Fail-closed: Redis outage → token rejected
 
 ## Open Questions
 

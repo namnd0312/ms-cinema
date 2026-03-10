@@ -1,0 +1,23 @@
+# Shared config served to ALL microservices by Config Server
+namnd:
+  app:
+    jwtSecret: ${JWT_SECRET:kBJb8FEOvTCWEcfZB6RLMM5BLoI8p0FWOWEu7FSZBYn+ItVi7mHRePYCvum5Ic6l4M2nFw+kdl8du99Bxnb7zg==}
+
+# Also exposed as jwt.auth.secret for starter library consumers
+jwt:
+  auth:
+    secret: ${namnd.app.jwtSecret}
+
+# Shared Kafka configuration — overridden per-service for group-id only
+spring:
+  kafka:
+    bootstrap-servers: ${KAFKA_HOST:localhost}:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      auto-offset-reset: earliest
+      properties:
+        spring.json.trusted.packages: "com.namnd.kafka.events.*"

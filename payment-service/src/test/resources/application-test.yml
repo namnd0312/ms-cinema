@@ -1,0 +1,11 @@
+spring:
+  config:
+    import: ""
+
+jwt:
+  auth:
+    enabled: false
+
+eureka:
+  client:
+    enabled: false

@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <springProperty scope="context" name="APP_NAME" source="spring.application.name" defaultValue="notification-service"/>
+    <!-- Override LOKI_HOST via env var for local dev (default: docker service name) -->
+    <property name="LOKI_HOST" value="${LOKI_HOST:-loki}"/>
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <customFields>{"service":"${APP_NAME}"}</customFields>
+            <fieldNames>
+                <timestamp>@timestamp</timestamp>
+                <version>[ignore]</version>
+            </fieldNames>
+        </encoder>
+    </appender>
+
+    <!-- Loki appender: batch push JSON logs with service + level labels -->
+    <appender name="LOKI" class="com.github.loki4j.logback.Loki4jAppender">
+        <http>
+            <url>http://${LOKI_HOST}:3100/loki/api/v1/push</url>
+        </http>
+        <format>
+            <label>
+                <!-- Low-cardinality labels only -->
+                <pattern>service=${APP_NAME},level=%level</pattern>
+            </label>
+            <message class="com.github.loki4j.logback.JsonLayout">
+                <!-- Include MDC fields in log line -->
+                <includeMdcProperties>true</includeMdcProperties>
+            </message>
+        </format>
+        <!-- Non-blocking: drop overflow rather than blocking request threads -->
+        <batchTimeoutMs>5000</batchTimeoutMs>
+        <dropRatioOnQueueFull>0</dropRatioOnQueueFull>
+    </appender>
+
+    <!-- Suppress framework noise -->
+    <logger name="org.springframework" level="INFO"/>
+    <logger name="org.hibernate" level="WARN"/>
+    <logger name="com.netflix" level="WARN"/>
+    <logger name="org.apache.kafka" level="WARN"/>
+    <!-- notification-service application code: DEBUG for dev visibility -->
+    <logger name="com.namnd.notification" level="DEBUG"/>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="LOKI"/>
+    </root>
+</configuration>

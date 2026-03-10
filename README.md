@@ -1,4 +1,4 @@
-# JWT Spring Security
+# MS Cinema
 
 REST API authentication & authorization using JWT (JSON Web Tokens) with Spring Boot 2.6.4 and Spring Security.
 
@@ -34,6 +34,23 @@ docker-compose up --build
 ```
 
 Server runs on `http://localhost:8080`
+
+## API Documentation
+
+### Interactive Swagger UI
+
+All services expose OpenAPI 3.0 documentation via Swagger UI:
+
+**Aggregated API Gateway (Primary):**
+- http://localhost:8080/swagger-ui.html — All service APIs combined
+
+**Individual Service Docs:**
+- auth-service: http://localhost:8081/swagger-ui.html
+- movie-service: http://localhost:8082/swagger-ui.html
+- booking-service: http://localhost:8083/swagger-ui.html
+- payment-service: http://localhost:8084/swagger-ui.html
+
+Download OpenAPI JSON: `/v3/api-docs` on any service for tool integration.
 
 ## API Reference
 
@@ -234,8 +251,8 @@ namnd.app.lockDurationMs: 900000                  # Lock duration (default 15 mi
 ## Project Structure
 
 ```
-src/main/java/com/namnd/springjwt/
-├── SpringJwtApplication.java          Main entry point
+src/main/java/com/namnd/cinema/
+├── CinemaAuthApplication.java          Main entry point
 ├── config/
 │   ├── security/SecurityConfig.java   Filter chain, encoder, session policy
 │   ├── filter/JwtAuthenticationFilter.java  Token extraction & validation

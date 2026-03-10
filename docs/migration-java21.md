@@ -132,7 +132,7 @@ public class SecurityConfig {
 - pom.xml: `<packaging>jar</packaging>` (default)
 - ServletInitializer.java removed
 - Tomcat embedded in spring-boot-starter-web
-- Build: `mvn clean package` → `target/spring-jwt.jar` (executable)
+- Build: `mvn clean package` → `target/auth-service.jar` (executable)
 
 ### 4. JJWT Library Split
 
@@ -213,15 +213,15 @@ spring:
 **Old:**
 ```dockerfile
 FROM openjdk:11
-COPY target/spring-jwt.jar /opt/app/spring-jwt.jar
-ENTRYPOINT ["java", "-jar", "/opt/app/spring-jwt.jar"]
+COPY target/auth-service.jar /opt/app/auth-service.jar
+ENTRYPOINT ["java", "-jar", "/opt/app/auth-service.jar"]
 ```
 
 **New:**
 ```dockerfile
 FROM eclipse-temurin:21-jre-alpine
-COPY target/spring-jwt.jar /opt/app/spring-jwt.jar
-ENTRYPOINT ["java", "-jar", "/opt/app/spring-jwt.jar"]
+COPY target/auth-service.jar /opt/app/auth-service.jar
+ENTRYPOINT ["java", "-jar", "/opt/app/auth-service.jar"]
 ```
 
 **Benefits:**

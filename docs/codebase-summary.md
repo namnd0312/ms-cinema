@@ -1,63 +1,115 @@
 # Codebase Summary
 
-**Project:** jwt-spring-security
-**Generated:** March 2026 (post-Java 21 migration)
-**Total Java Files:** 37 (main) + 1 (test)
-**Total Lines of Code (approx):** ~4,200 LOC
+**Project:** ms-cinema
+**Generated:** March 2026 (post-microservice migration)
+**Architecture:** 6-module Maven multi-module (Spring Cloud)
 **Java Version:** 21 LTS
 **Spring Boot:** 3.4.3
+**Spring Cloud:** 2024.0.1
 
-## Directory Structure
+## Module Structure
 
 ```
-jwt-spring-security/
-├── src/
-│   ├── main/
-│   │   ├── java/com/namnd/springjwt/
-│   │   │   ├── SpringJwtApplication.java (35 lines)
-│   │   │   ├── config/
-│   │   │   │   ├── security/SecurityConfig.java (82 lines)
-│   │   │   │   ├── filter/JwtAuthenticationFilter.java (~60 lines)
-│   │   │   │   └── custom/CustomAccesDeniedHandler.java (~30 lines)
-│   │   │   ├── controller/
-│   │   │   │   └── AuthController.java (96 lines)
-│   │   │   ├── model/
-│   │   │   │   ├── User.java (29 lines)
-│   │   │   │   ├── Role.java (~20 lines)
-│   │   │   │   └── UserPrinciple.java (~80 lines)
-│   │   │   ├── dto/
-│   │   │   │   ├── JwtResponseDto.java (~40 lines)
-│   │   │   │   ├── RegisterDto.java (~30 lines)
-│   │   │   │   └── mapper/RegisterDtoMapper.java (~40 lines)
-│   │   │   ├── service/
-│   │   │   │   ├── JwtService.java (61 lines)
-│   │   │   │   ├── UserService.java (~20 lines interface)
-│   │   │   │   ├── RoleService.java (~15 lines interface)
-│   │   │   │   └── impl/
-│   │   │   │       ├── UserServiceImpl.java (~50 lines)
-│   │   │   │       └── RoleServiceImpl.java (~30 lines)
-│   │   │   └── repository/
-│   │   │       ├── UserRepository.java (interface)
-│   │   │       └── RoleRepository.java (interface)
-│   │   └── resources/
-│   │       ├── application.yml (46 lines)
-│   │       └── roles.sql (3 lines)
-│   └── test/
-│       └── SpringJwtApplicationTests.java (15 lines)
-├── pom.xml (92 lines)
-├── Dockerfile (18 lines)
-├── docker-compose.yml (36 lines)
-├── README.md
+ms-cinema/                  ← root pom (packaging: pom)
+├── auth-service/                     ← core auth service (:8081)
+├── jwt-auth-spring-boot-autoconfigure/ ← JWT starter auto-config
+├── jwt-auth-spring-boot-starter/     ← thin starter wrapper
+├── eureka-server/                    ← service registry (:8761)
+├── config-server/                    ← shared config (:8888)
+├── api-gateway/                      ← single entry point (:8080)
+├── movie-service/                    ← movie catalog service (:8082)
+├── booking-service/                  ← ticket booking service (:8083)
+├── payment-service/                  ← payment processing service (:8084)
+├── notification-service/             ← notification service (:8085)
+├── kafka-events/                     ← Kafka event domain models
+├── monitoring/                       ← Prometheus & Grafana config
+│   ├── prometheus/
+│   │   └── prometheus.yml            ← 8 scrape jobs (15s interval)
+│   └── grafana/provisioning/
+│       ├── datasources/datasources.yml   ← auto-provision Prometheus datasource
+│       └── dashboards/
+│           ├── dashboards.yml            ← dashboard provider config
+│           └── json/
+│               ├── jvm-micrometer.json           ← JVM metrics dashboard
+│               └── spring-boot-http-overview.json ← HTTP + business metrics dashboard
+├── docker-compose.yml
 └── docs/
 ```
+
+### auth-service (main module)
+
+```
+auth-service/src/main/java/com/namnd/cinema/
+├── CinemaAuthApplication.java
+├── config/
+│   ├── security/SecurityConfig.java
+│   ├── filter/JwtAuthenticationFilter.java
+│   ├── custom/CustomAccesDeniedHandler.java
+│   ├── OpenApiConfig.java                 ← NEW (SpringDoc)
+│   ├── RedisConfig.java
+│   └── RedisKeyPrefix.java
+├── controller/
+│   ├── AuthController.java (~230 lines, @Tag + @Operation)
+│   ├── TokenValidationController.java (99 lines, @Tag + @Operation)  ← NEW
+│   └── TestController.java
+├── model/
+│   ├── User.java, Role.java, UserPrinciple.java
+│   ├── RefreshToken.java, PasswordResetToken.java
+│   └── ActivationToken.java
+├── dto/
+│   ├── LoginRequestDto.java, JwtResponseDto.java, RegisterDto.java
+│   ├── ForgotPasswordDto.java, ResetPasswordDto.java
+│   ├── RefreshTokenRequestDto.java, TokenRefreshResponseDto.java
+│   ├── ValidateTokenRequestDto.java  ← NEW
+│   ├── ValidateTokenResponseDto.java ← NEW
+│   ├── UserInfoResponseDto.java      ← NEW
+│   └── mapper/RegisterDtoMapper.java
+├── service/
+│   ├── JwtService.java (147 lines)   ← UPDATED (roles+userId claims)
+│   ├── UserService.java, RoleService.java, RefreshTokenService.java
+│   ├── PasswordResetService.java, EmailService.java
+│   ├── ActivationService.java, BlacklistedTokenService.java
+│   ├── AccountLockService.java, RedisService.java
+│   └── impl/ (all above impls)
+└── repository/
+    ├── UserRepository.java, RoleRepository.java
+    ├── RefreshTokenRepository.java, PasswordResetTokenRepository.java
+    └── ActivationTokenRepository.java
+```
+
+### jwt-auth-spring-boot-autoconfigure
+
+```
+src/main/java/com/namnd/jwt/autoconfigure/
+├── JwtAutoConfiguration.java   ← @AutoConfiguration, conditional beans
+├── JwtAuthProperties.java      ← @ConfigurationProperties prefix=jwt.auth
+├── JwtTokenValidator.java      ← validates HS512 signature
+├── JwtAuthenticationFilter.java← sets SecurityContext for downstream services
+└── JwtAuthenticatedUser.java   ← principal model
+```
+
+### Infrastructure Modules
+
+| Module | Main Class | Port | Key Dep |
+|--------|-----------|------|---------|
+| eureka-server | EurekaServerApplication | 8761 | spring-cloud-starter-netflix-eureka-server |
+| config-server | ConfigServerApplication | 8888 | spring-cloud-config-server |
+| api-gateway | ApiGatewayApplication | 8080 | spring-cloud-starter-gateway-mvc, springdoc-openapi-starter-webmvc-ui |
+| movie-service | MovieServiceApplication | 8082 | springdoc-openapi-starter-webmvc-ui, OpenApiConfig.java |
+| booking-service | BookingServiceApplication | 8083 | springdoc-openapi-starter-webmvc-ui, OpenApiConfig.java |
+| payment-service | PaymentServiceApplication | 8084 | springdoc-openapi-starter-webmvc-ui, OpenApiConfig.java |
+| notification-service | NotificationServiceApplication | 8085 | spring-kafka, spring-boot-starter-mail |
+| kafka-events | — | — | domain event records (NotificationRequestedEvent) |
+| prometheus | (Docker image) | 9090 | monitoring/prometheus/prometheus.yml |
+| grafana | (Docker image) | 3000 | monitoring/grafana/provisioning/ |
 
 ## Core Components
 
 ### 1. Application Entry Point
 
-**SpringJwtApplication.java** (35 lines)
+**CinemaAuthApplication.java** (35 lines)
 - `@SpringBootApplication` main entry point
-- Scans packages under com.namnd.springjwt
+- Scans packages under com.namnd.cinema
 - Runs on port 8080 via application.yml
 - Note: ServletInitializer.java removed (JAR-only packaging post-migration)
 
@@ -111,50 +163,27 @@ jwt-spring-security/
 - **handle():** Returns 403 with JSON error on access denied
 - Prevents Spring default redirect behavior
 
-### 3. REST Controller
+### 3. REST Controllers
 
-**AuthController.java** (~230 lines)
-- Route: `/api/auth`
-- Annotations: @CrossOrigin(origins="*", maxAge=3600), @RestController, @RequestMapping
-- **Endpoints:**
-  - **POST /login** (accepts LoginRequestDto with email+password, returns JwtResponseDto)
-    - Pre-auth check: returns 423 with remaining lock time if account is locked
-    - Authenticates via AuthenticationManager using email as principal
-    - On BadCredentialsException: increments failedAttempts; locks account when threshold reached
-    - On LockedException: returns 423 "Account is locked"
-    - Returns 401 "Account not activated" if user.active=false
-    - On success: resets failedAttempts to 0 and clears lockTime
-    - Generates access token + refresh token
-    - Returns id, token, refreshToken, email, username, name, roles
-  - **POST /register** (accepts RegisterDto, returns String)
-    - Validates email uniqueness only (duplicate usernames allowed)
-    - Validates email required field
-    - Encodes password, creates/assigns roles, saves with active=false
-    - Triggers ActivationService.createActivationToken() to send email
-    - Returns: "User registered successfully! Please check your email to activate your account."
-  - **GET /activate** (query param: token)
-    - Delegates to ActivationService.activateAccount(token)
-    - Sets user.active=true, marks token used
-    - Returns 400 on invalid/expired/already-used token
-  - **POST /resend-activation** (accepts ForgotPasswordDto with email)
-    - Delegates to ActivationService.resendActivation(email)
-    - Returns generic success message (security)
-  - **POST /forgot-password** (accepts ForgotPasswordDto)
-    - Generates password reset token
-    - Sends reset link via email
-    - Returns generic success message (security)
-  - **POST /reset-password** (accepts ResetPasswordDto)
-    - Validates reset token expiration
-    - Encodes new password
-    - Updates user password
-  - **POST /refresh-token** (accepts RefreshTokenRequestDto)
-    - Validates refresh token existence & expiration
-    - Generates new access token
-    - Rotates refresh token (creates new one)
-  - **POST /logout** (requires Bearer token)
-    - Extracts JWT and JTI
-    - Blacklists JTI with expiration date
-    - Deletes user's refresh token
+**AuthController.java** (~230 lines) — route: `/api/auth`
+
+| Endpoint | Method | Auth | Notes |
+|----------|--------|------|-------|
+| /login | POST | none | Returns JwtResponseDto with id/token/refreshToken/email/username/roles |
+| /register | POST | none | Saves user (active=false), sends activation email |
+| /activate | GET | token param | Sets user.active=true |
+| /resend-activation | POST | none | Resends activation email |
+| /forgot-password | POST | none | Generates 24h reset token, sends email |
+| /reset-password | POST | token | BCrypt-encodes new password |
+| /refresh-token | POST | refresh token | Rotates refresh token, returns new pair |
+| /logout | POST | Bearer | Blacklists JTI in Redis, deletes refresh token |
+
+**TokenValidationController.java** (99 lines) — NEW for microservice integration
+
+| Endpoint | Method | Auth | Notes |
+|----------|--------|------|-------|
+| /api/auth/validate-token | POST | none | Validates JWT sig+expiry+blacklist; returns valid/userId/email/roles |
+| /api/users/me | GET | Bearer | Loads fresh user profile from DB for authenticated caller |
 
 ### 4. Data Models
 
@@ -263,18 +292,17 @@ jwt-spring-security/
 
 ### 6. Services
 
-**JwtService.java** (~120 lines)
-- @Component
-- Injected: @Value("${namnd.app.jwtSecret}"), @Value("${namnd.app.jwtExpiration}"), @Value("${namnd.app.jwtRefreshExpiration}")
+**JwtService.java** (147 lines) — UPDATED
+- Injected: `${namnd.app.jwtSecret}`, `${namnd.app.jwtExpiration}`
 - **Methods:**
-  - `generateTokenLogin(Authentication)` - Generates 15-min access token with JTI (sub = email)
-  - `generateTokenFromEmail(String)` - Generates access token from email (used on token refresh)
-  - `validateJwtToken(String)` - Validates signature & expiration
-  - `validateJwtTokenWithBlacklist(String)` - Validates & checks Redis blacklist
-  - `getEmailFromJwtToken(String)` - Extracts email from JWT sub claim
-  - `getJtiFromToken(String)` - Extracts JTI (JWT ID) claim
-  - `getExpirationFromToken(String)` - Extracts expiration date
-- **Note:** JWT sub claim = email (not username). No scheduled cleanup (Redis auto-TTL)
+  - `generateTokenLogin(Authentication)` — HS512 signed, JTI, includes `roles` + `userId` claims
+  - `generateTokenFromEmail(String)` — legacy, no roles/userId (backward compat)
+  - `generateTokenFromEmail(String, Long, List<String>)` — with roles+userId for refresh flow
+  - `validateJwtToken(String)` — signature + expiration check
+  - `getEmailFromJwtToken(String)`, `getJtiFromToken(String)`, `getExpirationFromToken(String)`
+  - `getRolesFromToken(String)` — NEW, extracts roles claim
+  - `getUserIdFromToken(String)` — NEW, extracts userId claim
+- JWT sub = email; roles+userId embedded for downstream service consumption via validate-token
 
 **RefreshTokenService.java** (interface)
 - **Methods:**
@@ -300,13 +328,13 @@ jwt-spring-security/
 
 **EmailService.java** (interface)
 - **Methods:**
-  - sendPasswordResetEmail(String email, String resetLink) - Sends via SMTP
-  - sendActivationEmail(String email, String activationLink) - Sends account activation email
+  - sendPasswordResetEmail(String email, String resetLink) - Publishes Kafka event
+  - sendActivationEmail(String email, String activationLink) - Publishes Kafka event
 
-**EmailServiceImpl.java** (~55 lines)
-- @Service, uses JavaMailSender
-- Sends HTML-formatted emails for password reset and account activation
-- Spring Mail configuration from application.yml
+**EmailServiceImpl.java** (~35 lines)
+- @Service, injected KafkaTemplate<String, Object>
+- Publishes NotificationRequestedEvent to Kafka topic "notification-events"
+- Removed JavaMailSender dependency; actual email sending delegated to notification-service
 
 **ActivationService.java** (interface)
 - **Methods:**
@@ -423,66 +451,22 @@ jwt-spring-security/
 
 ## Configuration Files
 
-**pom.xml** (updated for Java 21 & Spring Boot 3.4.3)
-- Group: com.namnd
-- Artifact: spring-jwt
-- Version: 0.0.1-SNAPSHOT
-- Packaging: jar (changed from war)
-- Java: 21
-- **Dependencies:**
-  - spring-boot-starter-data-jpa
-  - spring-boot-starter-security (6.x, includes Jakarta EE)
-  - spring-boot-starter-web (embedded Tomcat, no separate tomcat starter)
-  - spring-boot-starter-data-redis
-  - spring-boot-devtools (runtime)
-  - postgresql (latest driver)
-  - lombok (BOM-managed, JDK 21 compatible)
-  - spring-boot-starter-test (test scope)
-  - spring-security-test (test scope)
-  - jjwt 0.12.6: api + impl + jackson (3 split artifacts)
-- **Key Changes:**
-  - Removed spring-boot-starter-tomcat (provided) - embedded in web starter for JAR
-  - JJWT split into 3 modules: jjwt-api, jjwt-impl, jjwt-jackson
-  - All javax.* imports converted to jakarta.* namespace
-- **Plugins:**
-  - spring-boot-maven-plugin (excludes Lombok)
+**Root pom.xml** — packaging: pom, 6 modules, Spring Cloud BOM (2024.0.1), JJWT 0.12.6
 
-**application.yml** (~51 lines, Spring Boot 3.4.3 format)
-- server.port: 8080
-- spring.jpa.hibernate.ddl-auto: create-drop (development), should be none (production)
-- spring.jpa.show-sql: true
-- spring.datasource.url: jdbc:postgresql://localhost:5432/testdb
-- spring.datasource.username: postgres
-- spring.datasource.password: postgres (or use env var override)
-- spring.data.redis.host: localhost (changed from spring.redis.host in SB 3.x)
-- spring.data.redis.port: 6379 (changed from spring.redis.port in SB 3.x)
-- spring.mail.host: smtp.gmail.com, port: 587 (for password reset emails)
-- namnd.app.jwtSecret: ${JWT_SECRET:bezKoderSecretKey} (Base64-encoded with env var override)
-- namnd.app.jwtExpiration: 900000 (15 minutes in milliseconds)
-- namnd.app.jwtRefreshExpiration: 604800000 (7 days in milliseconds)
-- namnd.app.passwordResetBaseUrl: http://localhost:3000/reset-password
-- namnd.app.activationBaseUrl: http://localhost:8080/api/auth/activate
-- logging: DEBUG for com.namnd.springjwt, SQL queries
-- **Key Change:** spring.redis.* → spring.data.redis.* (Spring Boot 3.x convention)
+**auth-service/application.yml** (key values)
+- `server.port: ${SERVER_PORT:8081}` (changed from 8080)
+- `spring.config.import: optional:configserver:http://${CONFIG_SERVER_HOST:localhost}:8888`
+- `eureka.client.service-url.defaultZone: http://${EUREKA_HOST:localhost}:8761/eureka/`
+- `namnd.app.jwtSecret: ${JWT_SECRET:...}` — overridden by Config Server in production
+- `namnd.app.jwtExpiration: 900000` / `jwtRefreshExpiration: 604800000`
 
-**roles.sql** (3 lines)
-- INSERT INTO roles: ROLE_USER, ROLE_PM, ROLE_ADMIN
+**config-repo/application.yml** — shared: `namnd.app.jwtSecret` + `jwt.auth.secret`
 
-**Dockerfile** (18 lines, updated)
-- Base: eclipse-temurin:21-jre-alpine (changed from openjdk:11)
-- Copies target/spring-jwt.jar to /opt/app/spring-jwt.jar
-- ENTRYPOINT: java -jar spring-jwt.jar
-- Benefits: Smaller image, JDK 21 runtime, Alpine Linux base
+**api-gateway/application.yml** — port 8080, routes `/api/auth/**` and `/api/users/**` to `lb://auth-service`
 
-**docker-compose.yml** (36 lines, updated)
-- Services:
-  - postgres-service (postgres:16-alpine, port 5432) [upgraded from 13.1]
-  - redis-service (redis:latest, port 6379)
-  - ms-authentication-service (builds from Dockerfile, port 8080, depends_on postgres, redis)
-- Network: my-net (bridge)
-- Volumes: /Users/admin/Desktop/DEV/DOCKER/docker-volumes (persistent)
-- Restart policy: unless-stopped
-- Note: Dockerfile now uses eclipse-temurin:21-jre-alpine base image
+**eureka-server/application.yml** — port 8761, self-register: false
+
+**docker-compose.yml** — now includes eureka-server, config-server, api-gateway; auth-service on 8081
 
 ## Key Design Patterns
 
@@ -499,108 +483,66 @@ jwt-spring-security/
 
 | Metric | Value |
 |--------|-------|
-| Total Java Classes | 39 (removed ServletInitializer) |
-| Total Interfaces | 11 (UserService, RoleService, JwtService, RefreshTokenService, PasswordResetService, EmailService, BlacklistedTokenService, ActivationService, AccountLockService) |
-| Total Enums | 0 |
-| Largest Class | AuthController (~230 lines) |
-| Key Entities | User, Role, RefreshToken, PasswordResetToken, ActivationToken |
-| Core Services | UserService, RoleService, JwtService, RefreshTokenService, PasswordResetService, EmailService, ActivationService, AccountLockService, BlacklistedTokenService, RedisService |
-| Config Classes | SecurityConfig, RedisConfig, RedisKeyPrefix |
-| Repositories | UserRepository, RoleRepository, RefreshTokenRepository, PasswordResetTokenRepository, ActivationTokenRepository |
-| DTOs | LoginRequestDto, JwtResponseDto, RegisterDto, ForgotPasswordDto, ResetPasswordDto, RefreshTokenRequestDto, TokenRefreshResponseDto |
-| Package Depth | 3-4 levels (com.namnd.springjwt.{service.impl, dto.mapper, config.security, config.filter, config.custom}) |
-| Scheduled Tasks | 0 (Redis auto-TTL replaces scheduled cleanup) |
-| Test Coverage | 1 smoke test (SpringJwtApplicationTests) |
+| Maven Modules | 9 (auth-service, autoconfigure, starter, eureka, config, gateway, movie, booking, payment) |
+| auth-service Java Classes | ~42 (added TokenValidationController + 3 DTOs) |
+| New Controllers | TokenValidationController (validate-token + users/me) |
+| New DTOs | ValidateTokenRequestDto, ValidateTokenResponseDto, UserInfoResponseDto |
+| New JwtService methods | getRolesFromToken(), getUserIdFromToken(), generateTokenFromEmail(String,Long,List) |
+| Starter lib classes | 5 (JwtAutoConfiguration, JwtAuthProperties, JwtTokenValidator, JwtAuthenticationFilter, JwtAuthenticatedUser) |
+| Test Coverage | 1 smoke test (auth-service CinemaAuthApplicationTests) |
+| Scheduled Tasks | 0 (Redis auto-TTL) |
 
 ## External Dependencies
 
-| Dependency | Version | Size (MB) | Security Status |
-|------------|---------|-----------|-----------------|
-| Spring Boot | 3.4.3 | - | Latest LTS, active maintenance |
-| Spring Security | 6.x (via Boot) | - | Latest, SecurityFilterChain pattern |
-| Spring Mail | included | - | Active maintenance, jakarta.mail |
-| JJWT | 0.12.6 | ~0.5 (split artifacts) | Current, async API support |
-| PostgreSQL Driver | ~42.x | ~0.9 | Latest |
-| Redis | via Spring Data Redis | ~7.x | NoSQL cache for token blacklist |
-| Lombok | BOM-managed | ~1.8 | JDK 21 compatible |
-| JavaMail | jakarta.mail (via Spring) | - | Jakarta EE standard |
-| Jakarta EE | 10+ | - | Namespace migration from javax.* |
+| Dependency | Version | Notes |
+|------------|---------|-------|
+| Spring Boot | 3.4.3 | Jakarta EE, virtual threads ready |
+| Spring Cloud | 2024.0.1 | Eureka, Config, Gateway |
+| Spring Security | 6.x (via Boot) | SecurityFilterChain pattern |
+| Spring Kafka | via Boot | message broker for event-driven flow |
+| Spring Mail | via Boot | SMTP email delivery (notification-service) |
+| JJWT | 0.12.6 | 3 split artifacts (api, impl, jackson) |
+| SpringDoc OpenAPI Starter | 2.8.4 | Swagger UI + OpenAPI 3.0 docs |
+| Micrometer | via Spring Boot Actuator | Metrics export per service |
+| PostgreSQL Driver | ~42.x | auth-service only |
+| Redis | via Spring Data Redis | auth-service only (blacklist) |
+| Lombok | BOM-managed | JDK 21 compatible |
 
-## Build & Artifact
+## Build
 
-**Maven Build:**
-```
+```bash
+# Build all modules from root
 mvn clean install
-→ Builds: target/spring-jwt.war, target/spring-jwt.jar
+
+# Build individual module
+cd auth-service && mvn clean package
+
+# Docker (auth-service)
+docker build -t auth-service ./auth-service
 ```
-
-**Docker Image:**
-```
-docker build -t ms-authentication-service .
-→ Image: OpenJDK 11 + spring-jwt.jar
-→ Size: ~500MB (approx, depends on build)
-```
-
-## Code Quality Observations
-
-**Strengths:**
-- Clean separation of concerns (controller → service → repository)
-- Standard Spring Security patterns
-- Lombok reduces boilerplate
-- Stateless design with token rotation supports scaling
-- Token refresh mechanism with rotation
-- Redis-based JTI blacklisting for logout (no scheduled cleanup needed)
-- Email-driven password reset flow
-- Auto-TTL on Redis keys eliminates data cleanup jobs
-- Configurable token expiration times
-- Email validation required on registration
-- Fail-closed blacklist error handling (rejects tokens on Redis outage)
-
-**Areas for Improvement:**
-- Limited test coverage (1 smoke test)
-- No validation annotations (@Valid, @NotNull) on DTOs
-- Hardcoded jwtSecret in application.yml (should use env var)
-- Account lockout implemented (brute-force protection); HTTP rate limiting not yet added
-- Password reset tokens need stronger entropy
-- Spring Mail credentials in config (use env vars)
-- Manual schema management (no migrations tracked)
-- Email service error handling could be more robust
-- No audit logging for sensitive operations
-- Redis connection resilience could be enhanced (circuit breaker)
-
-## Deployment Artifacts
-
-**WAR File:**
-- Target: target/spring-jwt.war
-- Supports: Tomcat, JBoss, other servlet containers
-
-**JAR File:**
-- Target: target/spring-jwt.jar
-- Supports: Docker, standalone JVM execution
-
-**Docker Image:**
-- Base: openjdk:11
-- Includes: Spring Boot JAR + embedded Tomcat
 
 ## Integration Points
 
-| System | Integration | Type |
-|--------|-----------|------|
-| PostgreSQL | Database | Synchronous (JDBC) |
-| Redis | Token Blacklist Cache | Synchronous (TCP) |
-| Spring Security | Authentication | Internal |
-| Spring Data JPA | ORM | Internal |
-| Log4j (via Spring) | Logging | Asynchronous |
-| Java Security | Crypto (BCrypt) | Internal |
+| System | Consumer | Type |
+|--------|----------|------|
+| PostgreSQL (:5432) | auth-service | JDBC/JPA |
+| Redis (:6379) | auth-service | token blacklist |
+| Kafka (notification-events topic) | notification-service | event streaming |
+| SMTP (Gmail) | notification-service | email sending |
+| Eureka (:8761) | auth-service, api-gateway, business services | service registry |
+| Config Server (:8888) | auth-service, api-gateway, business services | shared JWT secret |
+| api-gateway (:8080) | clients | routing to downstream services |
+| Prometheus (:9090) | grafana | metrics datasource |
+| /actuator/prometheus | prometheus | scraped from all 8 services every 15s |
 
 ## Future Expansion Points
 
-1. **Two-Factor Authentication:** SMS or authenticator app support
-2. **OAuth2/Social Login:** Google, GitHub, Facebook integration
-3. **Advanced Roles:** Implement permissions model (Role → Permission mapping)
-4. **Audit Logging:** Track login/register/password reset/logout attempts
-5. **Rate Limiting:** Prevent brute force on login/forgot-password
-6. **Token Encryption:** Add encryption layer to refresh tokens
-8. **API Gateway:** Kong, Spring Cloud Gateway wrapper
-9. **Admin Dashboard:** User/role management UI
-10. **Token Introspection:** Endpoint to check token validity
+1. **OAuth2/Social Login** — Google, GitHub
+2. **Advanced Roles** — permissions model
+3. **Audit Logging** — login/reset/logout events with IP
+4. **Rate Limiting** — login/forgot-password endpoints
+5. ✓ **OpenAPI/Swagger** — auto-generated API docs (DONE: SpringDoc 2.8.4)
+6. ✓ **Event-Driven Email** — Kafka-based notification service (DONE)
+7. **Alerting Rules** — Prometheus alertmanager for SLA breach notifications
+8. **Centralized Logging** — ELK/Loki stack integration
+9. **Notification Templates** — Customizable email templates in notification-service

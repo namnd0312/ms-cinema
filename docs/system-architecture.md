@@ -1,33 +1,84 @@
 # System Architecture
 
-**Project:** jwt-spring-security
+**Project:** ms-cinema
 **Version:** 0.0.1-SNAPSHOT
 **Java Version:** 21 LTS
 **Spring Boot:** 3.4.3
-**Architecture Pattern:** Layered Architecture with JWT Authentication
-**Last Updated:** March 2026 (post-Java 21 migration)
+**Spring Cloud:** 2024.0.1
+**Architecture Pattern:** Multi-Module Microservice with Spring Cloud
+**Last Updated:** March 2026 (post-microservice migration)
 
 ## Architecture Overview
 
-JWT Spring Security is built on a **layered architecture** with stateless JWT-based authentication. The system separates concerns into distinct layers: Presentation (REST), Business Logic (Service), Data Access (Repository), and Data Storage (Database).
+MS Cinema has migrated from a single-module monolith to an **8-module Maven multi-module project** with a Spring Cloud infrastructure layer and event-driven notification system. All external traffic enters through the API Gateway (port 8080); auth-service runs on port 8081, notification-service runs on port 8085.
+
+### Module Topology
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      CLIENT (Web/Mobile)                     │
-└──────────────────────────┬──────────────────────────────────┘
-                           │ HTTP + JWT Bearer Token
-┌──────────────────────────▼──────────────────────────────────┐
-│                 PRESENTATION LAYER                           │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │         AuthController (@RestController)             │   │
-│  │  POST /api/auth/login                                │   │
-│  │  POST /api/auth/register                             │   │
-│  │  GET  /api/auth/activate                             │   │
-│  │  POST /api/auth/resend-activation                    │   │
-│  └──────────────────────────────────────────────────────┘   │
-│                           ▲                                   │
-│                           │                                   │
-└───────────────────────────┼───────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                      CLIENT (Web/Mobile)                         │
+└──────────────────────────────┬──────────────────────────────────┘
+                               │ HTTP (port 8080)
+┌──────────────────────────────▼──────────────────────────────────┐
+│                    api-gateway  (:8080)                          │
+│  spring-cloud-starter-gateway-mvc (servlet, NOT WebFlux)         │
+│  Routes: /api/auth/** → lb://auth-service                        │
+│          /api/users/** → lb://auth-service                       │
+└──────────┬──────────────────────────────────┬───────────────────┘
+           │ service discovery                 │ config fetch
+           ▼                                   ▼
+┌─────────────────────┐          ┌─────────────────────────┐
+│  eureka-server      │          │  config-server  (:8888)  │
+│  (:8761)            │◀─────────│  Serves shared JWT       │
+│  Netflix Eureka     │ register │  secret + app configs    │
+└─────────────────────┘          └─────────────────────────┘
+           │ discovers
+           ▼
+┌──────────────────────────────────────────────────────────────┐
+│                   auth-service  (:8081)                       │
+│  Layered Architecture with JWT Authentication                 │
+│                                                               │
+│  ┌──────────────────────────────────────────────────────┐    │
+│  │  PRESENTATION LAYER                                  │    │
+│  │  AuthController (@RestController)                    │    │
+│  │  POST /api/auth/login                                │    │
+│  │  POST /api/auth/register                             │    │
+│  │  GET  /api/auth/activate                             │    │
+│  │  POST /api/auth/resend-activation                    │    │
+│  │  POST /api/auth/validate-token  (microservice use)   │    │
+│  │  GET  /api/users/me             (microservice use)   │    │
+│  │                                                       │    │
+│  │  EmailServiceImpl (now publishes Kafka events)        │    │
+│  │  POST /notifications → Kafka (notification-events)   │    │
+│  └──────────────────────────────────────────────────────┘    │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### JWT Starter Library & Event Modules
+
+```
+jwt-auth-spring-boot-autoconfigure
+  ├─ JwtAutoConfiguration (@AutoConfiguration)
+  │  ├─ @ConditionalOnClass(SecurityFilterChain.class)
+  │  ├─ @ConditionalOnWebApplication(SERVLET)
+  │  └─ @ConditionalOnProperty(jwt.auth.enabled=true, default)
+  ├─ JwtAuthProperties (@ConfigurationProperties prefix=jwt.auth)
+  ├─ JwtTokenValidator  — validates signature via shared secret
+  ├─ JwtAuthenticationFilter — sets SecurityContext from token
+  └─ JwtAuthenticatedUser — principal model for downstream services
+
+jwt-auth-spring-boot-starter
+  └─ Thin wrapper: declares autoconfigure + spring-boot-starter as deps
+     (downstream services add this one dep to get JWT auth out of the box)
+
+kafka-events
+  └─ Domain event records (shared across services)
+     └─ NotificationRequestedEvent (topic: notification-events)
+```
+
+### auth-service Internal Layers
+
+```
                             │
         ┌───────────────────┴───────────────────┐
         │                                       │
@@ -185,58 +236,21 @@ JWT Spring Security is built on a **layered architecture** with stateless JWT-ba
 
 ```
 CLIENT                           SERVER
-  │                                │
   ├─ POST /api/auth/login ──────▶ AuthController.authenticateUser()
-  │  {email, password}             │
-  │                                ├─ AccountLockService.isLocked(user)?
-  │                                │  ├─ Yes → 423 "Account locked, try in X min"
-  │                                │  └─ No → continue
-  │                                │
-  │                                ├─ AuthenticationManager.authenticate()
-  │                                │  (Spring Security calls isEnabled() → DisabledException if false → 401)
-  │                                │  (Spring Security calls isAccountNonLocked() → LockedException if false → 423)
-  │                                │  ├─ UserServiceImpl.loadUserByUsername(email)
-  │                                │  │  └─ UserRepository.findByEmail()
-  │                                │  │     └─ Database Query
-  │                                │  │        ├─ Load User
-  │                                │  │        └─ Eager Load Roles
-  │                                │  │        └─ Return User
-  │                                │  ├─ PasswordEncoder.matches(inputPassword, userPassword)
-  │                                │  │  └─ BCrypt Verification
-  │                                │  └─ Return Authentication(UserPrinciple)
-  │                                │
-  │                                ├─ [on BadCredentialsException]
-  │                                │  └─ AccountLockService.loginFailed(email)
-  │                                │     ├─ Increment user.failedAttempts
-  │                                │     └─ If >= maxFailedAttempts: set user.lockTime=now
-  │                                │
-  │                                ├─ AccountLockService.loginSucceeded(email)
-  │                                │  ├─ Reset user.failedAttempts = 0
-  │                                │  └─ Clear user.lockTime = null
-  │                                │
-  │                                ├─ JwtService.generateTokenLogin()
-  │                                │  ├─ Extract email from UserPrinciple
-  │                                │  ├─ Build JWT Claims + JTI
-  │                                │  │  ├─ subject: email
-  │                                │  │  ├─ jti: random UUID
-  │                                │  │  ├─ issuedAt: now
-  │                                │  │  └─ expiration: now + 15min
-  │                                │  ├─ Sign with HS512 + SECRET_KEY
-  │                                │  └─ Return JWT string
-  │                                │
-  │                                ├─ RefreshTokenService.createRefreshToken()
-  │                                │  ├─ Generate random refresh token
-  │                                │  ├─ Set expiration: now + 7 days
-  │                                │  └─ Save RefreshToken to database
-  │                                │
-  │                                ├─ Load User from DB
-  │                                └─ Return JwtResponseDto
-  │
-  │ ◀─ 200 OK ─────────────────────┤
-  │  {token, refreshToken,          │
-  │   email, username, roles, ...}  │
-  │                                 │
-  └─ Store both tokens locally ────┘
+  │  {email, password}           │  ├─ AccountLockService.isLocked()? → 423
+  │                              │  ├─ AuthenticationManager.authenticate()
+  │                              │  │  ├─ loadUserByUsername(email) → DB
+  │                              │  │  ├─ isEnabled()? → 401 if false
+  │                              │  │  └─ BCrypt password match
+  │                              │  ├─ [BadCredentials] loginFailed() → inc failedAttempts
+  │                              │  ├─ loginSucceeded() → reset failedAttempts
+  │                              │  ├─ JwtService.generateTokenLogin()
+  │                              │  │  → HS512 signed, JTI, roles+userId claims, 15min
+  │                              │  └─ RefreshTokenService.createRefreshToken() (7d, DB)
+  │ ◀─ 200 OK ──────────────────┤
+  │  {id, token, refreshToken,   │
+  │   email, username, roles}    │
+  └─ Store tokens locally ──────┘
 ```
 
 ### Request Authorization Flow
@@ -282,74 +296,43 @@ CLIENT                           SERVER
 CLIENT                              SERVER
   │                                  │
   ├─ POST /api/auth/register ───────▶ AuthController.registerUser()
-  │  {username, email, password,       │
-  │   fullName, roles}                │
-  │                                   ├─ Check email uniqueness
-  │                                   │  └─ UserService.existsByEmail()
-  │                                   │     └─ DB Query
-  │                                   │        └─ Return boolean
-  │                                   │
-  │                                   ├─ Process roles
-  │                                   │  ├─ For each role in request
-  │                                   │  │  ├─ RoleService.findByName()
-  │                                   │  │  │  └─ If not exists: save new role
-  │                                   │  │  └─ Set role ID from DB
-  │                                   │  └─ Transaction: flush
-  │                                   │
-  │                                   ├─ Map RegisterDto → User (active=false)
-  │                                   │  ├─ RegisterDtoMapper.toEntity()
-  │                                   │  │  ├─ Copy username, fullName
-  │                                   │  │  ├─ PasswordEncoder.encode()
-  │                                   │  │  │  └─ BCrypt hash
-  │                                   │  │  └─ Copy roles
-  │                                   │  │     └─ Return User entity
-  │                                   │
-  │                                   ├─ UserService.save(user)
-  │                                   │  └─ UserRepository.save()
-  │                                   │     └─ DB INSERT (active=false)
-  │                                   │
-  │                                   ├─ ActivationService.createActivationToken()
-  │                                   │  ├─ Generate UUID activation token
-  │                                   │  ├─ Set expiration: now + 24h
-  │                                   │  ├─ Save ActivationToken to DB
-  │                                   │  └─ EmailService.sendActivationEmail()
-  │                                   │     └─ Send {activationBaseUrl}?token={token}
-  │                                   │
-  │                                   └─ Return success message
-  │
+  │  {username, email, password,     │  ├─ existsByEmail() → 400 if duplicate
+  │   fullName, roles}               │  ├─ BCrypt encode password
+  │                                  │  ├─ Save User (active=false)
+  │                                  │  └─ ActivationService.createActivationToken()
+  │                                  │     └─ Email {activationBaseUrl}?token={uuid}
   │ ◀─ 200 OK ──────────────────────┤
-  │  "User registered successfully!  │
-  │   Please check your email to     │
-  │   activate your account."        │
-  │
+  │  "User registered successfully!" │
   └─────────────────────────────────┘
 ```
 
-### Email Activation Flow
+### Email Activation Flow (Event-Driven)
 
 ```
-CLIENT                              SERVER
-  │                                  │
-  │  (User clicks link in email)     │
-  │                                  │
-  ├─ GET /api/auth/activate ────────▶ AuthController.activateAccount()
-  │  ?token=<uuid-token>             │
-  │                                  ├─ ActivationService.activateAccount(token)
-  │                                  │  ├─ ActivationTokenRepository.findByToken()
-  │                                  │  ├─ Verify token not expired
-  │                                  │  ├─ Verify token not used
-  │                                  │  ├─ Set user.active = true
-  │                                  │  ├─ UserRepository.save(user)
-  │                                  │  └─ Mark token.used = true
-  │                                  │
-  │                                  └─ Return success message
-  │
-  │ ◀─ 200 OK ──────────────────────┤
-  │  "Account activated successfully"│
-  │                                  │
-  │ (or 400 if token invalid/expired)│
-  │                                  │
-  └─ User can now login ────────────┘
+CLIENT                    SERVER (auth-service)              Kafka              notification-service
+  │                                │                           │                        │
+  ├─ POST /api/auth/register ─────▶│ AuthController            │                        │
+  │  {email, ...}                  │ ├─ Save user (active=false)                        │
+  │                                │ └─ ActivationService      │                        │
+  │                                │    ├─ Create token        │                        │
+  │                                │    └─ publishEvent()      │                        │
+  │                                │       KafkaTemplate       │                        │
+  │ ◀─ 200 OK ─────────────────────│       publish to          │                        │
+  │                                │       notification-events ├──────────────────────▶│
+  │                                │                           │ NotificationRequested│
+  │                                │                           │ Event(email, type)  │
+  │                                │                           │                     │
+  │                                │                           │  ├─ Consume event  │
+  │                                │                           │  ├─ Build template │
+  │                                │                           │  ├─ Send SMTP      │
+  │                                │                           │  └─ Log status     │
+  │                                │                           │                     │
+  ├─ Open email, click link ──────────────────────────────────┼────────────────────┤
+  │  /api/auth/activate?token=...  │ ActivationService         │                        │
+  │                                │ ├─ Verify token           │                        │
+  │                                │ ├─ Set active=true        │                        │
+  │ ◀─ 200 OK ─────────────────────│ └─ Mark token used        │                        │
+  └─ Account activated ───────────┘                           │                        │
 ```
 
 ### Token Refresh Flow
@@ -383,46 +366,31 @@ CLIENT                           SERVER
   └─ Update both tokens locally ───┘
 ```
 
-### Password Reset Flow
+### Password Reset Flow (Event-Driven)
 
 ```
-CLIENT                           SERVER
-  │                                │
-  ├─ POST /api/auth/forgot-password ▶ AuthController.forgotPassword()
-  │  {email}                        │
-  │                                ├─ PasswordResetService.createPasswordResetToken()
-  │                                │  ├─ UserRepository.findByEmail()
-  │                                │  ├─ Generate reset token (24h expiry)
-  │                                │  └─ Save PasswordResetToken to DB
-  │                                │
-  │                                ├─ EmailService.sendPasswordResetEmail()
-  │                                │  ├─ Build reset link with token
-  │                                │  │  └─ {passwordResetBaseUrl}?token={token}
-  │                                │  ├─ Send via SMTP (Gmail)
-  │                                │  └─ Return email sent status
-  │                                │
-  │                                └─ Return success message
-  │
-  │ ◀─ 200 OK ─────────────────────┤
-  │  "If email exists..."           │
-  │                                 │
-  │  (User clicks email link)       │
-  │                                 │
-  ├─ POST /api/auth/reset-password ▶ AuthController.resetPassword()
-  │  {token, newPassword}           │
-  │                                ├─ PasswordResetService.resetPassword()
-  │                                │  ├─ PasswordResetTokenRepository.findByToken()
-  │                                │  ├─ Verify not expired
-  │                                │  ├─ PasswordEncoder.encode(newPassword)
-  │                                │  ├─ Update User.password in DB
-  │                                │  └─ Delete reset token
-  │                                │
-  │                                └─ Return success
-  │
-  │ ◀─ 200 OK ─────────────────────┤
-  │  "Password reset successful"    │
-  │                                 │
-  └─ User can now login ───────────┘
+CLIENT                    SERVER (auth-service)              Kafka              notification-service
+  │                                │                           │                        │
+  ├─ POST /api/auth/forgot-───────▶│ PasswordResetService      │                        │
+  │    password {email}            │ ├─ Create 24h reset token │                        │
+  │                                │ └─ publishEvent()         │                        │
+  │                                │    KafkaTemplate ────────┼───────────────────────▶│
+  │                                │    (password-reset type) │ NotificationRequested  │
+  │ ◀─ 200 OK (generic) ──────────┤                           │ Event(email, link)    │
+  │  "Check email if exists"       │                           │                        │
+  │                                │                           │  ├─ Consume         │
+  │                                │                           │  ├─ Send email      │
+  │                                │                           │  └─ Log             │
+  │                                │                           │                        │
+  ├─ Open email, click link ──────────────────────────────────┼────────────────────┤
+  │  /reset?token=...             │                           │                        │
+  │                                │                           │                        │
+  ├─ POST /api/auth/reset-password ▶ PasswordResetService      │                        │
+  │  {token, newPassword}          │ ├─ Validate token        │                        │
+  │                                │ ├─ BCrypt encode        │                        │
+  │                                │ ├─ Update password      │                        │
+  │ ◀─ 200 OK ────────────────────┤ └─ Delete token         │                        │
+  └─ User can now login ──────────┘                           │                        │
 ```
 
 ### Logout Flow
@@ -515,22 +483,11 @@ REDIS (Key-Value Store)
 
 ### Security Context Representation
 
-After successful login, SecurityContext contains:
-```
-SecurityContext
-├─ Authentication
-│  ├─ principal: UserPrinciple
-│  │  ├─ id: 1
-│  │  ├─ username: "john@example.com" (email used as Spring Security username)
-│  │  ├─ password: "$2a$10$..." (BCrypt hash)
-│  │  ├─ fullName: "John Doe"
-│  │  └─ authorities: [GrantedAuthority("ROLE_USER"), GrantedAuthority("ROLE_PM")]
-│  ├─ credentials: password (not stored after auth)
-│  ├─ isAuthenticated: true
-│  └─ details: WebAuthenticationDetails
-│     └─ remoteAddress: client IP
-└─ (No Session - Stateless JWT)
-```
+After successful JWT validation, SecurityContext principal = `UserPrinciple`:
+- `id` (Long), `username` (email), `fullName`, `authorities` (from Role names)
+- `isAccountNonLocked()` checks `User.lockTime` against `lockDurationMs`
+- `isEnabled()` returns `user.active` (false until email activation)
+- No session stored (STATELESS policy)
 
 ## JWT Token Structure
 
@@ -553,7 +510,9 @@ PAYLOAD (Base64URL-decoded):
   "sub": "john@example.com",        // email (used as subject)
   "jti": "uuid-string",             // JWT ID (unique identifier)
   "iat": 1638360000,                // issued at (seconds)
-  "exp": 1638360900                 // expiration (15min later)
+  "exp": 1638360900,                // expiration (15min later)
+  "roles": ["ROLE_USER", "ROLE_PM"], // roles embedded for downstream services
+  "userId": 1                        // user ID embedded for downstream services
 }
 
 SIGNATURE:
@@ -563,148 +522,137 @@ HMACSHA512(
 )
 ```
 
-**Access Token Lifecycle:**
-1. Generated at login with 15-minute expiration + unique JTI
-2. Sent to client in response
-3. Client stores token (localStorage, sessionStorage, HttpOnly cookie)
-4. Client sends in Authorization header: `Bearer <token>`
-5. Server validates signature, expiration, and blacklist on each request
-6. Token expires after 15 minutes
-7. Before expiration, client uses refresh token to obtain new pair
+**Access Token Lifecycle:** 15-min expiration + JTI. Contains `roles` and `userId` claims for downstream service use. Validated via HS512 signature + Redis blacklist check.
 
-**Refresh Token Lifecycle:**
-1. Generated at login with 7-day expiration
-2. Sent to client in response
-3. Client stores token separately from access token
-4. Client sends to /api/auth/refresh-token endpoint when access token expires
-5. Server validates expiration, generates new access + refresh token pair
-6. Old refresh token is deleted (rotation on each use)
-7. Provides 7 days of extended session before re-login required
+**Refresh Token Lifecycle:** 7-day expiration, stored in DB. Rotated on each use (old deleted, new created). Send to `/api/auth/refresh-token` when access token expires.
 
-**Token Revocation:**
-- On logout: JTI added to blacklist_tokens table with expiration date
-- Scheduled cleanup: hourly job deletes expired entries from blacklist
-- Validation: checks if JTI in blacklist before accepting token
+**Token Revocation:** On logout, JTI stored in Redis with auto-TTL = token expiry epoch. Redis auto-expires entry; no cleanup job needed.
 
 ## Component Interactions
 
-### Spring Security Filter Chain
+### Spring Security Filter Chain (auth-service)
 
-```
-Client Request
-    ↓
-Security Filter Chain
-    ↓
-┌─────────────────────────────────────────────────────────────┐
-│  SPRING SECURITY FILTER CHAIN                                │
-├─────────────────────────────────────────────────────────────┤
-│  1. FilterSecurityInterceptor (method-level @PreAuthorize)  │
-│     └─ Checks role requirements                              │
-│  2. ExceptionTranslationFilter (handles auth errors)         │
-│     └─ Converts exceptions to HTTP responses                │
-│  3. CustomAccessDeniedHandler (custom exception handler)     │
-│     └─ Returns 403 JSON on access denied                     │
-│  4. JwtAuthenticationFilter (custom, added before #5)        │
-│     └─ Extracts & validates JWT, sets SecurityContext       │
-│  5. UsernamePasswordAuthenticationFilter (for login POST)    │
-│     └─ Authenticates username/password                       │
-│  6. BasicAuthenticationFilter (HTTP Basic, disabled here)    │
-│  7. CSRF Protection Filter (disabled for JWT API)            │
-│  8. CORS Filter (enabled)                                    │
-│  9. SessionManagementFilter (creates session if needed)      │
-│     └─ Disabled here (STATELESS policy)                      │
-└─────────────────────────────────────────────────────────────┘
-    ↓
-DispatcherServlet
-    ↓
-Controller Handler
-    ↓
-Response
-```
-
-**Custom Configuration in SecurityConfig:**
-```java
-http.authorizeRequests()
-    .antMatchers("/api/auth/**").permitAll()  // Public endpoints
-    .anyRequest().authenticated()              // All others require auth
-
-http.addFilterBefore(
-    jwtAuthenticationFilter(),
-    UsernamePasswordAuthenticationFilter.class
-)  // Add JWT filter before standard filter
-
-http.sessionManagement()
-    .sessionCreationPolicy(SessionCreationPolicy.STATELESS)  // No sessions
-
-http.cors()  // Enable CORS
-```
+Key filter order in auth-service SecurityConfig:
+1. `JwtAuthenticationFilter` (custom, before UsernamePasswordAuthenticationFilter)
+   - Extracts Bearer token, validates via JwtService, sets SecurityContext
+2. `CustomAccessDeniedHandler` — returns 403 JSON on role check failure
+3. CSRF: disabled; Sessions: STATELESS; CORS: enabled
+4. Permits: `/api/auth/**`; All others require authenticated user
 
 ## Deployment Architecture
 
 ### Docker Compose Setup
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                  DOCKER HOST                              │
-├──────────────────────────────────────────────────────────┤
-│                                                            │
-│  ┌──────────────────┐  ┌──────────────┐  ┌──────────────┐ │
-│  │postgres-service  │  │redis-service │  │ ms-auth-     │ │
-│  │(postgres:16)     │  │ (redis:latest)   │ service      │ │
-│  │                  │  │              │  │ (built)      │ │
-│  │ Port: 5432       │  │Port: 6379    │  │Port: 8080    │ │
-│  │ Env:             │  │              │  │Base:openjdk11│ │
-│  │ POSTGRES_USER    │  │              │  │COPY .jar     │ │
-│  │ POSTGRES_PASSWORD│  │              │  │CMD: java -jar│ │
-│  │                  │  │              │  │              │ │
-│  │ Volume:          │  │              │  │depends_on:   │ │
-│  │ /docker/volumes/ │  │              │  │postgres,redis│ │
-│  │                  │  │              │  │              │ │
-│  └────────┬─────────┘  └────────┬─────┘  └──────┬───────┘ │
-│           │                     │                │         │
-│           └─────────────────────┼────────────────┘         │
-│                 Network Bridge (my-net)                    │
-│                                                            │
-└──────────────────────────────────────────────────────────┘
-     ▲                    ▲                    ▲
-     │                    │                    │
-     │ 5432               │ 6379               │ 8080
-     │ (PostgreSQL)       │ (Redis)            │ (HTTP)
-     │                    │                    │
-HOST MACHINE
+┌─────────────────────────────────────────────────────────────────┐
+│                        DOCKER HOST                               │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│  ┌─────────┐ ┌────────┐ ┌─────────┐ ┌────────┐ ┌────────────┐  │
+│  │postgres │ │redis   │ │kafka    │ │eureka  │ │config-     │  │
+│  │(:5432)  │ │(:6379) │ │(:9092)  │ │(:8761) │ │server      │  │
+│  │postgres:│ │redis:  │ │confluen │ │        │ │(:8888)     │  │
+│  │16       │ │latest  │ │t-kafka  │ │        │ │            │  │
+│  └────┬────┘ └──┬─────┘ └────┬────┘ └───┬────┘ └──────┬─────┘  │
+│       │        │             │ registry  │ fetch      │         │
+│       │        │             │           ▼            ▼         │
+│       │        │             │      ┌──────────────────────┐    │
+│       │        │             │      │ api-gateway (:8080)  │    │
+│       │        │             │      │ Single entry point   │    │
+│       │        │             │      └────────┬─────────────┘    │
+│       │        │             │               │ routes           │
+│       │        │             │      ┌────────▼────────────────┐ │
+│       └───────┼─────────────┼──────│  auth-service (:8081)  │ │
+│               │             │      │  Publishes to Kafka    │ │
+│               │             │      │  depends_on: postgres, │ │
+│               │             │      │  redis, kafka, eureka  │ │
+│               │             │      └───────────────────────┤ │
+│               │             │                              │   │
+│               │             │      ┌──────────────────────┬┘   │
+│               │             └─────►│notification-service   │    │
+│               │                    │  (:8085)              │    │
+│               │                    │  Consumes Kafka events│    │
+│               │                    │  Redis dedup (24h TTL)│    │
+│               │                    │  Sends emails via SMTP│    │
+│               └───────────────────►│  depends_on: kafka,   │    │
+│                                    │  redis, eureka        │    │
+│                                    └───────────────────────┘    │
+│                                                                   │
+│                      Network Bridge (my-net)                     │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### Runtime Environment
+### Service Port Reference
+
+| Service | Port | Notes |
+|---------|------|-------|
+| api-gateway | 8080 | Single external entry point |
+| auth-service | 8081 | JWT auth + token validation |
+| movie-service | 8082 | Movie catalog (business service) |
+| booking-service | 8083 | Ticket booking (business service) |
+| payment-service | 8084 | Payment processing (business service) |
+| notification-service | 8085 | Kafka consumer; sends emails via SMTP |
+| eureka-server | 8761 | Service registry dashboard |
+| config-server | 8888 | Serves shared JWT secret |
+| PostgreSQL | 5432 | auth-service only |
+| Redis | 6379 | auth-service (token blacklist), notification-service (dedup) |
+| Kafka | 9092 | Message broker (notification-events topic) |
+| Prometheus | 9090 | Metrics collection (internal + host) |
+| Grafana | 3000 | Dashboards (admin/admin) |
+
+### Runtime Environment (auth-service)
 
 ```
 ┌────────────────────────────────────────┐
-│     Docker Container                   │
-│  (ms-authentication-service)           │
+│  auth-service Container                │
 ├────────────────────────────────────────┤
 │  Eclipse Temurin JDK 21 (Alpine Linux) │
-│  ├─ Java Heap Memory: configurable      │
-│  ├─ GC: G1GC (default)                  │
-│  ├─ Virtual threads support (Java 21)   │
-│  └─ JVM args: customizable              │
-│                                         │
-│  Spring Boot Application                │
-│  ├─ Embedded Tomcat (port 8080)         │
-│  ├─ Spring Boot: 3.4.3                  │
-│  ├─ Spring Security: 6.x                │
-│  └─ Logging: stdout/stderr              │
-│                                         │
-│  Application Properties                 │
-│  ├─ JWT Secret: Base64-encoded          │
-│  ├─ JWT Expiration: 900000ms (15min)    │
-│  ├─ Database: PostgreSQL 16 (via net)   │
-│  ├─ Redis: Token blacklist              │
-│  └─ CORS: enabled for all origins       │
+│  Spring Boot 3.4.3 / Tomcat (:8081)    │
+│  Registers with Eureka (:8761)         │
+│  Fetches config from Config Server     │
+│  ├─ JWT Secret (shared via config)     │
+│  ├─ JWT Expiration: 900000ms (15min)   │
+│  ├─ Database: PostgreSQL 16            │
+│  └─ Redis: token blacklist             │
 └────────────────────────────────────────┘
-        ▲
-        │ DB Connection Pool
-        │ (HikariCP default)
-        ▼
-PostgreSQL Container
+```
+
+### Runtime Environment (notification-service)
+
+```
+┌────────────────────────────────────────┐
+│ notification-service Container         │
+├────────────────────────────────────────┤
+│ Eclipse Temurin JDK 21 (Alpine Linux) │
+│ Spring Boot 3.4.3 / Tomcat (:8085)    │
+│ Registers with Eureka (:8761)         │
+│ Fetches config from Config Server     │
+│ ├─ Kafka bootstrap-servers (9092)     │
+│ ├─ Redis host (6379, dedup cache)     │
+│ └─ SMTP mail properties (Gmail)       │
+└────────────────────────────────────────┘
+```
+
+### Event-Driven Notification Processing
+
+**Kafka Consumer Flow:**
+1. NotificationEventListener consumes from `notification-events` topic (groupId: notification-service)
+2. NotificationDeduplicationService checks Redis for prior processing:
+   - Key pattern: `notification:processed:{eventId}`
+   - SETNX (atomic set-if-not-exists) with 24h TTL
+   - Returns true if event newly marked (proceed), false if already processed (skip)
+3. On duplicate: logs and returns (Kafka auto-commits offset)
+4. On new event: EmailSenderService sends via SMTP; exception throws to trigger DLT retry
+
+**Fail-Open Design:**
+- Redis unavailable → proceed with email send + log warning
+- Does NOT block notifications on Redis outage
+- Conservative choice: prefer email duplicate over missing email
+
+**Key Redis Pattern:**
+```
+notification:processed:event-uuid-123 = "1" (value irrelevant)
+TTL: 24 hours (auto-expires entry)
 ```
 
 ## Security Architecture
@@ -767,177 +715,127 @@ PostgreSQL Container
 
 ### Potential Security Improvements (Future)
 
-1. **Rate Limiting:** Add HTTP-layer rate limiter on /api/auth/login (account lockout handles credential brute force; rate limiting handles volumetric attacks)
-2. **Audit Logging:** Log all authentication attempts with IP, timestamp, success/failure
-4. **HTTPS Only:** Enforce HTTPS in production (JWT in Authorization header, not cookies)
-5. **Secret Management:** Use vault service (HashiCorp Vault, AWS Secrets Manager) instead of config file
-6. **Algorithm Upgrade:** Upgrade JJWT to 0.12.x for newer JWT standards compliance
-7. **Asymmetric Keys:** Consider RS256 for distributed systems where multiple services validate tokens
-8. **Two-Factor Auth:** SMS or authenticator app for sensitive operations
-9. **Token Encryption:** Encrypt refresh tokens in transit/storage
-10. **IP Whitelisting:** Restrict access from known IP ranges
+- Rate limiting on /api/auth/login (volumetric attack defense)
+- Audit logging (IP, timestamp, success/failure)
+- HTTPS enforcement in production
+- RS256 asymmetric keys (better for multi-service trust)
+- Two-factor authentication
+- Secret rotation mechanism
 
-## Scaling Considerations
+## Scaling & Performance
 
-### Horizontal Scaling
+- **Stateless JWT:** no session affinity; Eureka enables multi-instance auth-service
+- **Shared secret via Config Server:** all instances receive same jwtSecret
+- **JWT contains roles + userId:** downstream services avoid DB lookups on every request
 
-Current design supports horizontal scaling:
-- **Stateless JWT:** No session affinity required
-- **Shared JWT Secret:** All instances use same jwtSecret from config
-- **Database-Backed:** PostgreSQL handles concurrent connections (connection pooling)
-- **No Local Cache:** Token validation doesn't require distributed cache
-
-**Deployment:**
-```
-┌─────────┐
-│ Load    │
-│ Balancer│
-└────┬────┘
-     │
-  ┌──┴──┐
-  │     │
-┌─┴─┐ ┌┴──┐
-│API│ │API│  (multiple instances)
-│ 1 │ │ 2 │  (all share same jwtSecret)
-└─┬─┘ └┬──┘  (all connect to same DB)
-  │     │
-  └─────┴─────────→ PostgreSQL
-```
-
-### Performance Characteristics
-
-| Operation | Latency | Bottleneck |
-|-----------|---------|-----------|
-| Login (authenticate + generate token) | ~100-200ms | Database query for user |
-| Token Validation (on each request) | ~5-15ms | JWT parsing + Redis blacklist check |
-| Token Logout (blacklist) | ~2-5ms | Redis SET operation with TTL |
-| Register (create user + roles) | ~150-300ms | Multiple DB transactions |
-| Authorization Check (@PreAuthorize) | ~1-2ms | In-memory role lookup |
-
-**Optimization Opportunities:**
-- Implement user cache (Redis) to reduce DB queries on loadUserByUsername
-- Use connection pooling (HikariCP default)
-- Add database indexes on username, role name
-- Redis connection pooling (Lettuce default)
-- Consider Redis Cluster for horizontal blacklist scaling
+| Operation | Approx Latency |
+|-----------|---------------|
+| Login (auth + token gen) | ~100-200ms |
+| Token validation (gateway) | ~5-15ms |
+| validate-token endpoint | ~5ms (Redis only, no DB) |
+| Logout (blacklist) | ~2-5ms |
 
 ## Monitoring & Observability
 
-### Logging Strategy
-
-| Component | Log Level | Information |
-|-----------|-----------|-------------|
-| JwtService | DEBUG | Token validation failures, claim extraction |
-| AuthController | INFO | Login/register attempts |
-| SecurityConfig | DEBUG | Filter chain configuration |
-| Hibernate | DEBUG | SQL queries, transaction details |
-| Application | DEBUG | Custom business logic |
-
-### Health Checks (Future)
+### Metrics Stack
 
 ```
-GET /actuator/health
-{
-  "status": "UP",
-  "components": {
-    "db": {"status": "UP"},
-    "diskSpace": {"status": "UP"},
-    "livenessState": {"status": "UP"},
-    "readinessState": {"status": "UP"}
-  }
-}
+┌─────────────────────────────────────────────────────────┐
+│  All Services (:808x + :9092)  /actuator/prometheus     │
+│  Micrometer metrics tagged: application=<service-name>  │
+└─────────────┬───────────────────────────────────────────┘
+              │ scrape every 15s
+              ▼
+┌─────────────────────────────────────────────────────────┐
+│  Prometheus (:9090)                                     │
+│  monitoring/prometheus/prometheus.yml                   │
+│  9 scrape jobs: prometheus + 8 services (including      │
+│  notification-service)                                  │
+└─────────────┬───────────────────────────────────────────┘
+              │ datasource
+              ▼
+┌─────────────────────────────────────────────────────────┐
+│  Grafana (:3000)  admin/admin                           │
+│  Auto-provisioned datasource + 2 dashboards             │
+│  monitoring/grafana/provisioning/                       │
+│  ├─ datasources/datasources.yml                         │
+│  ├─ dashboards/dashboards.yml  (provider config)        │
+│  └─ dashboards/json/                                    │
+│     ├─ jvm-micrometer.json                              │
+│     └─ spring-boot-http-overview.json                   │
+└─────────────────────────────────────────────────────────┘
 ```
 
-### Metrics (Future)
+**Network:** Prometheus and Grafana run inside `my-net` Docker network. Actuator endpoints are NOT routed through API Gateway — internal access only.
 
-Suggested metrics to track:
-- Login success/failure rate
-- Token validation success/failure rate
-- Average response time per endpoint
-- Database connection pool utilization
-- JWT signature verification failures (potential attacks)
-- Unauthorized access attempts (403 responses)
+### Dashboards
+
+| Dashboard | Metrics Covered |
+|-----------|----------------|
+| JVM Micrometer | Memory, GC pause, thread count, CPU usage, file descriptors per service |
+| Spring Boot HTTP Overview | Request rate, error rate, p99 latency, HikariCP pool, business counters |
+
+### Business Metrics (Custom Counters)
+
+| Service | Counter |
+|---------|---------|
+| auth-service | auth.login, auth.register, auth.logout |
+| booking-service | booking.created, booking.confirmed, booking.cancelled |
+| payment-service | payment.initiated, payment.completed, payment.failed |
+
+### Security Considerations
+
+- `/actuator/**` permitted in auth-service and movie-service `SecurityConfig`
+- `/actuator/prometheus` added to `jwt.auth.publicPaths` for movie/booking/payment services (JWT starter)
+- Monitoring ports (:9090, :3000) exposed on Docker host; not behind API Gateway
+
+### Log Levels
+
+| Component | Log Level |
+|-----------|-----------|
+| JwtService | DEBUG |
+| AuthController | INFO |
+| Hibernate | DEBUG |
+| com.namnd.cinema | DEBUG |
 
 ## Technology Stack Summary
 
 | Layer | Technology | Version | Role |
 |-------|-----------|---------|------|
-| Framework | Spring Boot | 2.6.4 | Application container |
-| Security | Spring Security | via Boot | Authentication/Authorization |
+| Framework | Spring Boot | 3.4.3 | Application container |
+| Cloud | Spring Cloud | 2024.0.1 | Service discovery, config, gateway |
+| Security | Spring Security | 6.x (via Boot) | Authentication/Authorization |
+| Service Registry | Netflix Eureka | via Cloud | Service discovery |
+| Config | Spring Cloud Config | via Cloud | Shared JWT secret distribution |
+| Gateway | Spring Cloud Gateway MVC | via Cloud | Single entry point, routing |
 | ORM | Spring Data JPA | via Boot | Object-relational mapping |
-| JWT | JJWT | 0.9.0 | Token generation/validation |
+| JWT | JJWT | 0.12.6 | Token generation/validation |
 | Password Hash | BCrypt | via Spring | Secure password encoding |
-| Database | PostgreSQL | 13.1+ | Data persistence (users, roles, refresh/reset tokens) |
+| Database | PostgreSQL | 16 | Data persistence (users, roles, refresh/reset tokens) |
 | Cache/Blacklist | Redis | 7.x | Token blacklist (JTI) with auto-TTL |
+| Message Broker | Apache Kafka | via Boot | Event streaming for notifications |
+| Email Service | Spring Mail | via Boot | SMTP email delivery |
+| Metrics | Micrometer + Prometheus | via Boot Actuator | Metrics scraping |
+| Dashboards | Grafana | latest | Metrics visualization |
 | Container | Docker | latest | Deployment container |
-| Runtime | OpenJDK | 11 | Java runtime |
+| Runtime | Eclipse Temurin | 21 (Alpine) | Java runtime |
 
-## Integration & Service Layer Architecture
-
-### RedisService Abstraction Layer
-
-**Purpose:** Unified interface for all Redis operations, reducing coupling between domain services and Redis.
-
-**Service Layer Boundaries:**
+## Dependency Graph (auth-service)
 
 ```
-Domain Services (Authentication, Token, etc)
-         │
-         ▼
-    RedisService (interface)
-         │
-         ├─ RedisServiceImpl (implementation)
-         │  ├─ StringRedisTemplate
-         │  └─ RedisTemplate<String, Object>
-         │
-    RedisKeyPrefix (constants)
-         │
-         ▼
-    Spring Data Redis
-         │
-         ▼
-    Redis Server (TCP/6379)
-```
-
-**Usage Example (Token Blacklist):**
-- BlacklistedTokenServiceImpl uses RedisService (not raw StringRedisTemplate)
-- Uses RedisKeyPrefix.BLACKLIST constant for key prefix
-- Calls: `redisService.set(key, "1", ttlSeconds, TimeUnit.SECONDS)`
-- Error handling: Try-catch wraps all operations; fail-closed on errors
-
-**Benefits:**
-- Single point of configuration (RedisConfig)
-- Consistent error handling across all Redis operations
-- Easy to switch Redis implementations (Lettuce/Jedis)
-- Key namespacing prevents collisions (RedisKeyPrefix)
-- Reusable for future features (caching, rate limiting, distributed locks)
-
-## Dependency Graph
-
-```
-Application
-├─ Spring Boot Core
-│  ├─ Spring Security
-│  │  └─ Spring Core (AOP, DI)
-│  ├─ Spring Data JPA
-│  │  └─ Hibernate
-│  │     └─ PostgreSQL Driver
-│  ├─ Spring Data Redis
-│  │  └─ Lettuce (Redis client)
-│  ├─ Spring Web (MVC, REST)
-│  │  └─ Embedded Tomcat
-│  └─ Logging (SLF4J → Log4j2)
-│
-├─ JJWT
-│  └─ Jackson (JSON parsing)
-│
-├─ Lombok (annotation processor)
-│
-├─ PostgreSQL Driver
-│  └─ JDBC
-│
-└─ Redis Client (via Spring Data Redis)
-   └─ Lettuce
+auth-service
+├─ Spring Boot 3.4.3
+│  ├─ Spring Security 6.x → JwtAuthenticationFilter, SecurityConfig
+│  ├─ Spring Data JPA → Hibernate → PostgreSQL Driver (HikariCP pool)
+│  ├─ Spring Data Redis → Lettuce → Redis (blacklist store)
+│  ├─ Spring Kafka → Kafka (notification events)
+│  ├─ Spring Web (Embedded Tomcat, :8081)
+│  └─ kafka-events (shared domain events)
+├─ Spring Cloud 2024.0.1
+│  ├─ Eureka Client → registers as "auth-service"
+│  └─ Config Client → fetches shared JWT secret from config-server
+├─ JJWT 0.12.6 (api + impl + jackson)
+└─ Lombok
 ```
 
 ## Architecture Decisions Rationale
@@ -954,16 +852,25 @@ Application
 
 ## Future Architecture Evolution
 
-### Phase 2: Microservices-Ready
-- Extract as library/service
-- Add OpenAPI/Swagger documentation
-- Implement rate limiting middleware
-- Add audit logging service
+### Phase 2: Microservices-Ready (IN PROGRESS)
+- ✓ Converted to 8-module Maven multi-module project (added notification-service, kafka-events)
+- ✓ Spring Cloud Eureka (service registry)
+- ✓ Spring Cloud Config Server (shared JWT secret)
+- ✓ Spring Cloud Gateway MVC (single entry point, port 8080)
+- ✓ JWT validation starter library (jwt-auth-spring-boot-starter)
+- ✓ POST /api/auth/validate-token (microservice token validation)
+- ✓ GET /api/users/me (user profile for downstream services)
+- ✓ JWT tokens include roles + userId claims
+- ✓ OpenAPI/Swagger documentation (SpringDoc 2.8.4)
+- ✓ Event-driven notification service (Kafka + SMTP; replaces direct email sending)
+- ✓ kafka-events module (shared domain event records)
+- ✓ Auth-service publishes NotificationRequestedEvent for password reset & activation
+- [ ] Rate limiting middleware
+- [ ] Audit logging service
 
 ### Phase 3: Enterprise Features
 - Multi-tenancy support
 - Advanced role model (permissions, resource-based)
-- Token refresh mechanism
 - OAuth2/SAML integration
 - Distributed tracing (Jaeger, Zipkin)
 
@@ -971,5 +878,5 @@ Application
 - Kubernetes deployment manifests
 - ConfigMap for secrets management
 - Health checks & readiness probes
-- Metrics export (Prometheus)
+- ✓ Metrics export (Prometheus + Grafana)
 - Centralized logging (ELK/Splunk)

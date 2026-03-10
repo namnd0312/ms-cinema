@@ -1,6 +1,6 @@
 # Deployment Troubleshooting & Operations
 
-**Project:** jwt-spring-security
+**Project:** ms-cinema
 **Updated:** February 2026
 **Related:** [Deployment Guide](./deployment-guide.md)
 
@@ -28,7 +28,7 @@ lsof -i :8080
 kill -9 <PID>
 
 # Or use different port
-java -jar spring-jwt.jar --server.port=8081
+java -jar auth-service.jar --server.port=8081
 
 # Check firewall (macOS)
 sudo lsof -i :8080
@@ -83,7 +83,7 @@ date -u
 ```bash
 # Ensure JWT_SECRET matches between services
 export JWT_SECRET="your-secret-key"
-java -jar spring-jwt.jar
+java -jar auth-service.jar
 
 # Or sync system time
 sudo ntpdate -s time.nist.gov  # Linux
@@ -96,7 +96,7 @@ sudo ntpdate -s time.nist.gov  # Linux
 **Solution:**
 ```bash
 # Increase heap size
-java -Xmx1024m -Xms512m -jar spring-jwt.jar
+java -Xmx1024m -Xms512m -jar auth-service.jar
 
 # For Docker
 docker run -e "JAVA_OPTS=-Xmx1024m" ms-authentication-service:latest
@@ -140,7 +140,7 @@ sudo pfctl -sr  # macOS
 **Fix:**
 ```bash
 # Ensure app listens on 0.0.0.0 (all interfaces)
-java -jar spring-jwt.jar --server.address=0.0.0.0
+java -jar auth-service.jar --server.address=0.0.0.0
 
 # Or in application.yml
 server:
@@ -203,7 +203,7 @@ kubectl rollout undo deployment/jwt-auth --to-revision=3
 sudo systemctl stop jwt-auth
 
 # Restore previous JAR
-cp /opt/app/backups/spring-jwt-0.0.0.jar /opt/app/spring-jwt.jar
+cp /opt/app/backups/auth-service.jar /opt/app/auth-service.jar
 
 # Start service
 sudo systemctl start jwt-auth
