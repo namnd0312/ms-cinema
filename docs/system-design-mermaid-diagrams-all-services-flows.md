@@ -10,6 +10,12 @@
 2. [Auth Service Flows](#2-auth-service-flows)
 3. [Booking & Payment Flows](#3-booking--payment-flows)
 4. [Movie Service Flows](#4-movie-service-flows)
+   - [4.1 Movie CRUD](#41-movie-crud)
+   - [4.2 Showtime CRUD & Seat Availability](#42-showtime-crud--seat-availability)
+   - [4.3 Theater CRUD](#43-theater-crud)
+   - [4.4 Movie Rating (Upsert)](#44-movie-rating-upsert)
+   - [4.5 Movie Comments (CRUD with Soft-Delete)](#45-movie-comments-crud-with-soft-delete)
+   - [4.6 Comment Reactions (Like/Dislike Toggle)](#46-comment-reactions-likedislike-toggle)
 5. [Infrastructure Flows](#5-infrastructure-flows)
 6. [Reference Tables](#6-reference-tables)
 
@@ -105,7 +111,7 @@ graph TD
 |---|---|---|---|---|---|
 | api-gateway | 8080 | — | Eureka, config-server | — | All routes |
 | auth-service | 8081 | testdb (PostgreSQL), Redis | — | Produces: notification-events | /api/auth/**, /api/users/**, /api/auth/validate-token |
-| movie-service | 8082 | moviedb (PostgreSQL) | — | Produces: movie-events | /api/movies/**, /api/showtimes/**, /api/theaters/** |
+| movie-service | 8082 | moviedb (PostgreSQL) | — | Produces: movie-events | /api/movies/**, /api/showtimes/**, /api/theaters/**, /api/comments/** |
 | booking-service | 8083 | bookingdb (PostgreSQL), Redis | movie-service (Feign) | Consumes: payment-events | /api/bookings/** |
 | payment-service | 8084 | paymentdb (PostgreSQL) | Stripe API | Produces: payment-events | /api/payments/** |
 | notification-service | 8085 | Redis (dedup) | SMTP (Gmail) | Consumes: notification-events | — (Kafka consumer only) |
@@ -126,6 +132,7 @@ graph TD
 | /api/movies/** | lb://movie-service |
 | /api/showtimes/** | lb://movie-service |
 | /api/theaters/** | lb://movie-service |
+| /api/comments/** | lb://movie-service |
 | /api/bookings/** | lb://booking-service |
 | /api/payments/** | lb://payment-service |
 
@@ -939,6 +946,188 @@ sequenceDiagram
 
 ---
 
+### 4.4 Movie Rating (Upsert)
+
+`POST /api/movies/{movieId}/ratings` | `GET /api/movies/{movieId}/ratings`
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant APIGateway
+    participant JwtAuthFilter
+    participant MovieRatingController
+    participant MovieRatingServiceImpl
+    participant MovieRatingRepository
+    participant MovieRepository
+    participant PostgreSQL
+
+    alt POST /api/movies/{movieId}/ratings (authenticated)
+        Client->>APIGateway: POST /api/movies/{movieId}/ratings {rating: 1-5} + Bearer
+        APIGateway->>JwtAuthFilter: validate token
+        JwtAuthFilter->>MovieRatingController: authenticated request
+        MovieRatingController->>MovieRatingServiceImpl: createOrUpdateRating(movieId, userId, request)
+        MovieRatingServiceImpl->>MovieRepository: findById(movieId)
+        MovieRepository->>PostgreSQL: SELECT movie
+        PostgreSQL-->>MovieRepository: Movie
+        MovieRatingServiceImpl->>MovieRatingRepository: findByMovieIdAndUserId(movieId, userId)
+
+        alt existing rating found
+            MovieRatingRepository-->>MovieRatingServiceImpl: MovieRating
+            Note over MovieRatingServiceImpl: Update rating value (upsert)
+            MovieRatingServiceImpl->>MovieRatingRepository: save(rating)
+        else no existing rating
+            MovieRatingRepository-->>MovieRatingServiceImpl: empty
+            Note over MovieRatingServiceImpl: Create new MovieRating
+            MovieRatingServiceImpl->>MovieRatingRepository: save(newRating)
+        end
+
+        MovieRatingRepository->>PostgreSQL: INSERT/UPDATE movie_ratings
+        PostgreSQL-->>MovieRatingRepository: savedRating
+        MovieRatingServiceImpl-->>MovieRatingController: MovieRatingDto
+        MovieRatingController-->>Client: 200 OK
+
+    else GET /api/movies/{movieId}/ratings (public, optional JWT)
+        Client->>APIGateway: GET /api/movies/{movieId}/ratings
+        APIGateway->>MovieRatingController: forward (JWT optional)
+        MovieRatingController->>MovieRatingServiceImpl: getRatingSummary(movieId, userId?)
+        MovieRatingServiceImpl->>MovieRatingRepository: findAverageRatingByMovieId(movieId)
+        MovieRatingRepository->>PostgreSQL: SELECT AVG(rating)
+        PostgreSQL-->>MovieRatingRepository: averageRating
+        MovieRatingServiceImpl->>MovieRatingRepository: countByMovieId(movieId)
+        MovieRatingRepository->>PostgreSQL: SELECT COUNT(*)
+        PostgreSQL-->>MovieRatingRepository: totalRatings
+
+        opt userId present (authenticated)
+            MovieRatingServiceImpl->>MovieRatingRepository: findByMovieIdAndUserId(movieId, userId)
+            MovieRatingRepository->>PostgreSQL: SELECT rating
+            PostgreSQL-->>MovieRatingRepository: userRating
+        end
+
+        MovieRatingServiceImpl-->>MovieRatingController: MovieRatingSummaryDto
+        MovieRatingController-->>Client: 200 OK {averageRating, totalRatings, userRating}
+    end
+```
+
+---
+
+### 4.5 Movie Comments (CRUD with Soft-Delete)
+
+`POST/GET /api/movies/{movieId}/comments` | `PUT/DELETE /api/comments/{commentId}`
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant APIGateway
+    participant JwtAuthFilter
+    participant MovieCommentController
+    participant MovieCommentServiceImpl
+    participant MovieCommentRepository
+    participant CommentReactionRepository
+    participant MovieRepository
+    participant PostgreSQL
+
+    alt POST /api/movies/{movieId}/comments (authenticated)
+        Client->>APIGateway: POST /api/movies/{movieId}/comments {content} + Bearer
+        APIGateway->>JwtAuthFilter: validate token
+        JwtAuthFilter->>MovieCommentController: authenticated request
+        MovieCommentController->>MovieCommentServiceImpl: createComment(movieId, userId, request)
+        MovieCommentServiceImpl->>MovieRepository: findById(movieId)
+        MovieRepository->>PostgreSQL: SELECT movie
+        PostgreSQL-->>MovieRepository: Movie
+        MovieCommentServiceImpl->>MovieCommentRepository: save(newComment with status=ACTIVE)
+        MovieCommentRepository->>PostgreSQL: INSERT movie_comments
+        PostgreSQL-->>MovieCommentRepository: savedComment
+        MovieCommentServiceImpl-->>MovieCommentController: MovieCommentDto
+        MovieCommentController-->>Client: 201 Created
+
+    else GET /api/movies/{movieId}/comments?page=0&size=20 (public)
+        Client->>APIGateway: GET /api/movies/{movieId}/comments?page=0&size=20
+        APIGateway->>MovieCommentController: forward (JWT optional)
+        MovieCommentController->>MovieCommentServiceImpl: getCommentsByMovie(movieId, userId?, pageable)
+        MovieCommentServiceImpl->>MovieCommentRepository: findByMovieIdAndStatusOrderByCreatedAtDesc(movieId, ACTIVE, pageable)
+        MovieCommentRepository->>PostgreSQL: SELECT comments WHERE status=ACTIVE ORDER BY created_at DESC LIMIT 20
+        PostgreSQL-->>MovieCommentRepository: Page<MovieComment>
+        Note over MovieCommentServiceImpl: Enrich each comment with like/dislike counts + userReaction
+        loop for each comment
+            MovieCommentServiceImpl->>CommentReactionRepository: countLikes, countDislikes, findUserReaction
+        end
+        MovieCommentServiceImpl-->>MovieCommentController: Page<MovieCommentDto>
+        MovieCommentController-->>Client: 200 OK (paginated)
+
+    else DELETE /api/comments/{commentId} (owner or admin)
+        Client->>APIGateway: DELETE /api/comments/{commentId} + Bearer
+        APIGateway->>JwtAuthFilter: validate token
+        JwtAuthFilter->>MovieCommentController: authenticated request
+        MovieCommentController->>MovieCommentServiceImpl: deleteComment(commentId, userId, isAdmin)
+        MovieCommentServiceImpl->>MovieCommentRepository: findById(commentId)
+        MovieCommentRepository->>PostgreSQL: SELECT comment
+        PostgreSQL-->>MovieCommentRepository: MovieComment
+
+        alt not owner AND not admin
+            MovieCommentServiceImpl-->>MovieCommentController: throw AccessDeniedException
+            MovieCommentController-->>Client: 403 Forbidden
+        else owner OR admin
+            Note over MovieCommentServiceImpl: Soft-delete: set status = DELETED
+            MovieCommentServiceImpl->>MovieCommentRepository: save(comment with status=DELETED)
+            MovieCommentRepository->>PostgreSQL: UPDATE movie_comments SET status='DELETED'
+            MovieCommentController-->>Client: 204 No Content
+        end
+    end
+```
+
+---
+
+### 4.6 Comment Reactions (Like/Dislike Toggle)
+
+`POST/DELETE /api/comments/{commentId}/reactions`
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant APIGateway
+    participant JwtAuthFilter
+    participant CommentReactionController
+    participant CommentReactionServiceImpl
+    participant CommentReactionRepository
+    participant MovieCommentRepository
+    participant PostgreSQL
+
+    Client->>APIGateway: POST /api/comments/{commentId}/reactions {isLike: true} + Bearer
+    APIGateway->>JwtAuthFilter: validate token
+    JwtAuthFilter->>CommentReactionController: authenticated request
+    CommentReactionController->>CommentReactionServiceImpl: toggleReaction(commentId, userId, request)
+
+    CommentReactionServiceImpl->>MovieCommentRepository: findById(commentId)
+    MovieCommentRepository->>PostgreSQL: SELECT comment WHERE status=ACTIVE
+    PostgreSQL-->>MovieCommentRepository: MovieComment
+
+    CommentReactionServiceImpl->>CommentReactionRepository: findByCommentIdAndUserId(commentId, userId)
+    CommentReactionRepository->>PostgreSQL: SELECT reaction
+    PostgreSQL-->>CommentReactionRepository: Optional<CommentReaction>
+
+    alt no existing reaction
+        Note over CommentReactionServiceImpl: Create new reaction
+        CommentReactionServiceImpl->>CommentReactionRepository: save(new CommentReaction)
+        CommentReactionRepository->>PostgreSQL: INSERT comment_reactions
+    else same type clicked (toggle off)
+        Note over CommentReactionServiceImpl: Remove reaction (hard delete)
+        CommentReactionServiceImpl->>CommentReactionRepository: delete(existing)
+        CommentReactionRepository->>PostgreSQL: DELETE FROM comment_reactions
+    else different type (switch)
+        Note over CommentReactionServiceImpl: Switch like↔dislike
+        CommentReactionServiceImpl->>CommentReactionRepository: save(updated reaction)
+        CommentReactionRepository->>PostgreSQL: UPDATE comment_reactions SET is_like=?
+    end
+
+    CommentReactionServiceImpl->>CommentReactionRepository: countLikes, countDislikes
+    CommentReactionRepository->>PostgreSQL: SELECT COUNT(*)
+    PostgreSQL-->>CommentReactionRepository: likeCount, dislikeCount
+    CommentReactionServiceImpl-->>CommentReactionController: CommentReactionDto
+    CommentReactionController-->>Client: 200 OK {commentId, likeCount, dislikeCount, userReaction}
+```
+
+---
+
 ## 5. Infrastructure Flows
 
 ### 5.1 API Gateway Routing
@@ -960,7 +1149,7 @@ sequenceDiagram
         Eureka-->>APIGateway: instance address
         APIGateway->>auth-service: forward request
         auth-service-->>APIGateway: response
-    else /api/movies/** or /api/showtimes/** or /api/theaters/**
+    else /api/movies/** or /api/showtimes/** or /api/theaters/** or /api/comments/**
         APIGateway->>Eureka: lookup lb://movie-service
         Eureka-->>APIGateway: instance address
         APIGateway->>movie-service: forward request
