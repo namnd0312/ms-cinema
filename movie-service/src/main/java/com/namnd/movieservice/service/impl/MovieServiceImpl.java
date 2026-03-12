@@ -3,8 +3,11 @@ package com.namnd.movieservice.service.impl;
 import com.namnd.movieservice.dto.CreateMovieRequest;
 import com.namnd.movieservice.dto.MovieDto;
 import com.namnd.movieservice.event.MovieEventPublisher;
+import com.namnd.movieservice.model.CommentStatus;
 import com.namnd.movieservice.model.Movie;
 import com.namnd.movieservice.model.MovieStatus;
+import com.namnd.movieservice.repository.MovieCommentRepository;
+import com.namnd.movieservice.repository.MovieRatingRepository;
 import com.namnd.movieservice.repository.MovieRepository;
 import com.namnd.movieservice.service.MovieService;
 import jakarta.persistence.EntityNotFoundException;
@@ -23,11 +26,13 @@ public class MovieServiceImpl implements MovieService {
 
     private final MovieRepository movieRepository;
     private final MovieEventPublisher movieEventPublisher;
+    private final MovieRatingRepository movieRatingRepository;
+    private final MovieCommentRepository movieCommentRepository;
 
     @Override
     public List<MovieDto> findAll() {
         return movieRepository.findAll().stream()
-                .map(MovieServiceImpl::toDto)
+                .map(this::toDto)
                 .toList();
     }
 
@@ -79,7 +84,22 @@ public class MovieServiceImpl implements MovieService {
         movie.setReleaseDate(req.releaseDate());
     }
 
-    public static MovieDto toDto(Movie m) {
+    private MovieDto toDto(Movie m) {
+        Double avg = movieRatingRepository.findAverageRatingByMovieId(m.getId());
+        Long totalRatings = movieRatingRepository.countByMovieId(m.getId());
+        Long commentCount = movieCommentRepository.countByMovieIdAndStatus(m.getId(), CommentStatus.ACTIVE);
+        return toDtoWithAggregations(m, avg, totalRatings, commentCount);
+    }
+
+    /**
+     * Static helper for embedding a MovieDto without DB aggregation calls.
+     * Used by ShowtimeServiceImpl when embedding movie summary inside ShowtimeDto.
+     */
+    public static MovieDto toDtoBasic(Movie m) {
+        return toDtoWithAggregations(m, 0.0, 0L, 0L);
+    }
+
+    private static MovieDto toDtoWithAggregations(Movie m, Double avg, Long totalRatings, Long commentCount) {
         return new MovieDto(
                 m.getId(),
                 m.getTitle(),
@@ -90,7 +110,10 @@ public class MovieServiceImpl implements MovieService {
                 m.getPosterUrl(),
                 m.getReleaseDate(),
                 m.getStatus() != null ? m.getStatus().name() : null,
-                m.getCreatedAt()
+                m.getCreatedAt(),
+                avg != null ? Math.round(avg * 10.0) / 10.0 : 0.0,
+                totalRatings,
+                commentCount
         );
     }
 }

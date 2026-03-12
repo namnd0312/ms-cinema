@@ -110,7 +110,7 @@ public class ShowtimeServiceImpl implements ShowtimeService {
     public static ShowtimeDto toDto(Showtime s) {
         return new ShowtimeDto(
                 s.getId(),
-                MovieServiceImpl.toDto(s.getMovie()),
+                MovieServiceImpl.toDtoBasic(s.getMovie()),
                 TheaterServiceImpl.toDto(s.getTheater()),
                 s.getStartTime(),
                 s.getEndTime(),

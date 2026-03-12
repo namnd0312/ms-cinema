@@ -13,7 +13,7 @@ MS Cinema is an **11-module Spring Cloud microservices platform** for cinema tic
 **Key Characteristics:**
 - Single external entry point: API Gateway (port 8080)
 - **Auth-service** (port 8081): JWT auth lifecycle, email activation, account lockout (5 attempts/15min), token rotation
-- **Movie-service** (port 8082): Movies, theaters, showtimes; auto-generates seat grids (A-Z rows)
+- **Movie-service** (port 8082): Movies, theaters, showtimes; auto-generates seat grids (A-Z rows); star ratings (1-5), paginated comments with soft-delete, comment reactions (like/dislike)
 - **Booking-service** (port 8083): Seat reservation with Redis locking (5-min TTL), lifecycle states (PENDING→CONFIRMED/CANCELLED/EXPIRED)
 - **Payment-service** (port 8084): Stripe integration, idempotent payment intents, webhook verification
 - **Notification-service** (port 8085): Kafka consumer, SMTP email delivery, Redis dedup (24h TTL)
@@ -91,6 +91,19 @@ MS Cinema is an **11-module Spring Cloud microservices platform** for cinema tic
   - notification-service (port 8085) consumes events from Kafka
   - Sends HTML-formatted emails via SMTP (no direct email sending in auth-service)
   - Decouples auth-service from email delivery concerns
+
+### Movie Ratings & Comments (FR-005)
+- **Star Ratings:** 1-5 point scale per movie, upsert per user
+  - POST /api/movies/{movieId}/ratings (authenticated, upsert)
+  - GET /api/movies/{movieId}/ratings (public, returns avg/count/userRating)
+- **Comments:** Flat structure with soft-delete (status ACTIVE/DELETED)
+  - POST /api/movies/{movieId}/comments (authenticated)
+  - GET /api/movies/{movieId}/comments?page=0&size=20 (public, paginated)
+  - PUT /api/comments/{commentId} (owner only)
+  - DELETE /api/comments/{commentId} (owner or admin, soft-delete)
+- **Comment Reactions:** Per-user like/dislike toggle
+  - POST /api/comments/{commentId}/reactions (authenticated, toggle)
+  - DELETE /api/comments/{commentId}/reactions (remove reaction)
 
 ## Non-Functional Requirements
 
@@ -436,6 +449,7 @@ Response (403 Forbidden):
 - ✓ Movie-service auto-generates seat grids (A-Z rows) on theater creation
 - ✓ Booking-service Redis locking (5-min TTL, key pattern: seat:lock:{showtimeId}:{seatId})
 - ✓ Payment-service Stripe integration (idempotency key, webhook signature verification)
+- ✓ Movie ratings & comments (FR-005): Star ratings, flat comments, soft-delete, reactions
 - [ ] Rate limiting on login/forgot-password endpoints
 
 ### Phase 4: Security Hardening (Planned)

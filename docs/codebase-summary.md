@@ -86,19 +86,35 @@ src/main/java/com/namnd/cinema/
 - MovieController - GET all, GET by id, POST (ADMIN), PUT (ADMIN), DELETE (ADMIN)
 - TheaterController - GET all, GET by id, POST (ADMIN, auto-generates seats), PUT (ADMIN), DELETE (ADMIN)
 - ShowtimeController - GET all, GET by id, POST (ADMIN), PUT (ADMIN), DELETE (ADMIN)
+- MovieRatingController - POST (create/update 1-5 rating, upsert), GET (summary with avg/count/user's rating)
+- MovieCommentController - POST (create), GET (paginated list, 20/page), PUT (update, owner only), DELETE (soft-delete)
+- CommentReactionController - POST (toggle like/dislike), DELETE (remove reaction)
 
 **Models:**
-- Movie (id, title, description, duration, genre, releaseDate)
+- Movie (id, title, description, duration, genre, releaseDate; includes averageRating, totalRatings, commentCount in DTO)
 - Theater (id, name, location, totalSeats, seats list LAZY)
 - Seat (id, seatNumber [A-Z row format], theaterRef, available)
 - Showtime (id, movieRef, theaterRef, startTime, endTime, price)
+- MovieRating (id, movie_id, user_id, rating [1-5], created_at, updated_at; UNIQUE(movie_id, user_id))
+- MovieComment (id, movie_id, user_id, content, status ENUM [ACTIVE/DELETED], created_at, updated_at)
+- CommentReaction (id, comment_id, user_id, reaction_type ENUM [LIKE/DISLIKE], created_at; UNIQUE(comment_id, user_id))
 
 **Services:**
-- MovieService - CRUD + event publishing (MovieCreatedEvent)
+- MovieService - CRUD + event publishing (MovieCreatedEvent); query-time aggregation in toDto()
 - TheaterService - CRUD + auto-seat-grid generation
 - ShowtimeService - CRUD + event publishing (ShowtimeCreatedEvent)
+- MovieRatingService - Upsert rating, get summary (avg, count, user's rating)
+- MovieCommentService - Create, list (paginated), update, soft-delete
+- CommentReactionService - Toggle like/dislike, remove reaction
+
+**Repositories (Custom Queries):**
+- MovieRatingRepository - findAverageRatingByMovieId(), countByMovieId()
+- MovieCommentRepository - findByMovieIdAndStatusActive (custom @Query)
+- CommentReactionRepository - countLikesByCommentId(), countDislikesByCommentId()
 
 **Kafka Events Published:** MovieCreatedEvent, ShowtimeCreatedEvent → topic: movie-events
+
+**Security:** /api/comments/** added to permitAll in SecurityConfig for GET (public comments)
 
 ## booking-service (Port 8083)
 
@@ -325,6 +341,12 @@ jwt.auth.secret: ${JWT_SECRET}
 - Stripe checkout integration
 - User profile, booking history
 - Admin dashboard (ROLE_ADMIN)
+- **Movie ratings & comments:** Star rating display, comment list, reaction buttons
+- **Models:** movie-rating.model.ts, movie-comment.model.ts (includes Page<T> interface for pagination)
+- **Services:** MovieRatingService, MovieCommentService
+- **Components:** StarRatingComponent, CommentListComponent, CommentItemComponent
+- **Auth interceptor:** Fixed to always attach token when available; PUBLIC_URLS only gates 401 refresh
+- **MovieDetailComponent:** Integrated with star rating + comment list
 
 **Lazy-Loaded Routes:**
 - /auth (login, register, password reset)
@@ -431,10 +453,10 @@ docker build -t movie-service ./movie-service
 ## Data Isolation
 
 **Per-Service PostgreSQL Databases:**
-- auth-service: testdb (7 tables)
-- movie-service: moviedb (4 tables)
-- booking-service: bookingdb (2 tables)
-- payment-service: paymentdb (1 table)
+- auth-service: testdb (7 tables: users, roles, user_roles, refresh_tokens, password_reset_tokens, activation_tokens, blacklisted_tokens)
+- movie-service: moviedb (7 tables: movies, theaters, seats, showtimes, movie_ratings, movie_comments, comment_reactions)
+- booking-service: bookingdb (2 tables: bookings, booking_seats)
+- payment-service: paymentdb (1 table: payments)
 
 **Shared Resources:**
 - PostgreSQL cluster (all databases on same instance)

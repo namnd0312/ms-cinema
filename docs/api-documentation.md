@@ -147,9 +147,39 @@ The API Gateway (:8080) aggregates OpenAPI docs from all downstream services:
 | POST /api/auth/validate-token | none | Validate JWT (for downstream services) |
 | GET /api/users/me | Bearer JWT | Get current user profile |
 
-### movie-service (/api/movies)
+### movie-service (/api/movies, /api/comments)
 
+**Movie Management:**
 Documented in MovieController with @Tag and @Operation annotations.
+
+**Ratings (1-5 stars):**
+| Endpoint | Auth | Description |
+|----------|------|-------------|
+| POST /api/movies/{movieId}/ratings | USER | Create or update rating |
+| GET /api/movies/{movieId}/ratings | public | Get rating summary (avg, count, user's rating) |
+
+**Comments (flat, soft-deleted):**
+| Endpoint | Auth | Method | Description |
+|----------|------|--------|-------------|
+| /api/movies/{movieId}/comments | public | GET | List comments (paginated, page=0&size=20 default) |
+| /api/movies/{movieId}/comments | USER | POST | Post comment with content text |
+| /api/comments/{commentId} | USER (owner) | PUT | Update own comment content |
+| /api/comments/{commentId} | USER (owner/ADMIN) | DELETE | Soft-delete comment (status→DELETED) |
+
+**Comment Reactions (like/dislike):**
+| Endpoint | Auth | Method | Description |
+|----------|------|--------|-------------|
+| /api/comments/{commentId}/reactions | USER | POST | Toggle like/dislike (send: reactionType: LIKE or DISLIKE) |
+| /api/comments/{commentId}/reactions | USER | DELETE | Remove user's reaction |
+
+**Response Codes:**
+- 200 OK: Successful operation
+- 400 Bad Request: Invalid input (rating not 1-5, missing content, invalid page params)
+- 401 Unauthorized: Missing/expired token on protected endpoints
+- 403 Forbidden: User lacks role (not owner of comment, not admin)
+- 404 Not Found: Movie/comment not found
+- 500 Internal Error: Server exception
+
 Swagger UI: http://localhost:8082/swagger-ui.html
 
 ### booking-service (/api/bookings)

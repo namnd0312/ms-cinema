@@ -68,6 +68,12 @@ MS Cinema is a comprehensive cinema ticket booking platform built on Spring Boot
 **Timeline:** March - May 2026
 **Focus:** Business features and user experience
 
+**Completed Features:**
+- ✓ Movie Ratings (1-5 stars) - POST/GET with summary stats (COMPLETE: March 12, 2026)
+- ✓ Movie Comments (flat, paginated, soft-delete) (COMPLETE: March 12, 2026)
+- ✓ Comment Reactions (like/dislike toggle) (COMPLETE: March 12, 2026)
+- ✓ API Gateway /api/comments/** route (COMPLETE: March 12, 2026)
+
 **Planned Features:**
 
 **FR-3.1: Seat Grid Display & Booking UI**

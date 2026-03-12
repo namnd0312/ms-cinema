@@ -29,7 +29,8 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET,
                         "/api/movies/**",
                         "/api/showtimes/**",
-                        "/api/theaters/**").permitAll()
+                        "/api/theaters/**",
+                        "/api/comments/**").permitAll()
                 .requestMatchers("/actuator/health", "/actuator/prometheus", "/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
                 .anyRequest().authenticated()
             )

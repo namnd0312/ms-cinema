@@ -7,6 +7,9 @@ export interface Movie {
   releaseDate: string;
   posterUrl: string;
   rating: number;
+  averageRating: number;
+  totalRatings: number;
+  commentCount: number;
 }
 
 export interface Theater {

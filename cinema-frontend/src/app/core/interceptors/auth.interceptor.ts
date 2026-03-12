@@ -22,18 +22,16 @@ const refreshTokenSubject = new BehaviorSubject<string | null>(null);
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const authService = inject(AuthService);
 
-  // Skip public URLs
-  if (PUBLIC_URLS.some(url => req.url.includes(url))) {
-    return next(req);
-  }
-
-  // Attach token
+  // Always attach token if available (so authenticated users get personalized data on public endpoints too)
   const token = authService.getToken();
   const authReq = token ? addToken(req, token) : req;
 
+  // Skip refresh-token logic for public URLs
+  const isPublic = PUBLIC_URLS.some(url => req.url.includes(url));
+
   return next(authReq).pipe(
     catchError(error => {
-      if (error instanceof HttpErrorResponse && error.status === 401) {
+      if (!isPublic && error instanceof HttpErrorResponse && error.status === 401) {
         return handle401Error(authReq, next, authService);
       }
       return throwError(() => error);

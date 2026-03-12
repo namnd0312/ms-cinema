@@ -4,7 +4,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
- * Read model returned to clients for movie data.
+ * Read model returned to clients for movie data, includes rating/comment aggregations.
  */
 public record MovieDto(
         Long id,
@@ -16,5 +16,8 @@ public record MovieDto(
         String posterUrl,
         LocalDate releaseDate,
         String status,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        Double averageRating,
+        Long totalRatings,
+        Long commentCount
 ) {}

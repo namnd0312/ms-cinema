@@ -49,11 +49,11 @@ mvn -pl notification-service spring-boot:run    # port 8085
 | config-server | 8888 | Centralized config | Git/classpath profiles |
 | api-gateway | 8080 | Request routing | OpenAPI aggregation, logging |
 | auth-service | 8081 | Authentication | JWT, email activation, account lockout |
-| movie-service | 8082 | Movie/theater data | Showtimes, auto seat grids |
+| movie-service | 8082 | Movies/ratings/comments | Showtimes, auto seat grids, star ratings, comments, reactions |
 | booking-service | 8083 | Seat reservation | Redis locking, lifecycle states |
 | payment-service | 8084 | Payment processing | Stripe, webhook verification |
 | notification-service | 8085 | Email notifications | Kafka consumer, Redis dedup |
-| cinema-frontend | 4200→80 | Web UI | Angular 18, Material, Stripe.js |
+| cinema-frontend | 4200→80 | Web UI | Angular 18, Material, Stripe.js, ratings UI |
 
 ## API Documentation
 
@@ -87,11 +87,11 @@ Each service has own database (auth→testdb, movie→moviedb, booking→booking
 
 **auth-service:** users, roles, user_roles, refresh_tokens, password_reset_tokens, activation_tokens, blacklisted_tokens
 
-**movie-service:** movies, theaters, seats, showtimes
+**movie-service:** movies, theaters, seats, showtimes, movie_ratings, movie_comments, comment_reactions
 
 **booking-service:** bookings, booking_seats
 
-**payment-service:** payments, payment_intents
+**payment-service:** payments
 
 ## Kafka Event Flow
 

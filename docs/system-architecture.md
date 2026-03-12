@@ -61,7 +61,18 @@ Infrastructure:
 **api-gateway (:8080)** - Single entry point
 - Spring Cloud Gateway MVC (servlet-based, not WebFlux)
 - Routes requests to downstream services via Eureka load balancing
-- Routes: `/api/auth/**` → auth-service, `/api/movies/**` → movie-service, etc.
+- Routes:
+  - `/api/auth/**` → auth-service
+  - `/api/users/**` → auth-service
+  - `/api/movies/**` → movie-service
+  - `/api/movies/{movieId}/ratings` → movie-service (POST, GET)
+  - `/api/movies/{movieId}/comments` → movie-service (POST, GET paginated)
+  - `/api/comments/{commentId}` → movie-service (PUT, DELETE)
+  - `/api/comments/{commentId}/reactions` → movie-service (POST, DELETE)
+  - `/api/showtimes/**` → movie-service
+  - `/api/theaters/**` → movie-service
+  - `/api/bookings/**` → booking-service
+  - `/api/payments/**` → payment-service
 - Aggregates OpenAPI documentation: `/v3/api-docs`
 - Swagger UI: `/swagger-ui.html`
 - HttpLoggingFilter logs requests with X-Correlation-ID header
@@ -79,13 +90,18 @@ Infrastructure:
 - Email Events: Publishes NotificationRequestedEvent to Kafka (no direct SMTP)
 - Database: testdb (7 tables: users, roles, user_roles, refresh_tokens, password_reset_tokens, activation_tokens, blacklisted_tokens)
 
-**movie-service (:8082)** - Movie catalog & showtimes
-- Controllers: MovieController, TheaterController, ShowtimeController
-- Models: Movie, Theater, Seat, Showtime
-- Features: Auto-generates seat grids (A-Z rows) on theater creation
+**movie-service (:8082)** - Movie catalog, showtimes, ratings, comments, reactions
+- Controllers: MovieController, TheaterController, ShowtimeController, MovieRatingController, MovieCommentController, CommentReactionController
+- Models: Movie, Theater, Seat, Showtime, MovieRating, MovieComment, CommentReaction
+- Features:
+  - Auto-generates seat grids (A-Z rows) on theater creation
+  - Star ratings (1-5): Upsert per user, summary with avg/count/user's rating
+  - Flat comments: Paginated (20/page), soft-delete via status column (ACTIVE/DELETED), owner/admin can update
+  - Comment reactions: Per-user toggle (like/dislike), one per user per comment
+  - MovieDto enhanced: Includes averageRating, totalRatings, commentCount fields
 - Events Published: MovieCreatedEvent, ShowtimeCreatedEvent → movie-events topic
-- Consumers: (future) booking-service may listen for seat availability
-- Database: moviedb (4 tables: movies, theaters, seats, showtimes)
+- Database: moviedb (7 tables: movies, theaters, seats, showtimes, movie_ratings, movie_comments, comment_reactions)
+- Security: /api/comments/** permitAll for GET (public), POST/PUT/DELETE require auth
 
 **booking-service (:8083)** - Seat reservation & booking lifecycle
 - Controllers: BookingController
@@ -237,10 +253,10 @@ notification-service: Kafka Consumer
 ## Data Persistence
 
 **Per-Service Databases (PostgreSQL 16):**
-- auth-service: testdb
-- movie-service: moviedb
-- booking-service: bookingdb
-- payment-service: paymentdb
+- auth-service: testdb (users, roles, user_roles, refresh_tokens, password_reset_tokens, activation_tokens, blacklisted_tokens)
+- movie-service: moviedb (movies, theaters, seats, showtimes, movie_ratings, movie_comments, comment_reactions)
+- booking-service: bookingdb (bookings, booking_seats)
+- payment-service: paymentdb (payments)
 
 **Shared Resources:**
 - PostgreSQL cluster (same instance, different databases)

@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit } from '@angular/core';
+import { Component, inject, signal, computed, OnInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { DatePipe } from '@angular/common';
 import { MatCardModule } from '@angular/material/card';
@@ -7,14 +7,24 @@ import { MatChipsModule } from '@angular/material/chips';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatDividerModule } from '@angular/material/divider';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MovieService } from '../../../core/services/movie.service';
+import { MovieRatingService } from '../../../core/services/movie-rating.service';
+import { AuthService } from '../../../core/services/auth.service';
 import { Movie, Showtime } from '../../../core/models/movie.model';
+import { MovieRatingSummaryDto } from '../../../core/models/movie-rating.model';
+import { StarRatingComponent } from '../star-rating/star-rating.component';
+import { CommentListComponent } from '../comment-list/comment-list.component';
 
 @Component({
   selector: 'app-movie-detail',
   standalone: true,
-  imports: [DatePipe, MatCardModule, MatButtonModule, MatChipsModule, MatIconModule,
-    MatProgressSpinnerModule, MatDividerModule],
+  imports: [
+    DatePipe,
+    MatCardModule, MatButtonModule, MatChipsModule, MatIconModule,
+    MatProgressSpinnerModule, MatDividerModule, MatSnackBarModule,
+    StarRatingComponent, CommentListComponent
+  ],
   template: `
     @if (loading()) {
       <div class="loading"><mat-spinner diameter="40"></mat-spinner></div>
@@ -30,10 +40,15 @@ import { Movie, Showtime } from '../../../core/models/movie.model';
                 <mat-chip>{{ movie()!.genre }}</mat-chip>
                 <mat-chip>{{ movie()!.durationMinutes }} min</mat-chip>
               </mat-chip-set>
-              <span class="rating">
-                <mat-icon class="star-icon">star</mat-icon>
-                {{ movie()!.rating }}/10
-              </span>
+              <div class="rating-wrapper">
+                <app-star-rating
+                  [averageRating]="ratingSummary()?.averageRating ?? (movie()!.averageRating || 0)"
+                  [totalRatings]="ratingSummary()?.totalRatings ?? (movie()!.totalRatings || 0)"
+                  [userRating]="ratingSummary()?.userRating ?? null"
+                  [readonly]="!isAuthenticated()"
+                  (ratingSelected)="onRate($event)"
+                />
+              </div>
             </div>
             <p class="description">{{ movie()!.description }}</p>
           </div>
@@ -65,6 +80,9 @@ import { Movie, Showtime } from '../../../core/models/movie.model';
             }
           </div>
         }
+
+        <mat-divider></mat-divider>
+        <app-comment-list [movieId]="movie()!.id" />
       </div>
     }
   `,
@@ -75,17 +93,17 @@ import { Movie, Showtime } from '../../../core/models/movie.model';
     .poster { width: 250px; border-radius: 8px; object-fit: cover; }
     .info { flex: 1; }
     .info h1 { margin: 0 0 12px; }
-    .meta { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
-    .rating { display: flex; align-items: center; gap: 4px; font-size: 1.1rem; }
-    .star-icon { color: #ffc107; }
+    .meta { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+    .rating-wrapper { display: flex; flex-direction: column; }
     .description { line-height: 1.6; color: rgba(255,255,255,0.8); }
-    .showtimes-grid { display: grid; gap: 12px; }
+    .showtimes-grid { display: grid; gap: 12px; margin-top: 16px; }
     .showtime-card { cursor: default; }
     .showtime-info { display: flex; justify-content: space-between; align-items: center; }
     .theater { color: rgba(255,255,255,0.6); margin: 4px 0 0; }
     .price-action { display: flex; flex-direction: column; align-items: center; gap: 8px; }
     .price { font-size: 1.3rem; font-weight: 600; color: #ffc107; }
     .no-showtimes { text-align: center; color: rgba(255,255,255,0.5); }
+    mat-divider { margin: 24px 0; }
     @media (max-width: 600px) {
       .movie-header { flex-direction: column; align-items: center; }
       .poster { width: 200px; }
@@ -96,10 +114,16 @@ export class MovieDetailComponent implements OnInit {
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private movieService = inject(MovieService);
+  private movieRatingService = inject(MovieRatingService);
+  private authService = inject(AuthService);
+  private snackBar = inject(MatSnackBar);
 
   movie = signal<Movie | null>(null);
   showtimes = signal<Showtime[]>([]);
+  ratingSummary = signal<MovieRatingSummaryDto | null>(null);
   loading = signal(true);
+
+  isAuthenticated = computed(() => this.authService.isAuthenticated());
 
   ngOnInit(): void {
     const id = Number(this.route.snapshot.paramMap.get('id'));
@@ -107,6 +131,7 @@ export class MovieDetailComponent implements OnInit {
       next: (movie) => {
         this.movie.set(movie);
         this.loadShowtimes(id);
+        this.loadRatingSummary(id);
       },
       error: () => this.loading.set(false)
     });
@@ -116,6 +141,25 @@ export class MovieDetailComponent implements OnInit {
     this.movieService.getShowtimes(movieId).subscribe({
       next: (showtimes) => { this.showtimes.set(showtimes); this.loading.set(false); },
       error: () => this.loading.set(false)
+    });
+  }
+
+  private loadRatingSummary(movieId: number): void {
+    this.movieRatingService.getRatingSummary(movieId).subscribe({
+      next: (summary) => this.ratingSummary.set(summary),
+      error: () => {} // non-critical, fall back to movie data
+    });
+  }
+
+  onRate(rating: number): void {
+    const movie = this.movie();
+    if (!movie) return;
+    this.movieRatingService.rateMovie(movie.id, { rating }).subscribe({
+      next: () => {
+        this.loadRatingSummary(movie.id);
+        this.snackBar.open(`Rated ${rating}/5!`, 'Close', { duration: 2000 });
+      },
+      error: () => this.snackBar.open('Failed to submit rating.', 'Close', { duration: 3000 })
     });
   }
 

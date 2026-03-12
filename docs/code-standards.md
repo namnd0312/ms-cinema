@@ -397,10 +397,112 @@ public interface UserRepository extends JpaRepository<User, Long> {
 ✓ POST /api/users            (create)
 ✓ PUT /api/users/{id}        (update)
 ✓ DELETE /api/users/{id}     (delete)
+✓ POST /api/movies/{movieId}/ratings       (nested resource)
+✓ GET /api/movies/{movieId}/comments       (nested collection)
+✓ POST /api/comments/{commentId}/reactions (nested action)
 
 ✗ POST /api/auth/doLogin     (redundant verb)
 ✗ GET /api/GetUserById       (not lowercase)
 ✗ POST /api/createUser       (verb in path)
+```
+
+**Soft-Delete Pattern**
+```java
+// ✓ Good: Use status enum or deleted flag
+@Entity
+public class MovieComment {
+    @Column(name = "status")
+    @Enumerated(EnumType.STRING)
+    private CommentStatus status;  // ACTIVE, DELETED
+
+    @PreUpdate
+    public void softDelete() {
+        this.status = CommentStatus.DELETED;
+        this.updatedAt = LocalDateTime.now();
+    }
+}
+
+// In repository, filter by status
+@Query("SELECT c FROM MovieComment c WHERE c.movieId = :movieId AND c.status = 'ACTIVE'")
+List<MovieComment> findActiveCommentsByMovieId(@Param("movieId") Long movieId);
+```
+
+**Pagination Pattern**
+```java
+// ✓ Good: Use Spring Data Page interface
+@GetMapping("/movies/{movieId}/comments")
+public ResponseEntity<Page<MovieCommentDto>> listComments(
+    @PathVariable Long movieId,
+    @RequestParam(defaultValue = "0") int page,
+    @RequestParam(defaultValue = "20") int size) {
+    Page<MovieComment> comments = commentService.findByMovieId(movieId, PageRequest.of(page, size));
+    return ResponseEntity.ok(comments.map(this::toDto));
+}
+
+// Response includes metadata: totalElements, totalPages, currentPage, size
+{
+    "content": [ { comment1 }, { comment2 } ],
+    "pageable": { "pageNumber": 0, "pageSize": 20, "totalElements": 150 },
+    "totalPages": 8
+}
+```
+
+**Upsert Pattern (Rating)**
+```java
+// ✓ Good: Update if exists, create if not
+@PostMapping("/movies/{movieId}/ratings")
+@PreAuthorize("isAuthenticated()")
+public ResponseEntity<?> createOrUpdateRating(
+    @PathVariable Long movieId,
+    @RequestBody CreateRatingRequest request,
+    @AuthenticationPrincipal UserPrincipal user) {
+    MovieRating rating = ratingService.createOrUpdateRating(
+        movieId, user.getId(), request.getRating());
+    return ResponseEntity.ok(ratingToDto(rating));
+}
+
+// Service implementation
+public MovieRating createOrUpdateRating(Long movieId, Long userId, Integer rating) {
+    return ratingRepository.findByMovieIdAndUserId(movieId, userId)
+        .map(existing -> {
+            existing.setRating(rating);
+            existing.setUpdatedAt(LocalDateTime.now());
+            return ratingRepository.save(existing);
+        })
+        .orElseGet(() -> {
+            MovieRating newRating = new MovieRating(movieId, userId, rating);
+            return ratingRepository.save(newRating);
+        });
+}
+```
+
+**Reaction Toggle Pattern**
+```java
+// ✓ Good: Toggle based on reaction type
+@PostMapping("/comments/{commentId}/reactions")
+@PreAuthorize("isAuthenticated()")
+public ResponseEntity<?> toggleReaction(
+    @PathVariable Long commentId,
+    @RequestBody CommentReactionRequest request,
+    @AuthenticationPrincipal UserPrincipal user) {
+    CommentReaction reaction = reactionService.toggleReaction(
+        commentId, user.getId(), request.getReactionType());
+    return ResponseEntity.ok(reactionToDto(reaction));
+}
+
+// Service: toggle removes if same type, replaces if different type
+public CommentReaction toggleReaction(Long commentId, Long userId, ReactionType type) {
+    Optional<CommentReaction> existing = repository.findByCommentIdAndUserId(commentId, userId);
+    if (existing.isPresent() && existing.get().getType() == type) {
+        repository.delete(existing.get());
+        return null;  // or return success DTO
+    }
+    if (existing.isPresent()) {
+        existing.get().setType(type);
+        return repository.save(existing.get());
+    }
+    return repository.save(new CommentReaction(commentId, userId, type));
+}
 ```
 
 **Request/Response Structure**

@@ -30,6 +30,10 @@ spring:
             uri: lb://movie-service
             predicates:
               - Path=/api/theaters/**
+          - id: movie-service-comments
+            uri: lb://movie-service
+            predicates:
+              - Path=/api/comments/**
           - id: booking-service
             uri: lb://booking-service
             predicates:
