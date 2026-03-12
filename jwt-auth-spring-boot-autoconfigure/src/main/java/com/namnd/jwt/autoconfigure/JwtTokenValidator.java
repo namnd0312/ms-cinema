@@ -4,6 +4,8 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.crypto.SecretKey;
 import java.util.Collections;
@@ -15,6 +17,8 @@ import java.util.List;
  * Used by downstream microservices that share the auth-service secret.
  */
 public class JwtTokenValidator {
+
+    private static final Logger log = LoggerFactory.getLogger(JwtTokenValidator.class);
 
     private final SecretKey signingKey;
 
@@ -35,6 +39,7 @@ public class JwtTokenValidator {
                     .parseSignedClaims(token)
                     .getPayload();
         } catch (Exception e) {
+            log.debug("JWT parse failed: {}", e.getMessage());
             return null;
         }
     }

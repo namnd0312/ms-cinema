@@ -5,6 +5,8 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -20,6 +22,8 @@ import java.util.List;
  * Skips filter silently on missing/invalid token and lets Spring Security handle 401.
  */
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
+
+    private static final Logger log = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
 
     private final JwtTokenValidator tokenValidator;
 
@@ -37,21 +41,29 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (jwt != null) {
             Claims claims = tokenValidator.parseClaims(jwt);
             if (claims != null) {
-                String email = tokenValidator.getEmail(claims);
-                Long userId = tokenValidator.getUserId(claims);
-                List<String> roles = tokenValidator.getRoles(claims);
+                try {
+                    String email = tokenValidator.getEmail(claims);
+                    Long userId = tokenValidator.getUserId(claims);
+                    List<String> roles = tokenValidator.getRoles(claims);
 
-                List<SimpleGrantedAuthority> authorities = roles.stream()
-                        .map(SimpleGrantedAuthority::new)
-                        .toList();
+                    List<SimpleGrantedAuthority> authorities = roles.stream()
+                            .map(SimpleGrantedAuthority::new)
+                            .toList();
 
-                JwtAuthenticatedUser principal = new JwtAuthenticatedUser(userId, email, roles);
+                    JwtAuthenticatedUser principal = new JwtAuthenticatedUser(userId, email, roles);
 
-                UsernamePasswordAuthenticationToken auth =
-                        new UsernamePasswordAuthenticationToken(principal, null, authorities);
-                auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                    UsernamePasswordAuthenticationToken auth =
+                            new UsernamePasswordAuthenticationToken(principal, null, authorities);
+                    auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
 
-                SecurityContextHolder.getContext().setAuthentication(auth);
+                    SecurityContextHolder.getContext().setAuthentication(auth);
+                } catch (Exception e) {
+                    log.warn("JWT claims extraction failed for {} {}: {}",
+                            request.getMethod(), request.getRequestURI(), e.getMessage());
+                }
+            } else {
+                log.debug("JWT validation failed (expired/invalid) for {} {}",
+                        request.getMethod(), request.getRequestURI());
             }
         }
         filterChain.doFilter(request, response);

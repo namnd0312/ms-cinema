@@ -22,12 +22,13 @@ const refreshTokenSubject = new BehaviorSubject<string | null>(null);
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const authService = inject(AuthService);
 
-  // Always attach token if available (so authenticated users get personalized data on public endpoints too)
-  const token = authService.getToken();
-  const authReq = token ? addToken(req, token) : req;
-
-  // Skip refresh-token logic for public URLs
+  // Skip token attachment for auth endpoints (refresh-token sends expired token which causes 401)
+  const isAuthEndpoint = req.url.includes('/api/auth/');
   const isPublic = PUBLIC_URLS.some(url => req.url.includes(url));
+
+  // Attach token for non-auth requests (public endpoints still get JWT for personalized data)
+  const token = !isAuthEndpoint ? authService.getToken() : null;
+  const authReq = token ? addToken(req, token) : req;
 
   return next(authReq).pipe(
     catchError(error => {
