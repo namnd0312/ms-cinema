@@ -340,13 +340,23 @@ jwt.auth.secret: ${JWT_SECRET}
 - Seat grid interactive booking
 - Stripe checkout integration
 - User profile, booking history
-- Admin dashboard (ROLE_ADMIN)
+- Admin CRUD dashboard (ROLE_ADMIN)
 - **Movie ratings & comments:** Star rating display, comment list, reaction buttons
 - **Models:** movie-rating.model.ts, movie-comment.model.ts (includes Page<T> interface for pagination)
-- **Services:** MovieRatingService, MovieCommentService
+- **Services:** MovieRatingService, MovieCommentService, TheaterService, ShowtimeAdminService
 - **Components:** StarRatingComponent, CommentListComponent, CommentItemComponent
 - **Auth interceptor:** Fixed to always attach token when available; PUBLIC_URLS only gates 401 refresh
 - **MovieDetailComponent:** Integrated with star rating + comment list
+
+**Admin Dashboard (New):**
+- **AdminNavComponent:** Tab-based navigation (Movies, Theaters, Showtimes, Payments)
+- **MovieManagementComponent:** List movies in MatTable with edit/delete actions
+- **MovieFormDialogComponent:** Modal form for create/edit movie
+- **TheaterManagementComponent:** List theaters in MatTable with edit/delete actions
+- **TheaterFormDialogComponent:** Modal form for create/edit theater
+- **ShowtimeManagementComponent:** List showtimes in MatTable with edit/delete actions
+- **ShowtimeFormDialogComponent:** Modal form for create/edit showtime
+- **PaymentManagementComponent:** List all payments in MatTable (admin-only view)
 
 **Lazy-Loaded Routes:**
 - /auth (login, register, password reset)
@@ -354,7 +364,7 @@ jwt.auth.secret: ${JWT_SECRET}
 - /booking (seat selection, confirmation)
 - /payment (Stripe checkout)
 - /profile (user info, bookings)
-- /admin (admin panels)
+- /admin (admin dashboard with tabs)
 
 **API Proxy:** Configured to route /api/* to http://api-gateway:8080
 

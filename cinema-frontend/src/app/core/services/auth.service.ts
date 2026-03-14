@@ -56,7 +56,7 @@ export class AuthService {
           username: response.username,
           email: response.email,
           fullName: response.name,
-          roles: response.roles
+          roles: (response.roles as any[]).map(r => typeof r === 'string' ? r : r.authority)
         };
         localStorage.setItem(this.USER_KEY, JSON.stringify(user));
         this.currentUser.set(user);

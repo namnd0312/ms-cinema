@@ -30,4 +30,8 @@ export class PaymentService {
   refundPayment(id: number): Observable<any> {
     return this.http.post(`/api/payments/${id}/refund`, {});
   }
+
+  getAllPayments(): Observable<Payment[]> {
+    return this.http.get<Payment[]>('/api/payments');
+  }
 }

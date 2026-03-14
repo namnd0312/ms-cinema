@@ -25,4 +25,6 @@ public interface PaymentService {
     PaymentHistoryResponse getPayment(Long paymentId, Long userId);
 
     List<PaymentHistoryResponse> getUserPayments(Long userId);
+
+    List<PaymentHistoryResponse> getAllPayments();
 }

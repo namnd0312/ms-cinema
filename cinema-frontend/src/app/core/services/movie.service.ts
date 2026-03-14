@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { Movie, Showtime, Seat } from '../models/movie.model';
+import { Movie, Showtime, Seat, CreateMovieRequest } from '../models/movie.model';
 
 @Injectable({ providedIn: 'root' })
 export class MovieService {
@@ -15,12 +15,12 @@ export class MovieService {
     return this.http.get<Movie>(`/api/movies/${id}`);
   }
 
-  createMovie(movie: Partial<Movie>): Observable<Movie> {
-    return this.http.post<Movie>('/api/movies', movie);
+  createMovie(request: CreateMovieRequest): Observable<Movie> {
+    return this.http.post<Movie>('/api/movies', request);
   }
 
-  updateMovie(id: number, movie: Partial<Movie>): Observable<Movie> {
-    return this.http.put<Movie>(`/api/movies/${id}`, movie);
+  updateMovie(id: number, request: CreateMovieRequest): Observable<Movie> {
+    return this.http.put<Movie>(`/api/movies/${id}`, request);
   }
 
   deleteMovie(id: number): Observable<void> {

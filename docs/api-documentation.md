@@ -190,6 +190,25 @@ Swagger UI: http://localhost:8083/swagger-ui.html
 ### payment-service (/api/payments)
 
 Documented in PaymentController with @Tag and @Operation annotations.
+
+**Payment Endpoints:**
+| Endpoint | Auth | Description |
+|----------|------|-------------|
+| POST /api/payments/create-intent | USER | Create Stripe PaymentIntent for booking |
+| POST /api/payments/{id}/confirm | USER (owner) | Confirm payment status from Stripe |
+| GET /api/payments/{id} | USER (owner) | Get payment details by ID |
+| GET /api/payments/my | USER | List user's payment history |
+| GET /api/payments | ADMIN | List all payments (admin only) |
+| POST /api/payments/{id}/refund | ADMIN | Refund a payment (admin only) |
+| POST /api/payments/fake-success | none | Fake success for testing (bypass Stripe) |
+
+**Response Codes:**
+- 200 OK: Successful operation
+- 401 Unauthorized: Missing/expired token
+- 403 Forbidden: User lacks permission (ADMIN only endpoint, payment owner only)
+- 404 Not Found: Payment not found
+- 500 Internal Error: Server exception
+
 Swagger UI: http://localhost:8084/swagger-ui.html
 
 ## Security in OpenAPI

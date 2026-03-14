@@ -1,7 +1,7 @@
 ---
 title: "Admin CRUD Frontend with MatDialog Forms"
 description: "Build all admin CRUD features in Angular 18 frontend with MatDialog popup forms for movies, theaters, showtimes, and payment refunds"
-status: pending
+status: completed
 priority: P1
 effort: 7h
 branch: master
@@ -18,11 +18,11 @@ Backend exposes 7 admin endpoints (movie CRUD, theater CRUD, showtime CRUD, paym
 
 | # | Phase | Effort | Status | File |
 |---|-------|--------|--------|------|
-| 1 | [Admin Services & Models](./phase-01-admin-services-and-models.md) | 1h | pending | Services, interfaces, model updates |
-| 2 | [Movie Management](./phase-02-movie-management-page-and-dialog.md) | 2h | pending | New page + dialog form |
-| 3 | [Theater Management Enhancement](./phase-03-theater-management-enhancement-and-dialog.md) | 1.5h | pending | Enhance existing + dialog form |
-| 4 | [Showtime Management Enhancement](./phase-04-showtime-management-enhancement-and-dialog.md) | 1.5h | pending | Enhance existing + dialog form |
-| 5 | [Payment Refund & Admin Nav](./phase-05-payment-refund-management-and-admin-nav.md) | 1h | pending | New page + refund + nav tabs |
+| 1 | [Admin Services & Models](./phase-01-admin-services-and-models.md) | 1h | completed | Services, interfaces, model updates |
+| 2 | [Movie Management](./phase-02-movie-management-page-and-dialog.md) | 2h | completed | New page + dialog form |
+| 3 | [Theater Management Enhancement](./phase-03-theater-management-enhancement-and-dialog.md) | 1.5h | completed | Enhance existing + dialog form |
+| 4 | [Showtime Management Enhancement](./phase-04-showtime-management-enhancement-and-dialog.md) | 1.5h | completed | Enhance existing + dialog form |
+| 5 | [Payment Refund & Admin Nav](./phase-05-payment-refund-management-and-admin-nav.md) | 1h | completed | New page + refund + nav tabs |
 
 ## Key Dependencies
 - All existing services (MovieService, PaymentService, AuthService) already have CRUD methods
@@ -55,4 +55,4 @@ Backend exposes 7 admin endpoints (movie CRUD, theater CRUD, showtime CRUD, paym
 - **Movie rating field:** MatSelect with preset values (G, PG, PG-13, R, NC-17)
 
 ### Action Items
-- [ ] Add `GET /api/payments` + `getAllPayments()` to PaymentController/PaymentService in backend (pre-Phase 5)
+- [x] Add `GET /api/payments` + `getAllPayments()` to PaymentController/PaymentService in backend (pre-Phase 5)

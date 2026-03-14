@@ -74,6 +74,13 @@ public class PaymentController {
         return ResponseEntity.ok(paymentService.getUserPayments(user.userId()));
     }
 
+    @Operation(summary = "List all payments (ADMIN only)")
+    @GetMapping
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<List<PaymentHistoryResponse>> getAllPayments() {
+        return ResponseEntity.ok(paymentService.getAllPayments());
+    }
+
     @Operation(summary = "Refund a payment (ADMIN only)")
     @PostMapping("/{id:\\d+}/refund")
     @PreAuthorize("hasRole('ADMIN')")

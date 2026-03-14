@@ -231,6 +231,14 @@ public class PaymentServiceImpl implements PaymentService {
                 .collect(Collectors.toList());
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<PaymentHistoryResponse> getAllPayments() {
+        return paymentRepository.findAll().stream()
+                .map(this::toResponse)
+                .collect(Collectors.toList());
+    }
+
     private PaymentHistoryResponse toResponse(Payment p) {
         return new PaymentHistoryResponse(
                 p.getId(),

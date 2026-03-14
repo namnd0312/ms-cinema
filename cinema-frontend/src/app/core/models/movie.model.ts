@@ -6,7 +6,7 @@ export interface Movie {
   genre: string;
   releaseDate: string;
   posterUrl: string;
-  rating: number;
+  rating: string;
   averageRating: number;
   totalRatings: number;
   commentCount: number;
@@ -15,7 +15,36 @@ export interface Movie {
 export interface Theater {
   id: number;
   name: string;
+  location: string;
+  totalRows: number;
+  totalColumns: number;
   totalSeats: number;
+  createdAt: string;
+}
+
+export interface CreateMovieRequest {
+  title: string;
+  description: string;
+  genre: string;
+  durationMin: number;
+  rating: string;
+  posterUrl: string;
+  releaseDate: string;
+}
+
+export interface CreateTheaterRequest {
+  name: string;
+  location: string;
+  totalRows: number;
+  totalColumns: number;
+}
+
+export interface CreateShowtimeRequest {
+  movieId: number;
+  theaterId: number;
+  startTime: string;
+  endTime: string;
+  basePrice: number;
 }
 
 export interface Seat {
