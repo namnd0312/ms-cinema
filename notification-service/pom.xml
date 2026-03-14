@@ -34,6 +34,34 @@
             <version>${project.version}</version>
         </dependency>
 
+        <!-- JPA + PostgreSQL for notification persistence -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- Bean validation -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <!-- Security + JWT auth for SSE + REST endpoints -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.namnd</groupId>
+            <artifactId>jwt-auth-spring-boot-starter</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
         <!-- Email sending -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

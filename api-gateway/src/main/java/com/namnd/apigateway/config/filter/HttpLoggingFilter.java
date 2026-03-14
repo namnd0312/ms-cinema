@@ -38,10 +38,19 @@ public class HttpLoggingFilter extends OncePerRequestFilter {
     /** Cap logged body size to avoid enormous log entries */
     private static final int MAX_BODY_LENGTH = 2000;
 
+    /** SSE/streaming endpoints must not be wrapped — response caching blocks flush */
+    private static final List<String> STREAMING_PATHS = List.of("/api/notifications/stream");
+
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain chain) throws ServletException, IOException {
+
+        // Skip response wrapping for SSE/streaming endpoints to avoid blocking
+        if (STREAMING_PATHS.stream().anyMatch(p -> request.getRequestURI().startsWith(p))) {
+            chain.doFilter(request, response);
+            return;
+        }
 
         var wrappedResp = new ContentCachingResponseWrapper(response);
 

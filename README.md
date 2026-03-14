@@ -52,7 +52,7 @@ mvn -pl notification-service spring-boot:run    # port 8085
 | movie-service | 8082 | Movies/ratings/comments | Showtimes, auto seat grids, star ratings, comments, reactions |
 | booking-service | 8083 | Seat reservation | Redis locking, lifecycle states |
 | payment-service | 8084 | Payment processing | Stripe, webhook verification |
-| notification-service | 8085 | Email notifications | Kafka consumer, Redis dedup |
+| notification-service | 8085 | Notifications (email + in-app SSE) | Kafka consumer, SSE emitters, PostgreSQL persistence, JWT auth via query param |
 | cinema-frontend | 4200→80 | Web UI | Angular 18, Material, Stripe.js, ratings UI |
 
 ## API Documentation
@@ -83,15 +83,17 @@ See [docs/api-documentation.md](./docs/api-documentation.md) for full endpoint r
 
 ## Database Schema
 
-Each service has own database (auth→testdb, movie→moviedb, booking→bookingdb, payment→paymentdb):
+Each service has own database:
 
-**auth-service:** users, roles, user_roles, refresh_tokens, password_reset_tokens, activation_tokens, blacklisted_tokens
+**auth-service (testdb):** users, roles, user_roles, refresh_tokens, password_reset_tokens, activation_tokens, blacklisted_tokens
 
-**movie-service:** movies, theaters, seats, showtimes, movie_ratings, movie_comments, comment_reactions
+**movie-service (moviedb):** movies, theaters, seats, showtimes, movie_ratings, movie_comments, comment_reactions
 
-**booking-service:** bookings, booking_seats
+**booking-service (bookingdb):** bookings, booking_seats
 
-**payment-service:** payments
+**payment-service (paymentdb):** payments
+
+**notification-service (notificationdb):** notifications (userId, eventId, notificationType, status, isRead, createdAt)
 
 ## Kafka Event Flow
 
@@ -99,7 +101,8 @@ Each service has own database (auth→testdb, movie→moviedb, booking→booking
 |-------|----------|----------|--------|
 | movie-events | movie-service | (future) | MovieCreatedEvent, ShowtimeCreatedEvent |
 | payment-events | payment-service | booking-service | PaymentCompletedEvent, PaymentFailedEvent |
-| notification-events | auth-service | notification-service | NotificationRequestedEvent |
+| notification-events | auth-service, booking-service | notification-service | NotificationRequestedEvent, InAppNotificationEvent |
+| notification.in_app | payment-service | notification-service | InAppNotificationEvent (payment confirm/fail) |
 
 Error handling: 3 retries, exponential backoff, DLT for failures.
 

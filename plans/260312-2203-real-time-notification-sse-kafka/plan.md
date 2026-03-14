@@ -1,7 +1,7 @@
 ---
 title: "Real-Time Notification System (SSE + Kafka)"
 description: "Add SSE real-time notifications for payment events and admin broadcasts"
-status: pending
+status: completed
 priority: P2
 effort: "6h"
 branch: master
@@ -42,12 +42,12 @@ Frontend → EventSource(/api/notifications/stream?token=JWT)
 
 | # | Phase | Status | Effort |
 |---|-------|--------|--------|
-| 1 | [kafka-events module](./phase-01-kafka-events-module-add-inapp-notification-event.md) | pending | 30m |
-| 2 | [notification-service backend](./phase-02-notification-service-backend-sse-persistence-rest-api.md) | pending | 2h |
-| 3 | [payment/booking integration](./phase-03-booking-service-publish-inapp-notification-after-payment.md) | pending | 45m |
-| 4 | [API Gateway routing](./phase-04-api-gateway-add-notification-service-routes.md) | pending | 15m |
-| 5 | [Angular frontend](./phase-05-angular-frontend-sse-client-notification-bell-and-list.md) | pending | 1.5h |
-| 6 | [Configuration & Docker](./phase-06-docker-compose-and-config-server-notificationdb-setup.md) | pending | 30m |
+| 1 | [kafka-events module](./phase-01-kafka-events-module-add-inapp-notification-event.md) | done | 30m |
+| 2 | [notification-service backend](./phase-02-notification-service-backend-sse-persistence-rest-api.md) | done | 2h |
+| 3 | [payment/booking integration](./phase-03-booking-service-publish-inapp-notification-after-payment.md) | done | 45m |
+| 4 | [API Gateway routing](./phase-04-api-gateway-add-notification-service-routes.md) | done | 15m |
+| 5 | [Angular frontend](./phase-05-angular-frontend-sse-client-notification-bell-and-list.md) | done | 1.5h |
+| 6 | [Configuration & Docker](./phase-06-docker-compose-and-config-server-notificationdb-setup.md) | done | 30m |
 
 ## Dependencies
 

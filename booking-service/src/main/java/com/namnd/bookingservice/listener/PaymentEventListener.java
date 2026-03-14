@@ -12,11 +12,13 @@ import com.namnd.kafka.events.topic.KafkaTopics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
+import com.namnd.bookingservice.service.NotificationPublisherService;
 import org.springframework.stereotype.Component;
 
 /**
  * Kafka consumer for payment-events topic.
  * Confirms or cancels bookings based on typed payment domain events.
+ * Publishes in-app notifications after payment outcomes.
  * Idempotency: skips events for bookings already in a terminal state.
  * Exceptions propagate to trigger DLT retry via DefaultErrorHandler.
  */
@@ -28,13 +30,16 @@ public class PaymentEventListener {
     private final BookingService bookingService;
     private final BookingRepository bookingRepository;
     private final ObjectMapper objectMapper;
+    private final NotificationPublisherService notificationPublisher;
 
     public PaymentEventListener(BookingService bookingService,
                                 BookingRepository bookingRepository,
-                                ObjectMapper objectMapper) {
+                                ObjectMapper objectMapper,
+                                NotificationPublisherService notificationPublisher) {
         this.bookingService = bookingService;
         this.bookingRepository = bookingRepository;
         this.objectMapper = objectMapper;
+        this.notificationPublisher = notificationPublisher;
     }
 
     /**
@@ -57,6 +62,9 @@ public class PaymentEventListener {
             bookingService.confirmBooking(event.bookingId());
             log.info("Booking {} confirmed via payment event", event.bookingId());
 
+            notificationPublisher.notifyPaymentSuccess(
+                    booking.getUserId(), event.bookingId(), event.paymentId(), event.amount());
+
         } else if ("payment.failed".equals(eventType)) {
             PaymentFailedEvent event = objectMapper.convertValue(envelope.payload(), PaymentFailedEvent.class);
             Booking booking = bookingRepository.findById(event.bookingId()).orElseThrow();
@@ -66,6 +74,9 @@ public class PaymentEventListener {
             }
             bookingService.cancelBooking(event.bookingId(), null);
             log.info("Booking {} cancelled due to payment failure: {}", event.bookingId(), event.reason());
+
+            notificationPublisher.notifyPaymentFailed(
+                    booking.getUserId(), event.bookingId(), event.reason());
 
         } else {
             log.warn("Unknown payment event type: {}", eventType);

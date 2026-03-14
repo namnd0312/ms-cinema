@@ -135,9 +135,10 @@ src/main/java/com/namnd/cinema/
 - MovieServiceClient - Fetch showtime & seat details
 
 **Kafka Event Handlers:**
-- Consumes PaymentCompletedEvent → transitions booking CONFIRMED
-- Consumes PaymentFailedEvent → transitions booking CANCELLED, releases locks
+- Consumes PaymentCompletedEvent → transitions booking CONFIRMED, publishes InAppNotificationEvent
+- Consumes PaymentFailedEvent → transitions booking CANCELLED, releases locks, publishes InAppNotificationEvent
 - Publishes BookingCreatedEvent → notification-events
+- Publishes InAppNotificationEvent → notification.in_app (payment confirm/fail events)
 
 **Schedulers:**
 - BookingExpiryScheduler (60s): Finds PENDING bookings past expiresAt, transitions EXPIRED, releases Redis locks
@@ -169,28 +170,46 @@ src/main/java/com/namnd/cinema/
 
 ## notification-service (Port 8085)
 
-**Key Features:** Kafka consumer (notification-events topic), SMTP email delivery via Spring Mail, Redis deduplication (24h TTL), fail-open on Redis
+**Key Features:** Kafka consumer (notification-events + in-app events), SMTP email delivery, Server-Sent Events (SSE) for real-time notifications, PostgreSQL persistence, REST API for notification management, JWT auth via query param for SSE
 
-**Kafka Consumer:**
-- Listens to notification-events topic
-- Consumes NotificationRequestedEvent
+**Kafka Consumers:**
+- Listens to notification-events topic → NotificationRequestedEvent (email)
+- Listens to notification.in_app topic → InAppNotificationEvent (payment events broadcast to frontend)
+- Consumer group: `notification-service-{instance-id}` (unique per instance for broadcast to all connected clients)
 
 **Models:**
-- Notification (id, eventId UNIQUE, recipientEmail, subject, body, status ENUM, createdAt)
+- Notification (id, userId, eventId UNIQUE, recipientEmail, subject, body, notificationType ENUM, status ENUM, isRead, createdAt)
+
+**Controllers:**
+- /api/notifications/stream (SSE endpoint, GET with JWT via query param)
+- /api/notifications (GET paginated list)
+- /api/notifications/{notificationId}/read (PATCH mark-as-read)
+- /api/notifications/unread-count (GET count)
+- /api/notifications/broadcast (POST admin-only test notifications)
 
 **Services:**
 - EmailSenderService - SMTP delivery via Spring Mail (jakarta.mail)
 - NotificationDeduplicationService - Redis key pattern: notification:processed:{eventId}, TTL 24h
-- KafkaNotificationListener - Event handler with error handling (retry policy)
+- SseEmitterService - Manages SSE emitter registry, 30-second heartbeat, exponential backoff reconnect on client disconnect
+- NotificationPublisherService - Publishes InAppNotificationEvent to Kafka topic
+- KafkaNotificationListener - Listens to both notification-events + notification.in_app
+
+**SSE Configuration:**
+- Heartbeat: 30-second keep-alive events (prevents connection timeout)
+- Reconnect: Exponential backoff (client-side) on disconnect
+- Max connections: Configurable per instance
+- 30-minute session timeout (configurable)
 
 **Configuration:**
 - spring.mail.host: smtp.gmail.com
 - spring.mail.port: 587
 - MAIL_USERNAME, MAIL_PASSWORD (Gmail app-specific password)
+- NOTIFICATION_DB_HOST, NOTIFICATION_DB_PORT, NOTIFICATION_DB_NAME
 
 **Error Handling:**
 - Kafka: 3 retries, exponential backoff (1s→2s→4s, capped 10s), DLT for failures
 - Redis fail-open: sends email even if Redis outage (may duplicate)
+- SSE: Graceful reconnect on connection loss; in-memory emitter registry (survives brief Redis outages)
 
 ## kafka-events (Shared Library)
 
@@ -203,6 +222,7 @@ src/main/java/com/namnd/cinema/
 - MovieCreatedEvent (movieId, title, genre)
 - ShowtimeCreatedEvent (showtimeId, movieId, theaterId, startTime)
 - NotificationRequestedEvent (recipientEmail, subject, body, eventType)
+- InAppNotificationEvent (userId, title, message, notificationType ENUM [PAYMENT_CONFIRMED, PAYMENT_FAILED, BOOKING_CONFIRMATION])
 
 **EventEnvelope Wrapper:**
 ```java
@@ -220,6 +240,7 @@ EventEnvelope<T> {
 - movie-events (partition 1, replication 3)
 - payment-events (partition 1, replication 3)
 - notification-events (partition 1, replication 3)
+- notification.in_app (partition 1, replication 3, broadcast to all SSE connections)
 
 **Error Handling (Docker Compose Kafka Config):**
 ```
@@ -358,6 +379,13 @@ jwt.auth.secret: ${JWT_SECRET}
 - **ShowtimeFormDialogComponent:** Modal form for create/edit showtime
 - **PaymentManagementComponent:** List all payments in MatTable (admin-only view)
 
+**Real-Time Notifications (New):**
+- **NotificationSseService:** EventSource + exponential backoff reconnect, JWT auth via query param
+- **NotificationApiService:** GET /api/notifications, PATCH mark-as-read, GET unread-count
+- **NotificationBellComponent:** Toolbar badge displaying unread count, snackbar for incoming notifications
+- **NotificationListComponent:** Paginated notification list with mark-as-read action, pagination controls
+- **notifications route:** Lazy-loaded route for full notification history
+
 **Lazy-Loaded Routes:**
 - /auth (login, register, password reset)
 - /movies (browse, details)
@@ -365,6 +393,7 @@ jwt.auth.secret: ${JWT_SECRET}
 - /payment (Stripe checkout)
 - /profile (user info, bookings)
 - /admin (admin dashboard with tabs)
+- /notifications (notification history, mark-as-read)
 
 **API Proxy:** Configured to route /api/* to http://api-gateway:8080
 
@@ -467,6 +496,7 @@ docker build -t movie-service ./movie-service
 - movie-service: moviedb (7 tables: movies, theaters, seats, showtimes, movie_ratings, movie_comments, comment_reactions)
 - booking-service: bookingdb (2 tables: bookings, booking_seats)
 - payment-service: paymentdb (1 table: payments)
+- notification-service: notificationdb (1 table: notifications with userId, eventId, notificationType, status, isRead fields)
 
 **Shared Resources:**
 - PostgreSQL cluster (all databases on same instance)

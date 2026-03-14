@@ -42,6 +42,10 @@ spring:
             uri: lb://payment-service
             predicates:
               - Path=/api/payments/**
+          - id: notification-service
+            uri: lb://notification-service
+            predicates:
+              - Path=/api/notifications/**
 
           # Swagger api-docs routes
           - id: auth-service-docs
@@ -68,6 +72,12 @@ spring:
               - Path=/payment-service/v3/api-docs/**
             filters:
               - StripPrefix=1
+          - id: notification-service-docs
+            uri: lb://notification-service
+            predicates:
+              - Path=/notification-service/v3/api-docs/**
+            filters:
+              - StripPrefix=1
 
 springdoc:
   api-docs:
@@ -83,6 +93,8 @@ springdoc:
         url: /booking-service/v3/api-docs
       - name: Payment Service
         url: /payment-service/v3/api-docs
+      - name: Notification Service
+        url: /notification-service/v3/api-docs
 
 eureka:
   client:

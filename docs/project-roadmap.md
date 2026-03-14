@@ -81,7 +81,31 @@ MS Cinema is a comprehensive cinema ticket booking platform built on Spring Boot
 - ✓ Admin tab-based navigation (COMPLETE: March 13, 2026)
 - ✓ PaymentManagementComponent with admin-only GET /api/payments (COMPLETE: March 13, 2026)
 
+**Completed Features (Real-Time Notifications - March 14, 2026):**
+- ✓ Real-time notifications (SSE + Kafka) - Server-Sent Events for instant notifications
+- ✓ NotificationSseService with exponential backoff reconnect strategy
+- ✓ NotificationBellComponent (toolbar badge + snackbar alerts)
+- ✓ NotificationListComponent (paginated list with mark-as-read)
+- ✓ PostgreSQL persistence (notificationdb with full notification history)
+- ✓ InAppNotificationEvent and NotificationType enum in kafka-events module
+- ✓ SSE heartbeat (30-second keep-alive to prevent timeout)
+- ✓ JWT authentication via query parameter for SSE endpoint
+- ✓ Payment event notifications (confirmation/failure broadcast)
+- ✓ NotificationPublisherService in booking-service (publishes to notification.in_app topic)
+
 **Planned Features:**
+
+**FR-3.0: Real-Time Notifications (COMPLETE ✓ - March 14, 2026)**
+- ✓ Server-Sent Events (SSE) infrastructure for real-time notifications
+- ✓ PostgreSQL persistence (notificationdb)
+- ✓ InAppNotificationEvent Kafka topic (notification.in_app)
+- ✓ Frontend SSE client with exponential backoff reconnect
+- ✓ Notification bell component with unread badge
+- ✓ Notification list page (paginated, mark-as-read)
+- ✓ Payment events broadcast (confirmation/failure to user)
+- ✓ JWT auth via query parameter for SSE endpoint
+- **Status:** COMPLETE (March 14, 2026)
+- **Implementation:** SSE emitter registry per user, 30s heartbeat, unique Kafka consumer group per instance
 
 **FR-3.1: Seat Grid Display & Booking UI**
 - Frontend seat map visualization (theater layout A-Z rows)

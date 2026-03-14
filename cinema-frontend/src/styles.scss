@@ -37,3 +37,16 @@ body {
   margin: 0;
   font-family: Roboto, "Helvetica Neue", sans-serif;
 }
+
+// Fix white background on form fields in dark theme
+.mat-mdc-text-field-wrapper,
+.mdc-text-field,
+.mdc-text-field--outlined,
+.mdc-text-field--filled {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+.mdc-text-field--filled:not(.mdc-text-field--disabled) {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+}

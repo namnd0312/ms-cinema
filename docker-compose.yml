@@ -200,6 +200,7 @@ services:
     networks:
       - my-net
     depends_on:
+      - postgres-service
       - eureka-server
       - config-server
       - kafka
@@ -209,6 +210,9 @@ services:
       SERVER_PORT: 8085
       EUREKA_HOST: eureka-server
       CONFIG_SERVER_HOST: config-server
+      DB_HOST: postgres-service
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
       KAFKA_HOST: kafka
       REDIS_HOST: redis-service
       MAIL_USERNAME: ${MAIL_USERNAME:-nghiemducnam0312@gmail.com}

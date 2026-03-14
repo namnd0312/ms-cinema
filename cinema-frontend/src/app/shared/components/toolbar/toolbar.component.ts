@@ -5,11 +5,12 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { AuthService } from '../../../core/services/auth.service';
+import { NotificationBellComponent } from '../notification-bell/notification-bell.component';
 
 @Component({
   selector: 'app-toolbar',
   standalone: true,
-  imports: [RouterLink, RouterLinkActive, MatToolbarModule, MatButtonModule, MatIconModule, MatMenuModule],
+  imports: [RouterLink, RouterLinkActive, MatToolbarModule, MatButtonModule, MatIconModule, MatMenuModule, NotificationBellComponent],
   template: `
     <mat-toolbar color="primary" class="toolbar">
       <button mat-icon-button (click)="menuToggle.emit()">
@@ -31,6 +32,7 @@ import { AuthService } from '../../../core/services/auth.service';
       </nav>
 
       @if (auth.isAuthenticated()) {
+        <app-notification-bell />
         <button mat-icon-button [matMenuTriggerFor]="userMenu">
           <mat-icon>account_circle</mat-icon>
         </button>

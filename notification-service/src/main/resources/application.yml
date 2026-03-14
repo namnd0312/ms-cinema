@@ -11,6 +11,14 @@ spring:
       fail-fast: false
       retry:
         max-attempts: 5
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:5432/notificationdb
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -24,6 +32,9 @@ spring:
       properties:
         spring.json.value.default.type: com.namnd.kafka.events.envelope.EventEnvelope
         spring.json.trusted.packages: com.namnd.kafka.events.*
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
   mail:
     host: ${MAIL_HOST:smtp.gmail.com}
     port: ${MAIL_PORT:587}
@@ -43,6 +54,17 @@ eureka:
   instance:
     prefer-ip-address: true
     instance-id: ${spring.application.name}:${server.port}
+
+jwt:
+  auth:
+    secret: ${JWT_SECRET:kBJb8FEOvTCWEcfZB6RLMM5BLoI8p0FWOWEu7FSZBYn+ItVi7mHRePYCvum5Ic6l4M2nFw+kdl8du99Bxnb7zg==}
+    public-paths:
+      - /actuator/health
+      - /actuator/prometheus
+      - /swagger-ui/**
+      - /v3/api-docs/**
+      - /swagger-ui.html
+      - /api/notifications/stream
 
 management:
   endpoints:
