@@ -47,13 +47,13 @@ mvn -pl notification-service spring-boot:run    # port 8085
 |---------|------|---------|--------------|
 | eureka-server | 8761 | Service discovery | Dynamic registration |
 | config-server | 8888 | Centralized config | Git/classpath profiles |
-| api-gateway | 8080 | Request routing | OpenAPI aggregation, logging |
+| api-gateway | 8080 | Request routing | OpenAPI aggregation, logging, SSE streaming support |
 | auth-service | 8081 | Authentication | JWT, email activation, account lockout |
 | movie-service | 8082 | Movies/ratings/comments | Showtimes, auto seat grids, star ratings, comments, reactions |
-| booking-service | 8083 | Seat reservation | Redis locking, lifecycle states |
-| payment-service | 8084 | Payment processing | Stripe, webhook verification |
-| notification-service | 8085 | Notifications (email + in-app SSE) | Kafka consumer, SSE emitters, PostgreSQL persistence, JWT auth via query param |
-| cinema-frontend | 4200→80 | Web UI | Angular 18, Material, Stripe.js, ratings UI |
+| booking-service | 8083 | Seat reservation | Redis locking, lifecycle states, notification publishing |
+| payment-service | 8084 | Payment processing | Stripe, webhook verification, payment notifications |
+| notification-service | 8085 | Real-time notifications | SSE streaming, Kafka consumer, email (SMTP), PostgreSQL persistence |
+| cinema-frontend | 4200→80 | Web UI | Angular 18, Material, Stripe.js, real-time notification bell |
 
 ## API Documentation
 
@@ -101,10 +101,10 @@ Each service has own database:
 |-------|----------|----------|--------|
 | movie-events | movie-service | (future) | MovieCreatedEvent, ShowtimeCreatedEvent |
 | payment-events | payment-service | booking-service | PaymentCompletedEvent, PaymentFailedEvent |
-| notification-events | auth-service, booking-service | notification-service | NotificationRequestedEvent, InAppNotificationEvent |
-| notification.in_app | payment-service | notification-service | InAppNotificationEvent (payment confirm/fail) |
+| notification-events | auth-service | notification-service | NotificationRequestedEvent (email) |
+| notification.in_app | booking-service, payment-service | notification-service (SSE broadcast) | InAppNotificationEvent (payment/booking events) |
 
-Error handling: 3 retries, exponential backoff, DLT for failures.
+Error handling: 3 retries, exponential backoff, DLT for failures. Real-time in-app notifications delivered via SSE with 30s heartbeat.
 
 ## Documentation
 

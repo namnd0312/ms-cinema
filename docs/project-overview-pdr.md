@@ -92,6 +92,24 @@ MS Cinema is an **11-module Spring Cloud microservices platform** for cinema tic
   - Sends HTML-formatted emails via SMTP (no direct email sending in auth-service)
   - Decouples auth-service from email delivery concerns
 
+### Real-Time In-App Notifications (FR-006)
+- **Server-Sent Events (SSE):** Real-time notification streaming to authenticated clients
+  - GET /api/notifications/stream (SSE endpoint, JWT auth via query parameter)
+  - 30-second heartbeat to prevent connection timeout
+  - Unique Kafka consumer group per instance for broadcast pattern
+  - Exponential backoff reconnect strategy on client disconnect (1s→30s max)
+- **Persistence:** PostgreSQL notificationdb with notifications table
+  - Track userId, title, message, notificationType, isRead, createdAt
+  - Support for paginated retrieval and mark-as-read operations
+- **REST API for Notifications:**
+  - GET /api/notifications (paginated list, ordered DESC by createdAt)
+  - PATCH /api/notifications/{id}/read (mark individual notification as read)
+  - PATCH /api/notifications/read-all (bulk mark all as read)
+  - GET /api/notifications/unread-count (unread badge count)
+  - POST /api/notifications/broadcast (admin-only test broadcast)
+- **Event Types:** PAYMENT_SUCCESS, PAYMENT_FAILED, ADMIN_BROADCAST, SYSTEM
+- **Frontend Integration:** Notification bell component with badge, snackbar alerts, notification list page
+
 ### Movie Ratings & Comments (FR-005)
 - **Star Ratings:** 1-5 point scale per movie, upsert per user
   - POST /api/movies/{movieId}/ratings (authenticated, upsert)

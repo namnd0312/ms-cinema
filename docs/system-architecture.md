@@ -64,19 +64,16 @@ Infrastructure:
 - Routes:
   - `/api/auth/**` → auth-service
   - `/api/users/**` → auth-service
-  - `/api/movies/**` → movie-service
-  - `/api/movies/{movieId}/ratings` → movie-service (POST, GET)
-  - `/api/movies/{movieId}/comments` → movie-service (POST, GET paginated)
-  - `/api/comments/{commentId}` → movie-service (PUT, DELETE)
-  - `/api/comments/{commentId}/reactions` → movie-service (POST, DELETE)
+  - `/api/movies/**` → movie-service (CRUD, ratings, comments, reactions)
   - `/api/showtimes/**` → movie-service
   - `/api/theaters/**` → movie-service
   - `/api/bookings/**` → booking-service
   - `/api/payments/**` → payment-service
-  - `/api/notifications/**` → notification-service (SSE stream, list, mark-read, broadcast)
+  - `/api/notifications/**` → notification-service (SSE stream, REST CRUD, broadcast)
+  - `/api/notifications/stream` → notification-service (SSE endpoint, **ContentCachingResponseWrapper skipped to prevent thread exhaustion**)
 - Aggregates OpenAPI documentation: `/v3/api-docs`
 - Swagger UI: `/swagger-ui.html`
-- HttpLoggingFilter logs requests with X-Correlation-ID header
+- HttpLoggingFilter: Logs requests with X-Correlation-ID, skips response caching for SSE paths
 - Actuator endpoints (internal only, not exposed via gateway)
 
 ### Business Services (5 modules)
@@ -125,29 +122,38 @@ Infrastructure:
 - Database: paymentdb (1 table: payments)
 
 **notification-service (:8085)** - Email notifications + Real-time in-app SSE notifications
-- Kafka Listeners:
-  - notification-events topic: NotificationRequestedEvent → email delivery
-  - notification.in_app topic: InAppNotificationEvent → broadcast via SSE
-- Controllers:
-  - GET /api/notifications/stream (SSE endpoint, JWT auth via query param)
-  - GET /api/notifications (paginated list, auth required)
-  - PATCH /api/notifications/{id}/read (mark-as-read, auth required)
-  - GET /api/notifications/unread-count (count unread, auth required)
-  - POST /api/notifications/broadcast (admin-only test broadcast)
-- Models: Notification (id, userId, eventId, recipientEmail, subject, body, notificationType, status, isRead, createdAt)
-- Services:
-  - EmailSenderService (SMTP via Spring Mail, Gmail)
-  - NotificationDeduplicationService (Redis key: notification:processed:{eventId}, 24h TTL)
-  - SseEmitterService (manages SSE emitter registry per user, 30s heartbeat)
-  - NotificationPublisherService (publishes InAppNotificationEvent to Kafka)
-- SSE Configuration:
-  - Heartbeat: 30-second keep-alive (prevents timeout)
-  - Consumer group: notification-service-{instanceId} (unique per instance for broadcast)
-  - Emitter timeout: 30 minutes (configurable)
-- SMTP: Gmail (smtp.gmail.com:587) - credentials via env vars MAIL_USERNAME, MAIL_PASSWORD
-- Error Handling: Kafka 3 retries, exponential backoff (1s→2s→4s, capped 10s), DLT for failures
-- Fail-Open: Sends email even if Redis unavailable (may duplicate); SSE survives Redis outage
-- Database: notificationdb (1 table: notifications)
+- **Kafka Listeners:**
+  - notification-events topic: NotificationRequestedEvent → EmailSenderService → SMTP delivery
+  - notification.in_app topic: InAppNotificationEvent → SseEmitterRegistryService → broadcast to all SSE clients
+  - Consumer group: `notification-service-{instanceId}` (unique per instance for broadcast pattern)
+- **REST Controllers:**
+  - `NotificationSseController`:
+    - GET /api/notifications/stream (SSE endpoint, JWT via query param: ?token=JWT)
+    - Returns: event: InAppNotificationEvent, :heartbeat (comment), Connection: keep-alive, 30s interval
+  - `NotificationRestController`:
+    - GET /api/notifications (paginated, createdAt DESC, auth required)
+    - PATCH /api/notifications/{id}/read (mark single, auth required)
+    - PATCH /api/notifications/read-all (bulk mark all, auth required)
+    - GET /api/notifications/unread-count (returns {count: N}, auth required)
+    - POST /api/notifications/broadcast (admin-only test broadcast)
+- **Models:** Notification JPA entity (id, userId, title, message, notificationType, isRead, createdAt)
+- **Services:**
+  - SseEmitterRegistryService: ConcurrentHashMap-based registry, heartbeat every 30s, atomic operations
+  - InAppNotificationServiceImpl: CRUD, mark-as-read, broadcast, emitter management
+  - EmailSenderService: SMTP (Gmail smtp.gmail.com:587, credentials MAIL_USERNAME/MAIL_PASSWORD)
+  - NotificationDeduplicationService: Redis key notification:processed:{eventId}, 24h TTL
+  - NotificationPublisherService: Publishes InAppNotificationEvent to notification.in_app topic
+- **SSE Configuration:**
+  - Heartbeat: Comment-only SSE events (:heartbeat) every 30s (prevent timeout, minimal overhead)
+  - Emitter timeout: 30 minutes (configurable, client auto-reconnect on disconnect)
+  - Client reconnect: Exponential backoff 1s→30s max, 5 attempts max
+- **Database (notificationdb):** notifications table (id PK, userId FK, title, message, notificationType ENUM, isRead bool, createdAt timestamp)
+  - Index: (userId, createdAt DESC) for efficient pagination
+- **Error Handling:**
+  - Kafka: 3 retries, exponential backoff (1s→2s→4s capped 10s), DLT for failures
+  - Race condition fix: Atomic computeIfPresent in removeEmitter prevents concurrent mod issues
+  - Broadcast optimization: findDistinctUserIds instead of findAll to avoid OOM on large datasets
+- **Fail-Open:** Redis unavailable doesn't block email send or SSE emit; dedup is optional
 
 ### Shared Libraries (2 modules)
 
@@ -316,11 +322,11 @@ cinema-frontend: Real-Time SSE Connection
 ## Data Persistence
 
 **Per-Service Databases (PostgreSQL 16):**
-- auth-service: testdb (users, roles, user_roles, refresh_tokens, password_reset_tokens, activation_tokens, blacklisted_tokens)
-- movie-service: moviedb (movies, theaters, seats, showtimes, movie_ratings, movie_comments, comment_reactions)
-- booking-service: bookingdb (bookings, booking_seats)
-- payment-service: paymentdb (payments)
-- notification-service: notificationdb (notifications)
+- auth-service: testdb (8 tables: users, roles, user_roles, refresh_tokens, password_reset_tokens, activation_tokens, blacklisted_tokens)
+- movie-service: moviedb (7 tables: movies, theaters, seats, showtimes, movie_ratings, movie_comments, comment_reactions)
+- booking-service: bookingdb (2 tables: bookings, booking_seats)
+- payment-service: paymentdb (1 table: payments)
+- notification-service: notificationdb (1 table: notifications with columns userId, title, message, notificationType, isRead, createdAt; indexed (userId, createdAt DESC))
 
 **Shared Resources:**
 - PostgreSQL cluster (same instance, different databases)

@@ -81,17 +81,21 @@ MS Cinema is a comprehensive cinema ticket booking platform built on Spring Boot
 - ✓ Admin tab-based navigation (COMPLETE: March 13, 2026)
 - ✓ PaymentManagementComponent with admin-only GET /api/payments (COMPLETE: March 13, 2026)
 
-**Completed Features (Real-Time Notifications - March 14, 2026):**
-- ✓ Real-time notifications (SSE + Kafka) - Server-Sent Events for instant notifications
-- ✓ NotificationSseService with exponential backoff reconnect strategy
-- ✓ NotificationBellComponent (toolbar badge + snackbar alerts)
-- ✓ NotificationListComponent (paginated list with mark-as-read)
-- ✓ PostgreSQL persistence (notificationdb with full notification history)
-- ✓ InAppNotificationEvent and NotificationType enum in kafka-events module
-- ✓ SSE heartbeat (30-second keep-alive to prevent timeout)
-- ✓ JWT authentication via query parameter for SSE endpoint
-- ✓ Payment event notifications (confirmation/failure broadcast)
+**Completed Features (Real-Time Notifications - COMPLETE ✓ March 14, 2026):**
+- ✓ Real-time notifications (SSE + Kafka) - Server-Sent Events with 30s heartbeat for instant delivery
+- ✓ NotificationSseService with exponential backoff reconnect (1s→30s max, 5 attempts)
+- ✓ NotificationBellComponent (toolbar badge with matBadge, snackbar alerts, increment on new)
+- ✓ NotificationListComponent (paginated Mat-card list, dark theme, colored borders per type)
+- ✓ PostgreSQL persistence (notificationdb: notifications table with userId, title, message, notificationType, isRead, createdAt)
+- ✓ InAppNotificationEvent (userId, title, message, notificationType) and NotificationType enum (PAYMENT_SUCCESS, PAYMENT_FAILED, ADMIN_BROADCAST, SYSTEM)
+- ✓ SseEmitterRegistryService (ConcurrentHashMap-based registry, atomic operations, 30s heartbeat)
+- ✓ NotificationRestController (GET list, PATCH mark-read, PATCH mark-all, GET unread-count, POST broadcast)
+- ✓ JWT authentication via query parameter (?token=JWT) for SSE endpoint
+- ✓ Payment event notifications (success/failure broadcast to user via SSE)
 - ✓ NotificationPublisherService in booking-service (publishes to notification.in_app topic)
+- ✓ Bug fixes: race condition (atomic), broadcast OOM (findDistinctUserIds), subscription leak (take(1)), 403 exception type, toolbar badge color, dark theme
+- ✓ API Gateway SSE support (skips ContentCachingResponseWrapper to prevent thread exhaustion)
+- ✓ Docker config updates (init-databases.sql, docker-compose notification-service env vars)
 
 **Planned Features:**
 

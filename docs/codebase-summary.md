@@ -170,59 +170,76 @@ src/main/java/com/namnd/cinema/
 
 ## notification-service (Port 8085)
 
-**Key Features:** Kafka consumer (notification-events + in-app events), SMTP email delivery, Server-Sent Events (SSE) for real-time notifications, PostgreSQL persistence, REST API for notification management, JWT auth via query param for SSE
+**Key Features:** Kafka consumer (notification-events + in-app SSE events), SMTP email delivery, Server-Sent Events (SSE) streaming, PostgreSQL persistence, REST API for CRUD + mark-as-read, JWT auth via query param for SSE
 
 **Kafka Consumers:**
-- Listens to notification-events topic → NotificationRequestedEvent (email)
-- Listens to notification.in_app topic → InAppNotificationEvent (payment events broadcast to frontend)
-- Consumer group: `notification-service-{instance-id}` (unique per instance for broadcast to all connected clients)
+- Topic: notification-events (NotificationRequestedEvent) → EmailSenderService → SMTP delivery
+- Topic: notification.in_app (InAppNotificationEvent) → SseEmitterService → broadcast to all connected SSE clients
+- Consumer group: `notification-service-{instance-id}` (unique per instance for broadcast to all instances)
 
-**Models:**
-- Notification (id, userId, eventId UNIQUE, recipientEmail, subject, body, notificationType ENUM, status ENUM, isRead, createdAt)
+**JPA Entity:**
+- Notification (id, userId, title, message, notificationType ENUM [PAYMENT_SUCCESS, PAYMENT_FAILED, ADMIN_BROADCAST, SYSTEM], isRead, createdAt)
 
-**Controllers:**
-- /api/notifications/stream (SSE endpoint, GET with JWT via query param)
-- /api/notifications (GET paginated list)
-- /api/notifications/{notificationId}/read (PATCH mark-as-read)
-- /api/notifications/unread-count (GET count)
-- /api/notifications/broadcast (POST admin-only test notifications)
+**REST Controllers:**
+- `NotificationSseController` - GET /api/notifications/stream (SSE endpoint, JWT via query param ?token=JWT)
+- `NotificationRestController`:
+  - GET /api/notifications (paginated, ordered createdAt DESC)
+  - PATCH /api/notifications/{id}/read (mark single as read)
+  - PATCH /api/notifications/read-all (bulk mark all as read)
+  - GET /api/notifications/unread-count (returns count for badge)
+  - POST /api/notifications/broadcast (admin-only test broadcast)
 
-**Services:**
-- EmailSenderService - SMTP delivery via Spring Mail (jakarta.mail)
-- NotificationDeduplicationService - Redis key pattern: notification:processed:{eventId}, TTL 24h
-- SseEmitterService - Manages SSE emitter registry, 30-second heartbeat, exponential backoff reconnect on client disconnect
-- NotificationPublisherService - Publishes InAppNotificationEvent to Kafka topic
-- KafkaNotificationListener - Listens to both notification-events + notification.in_app
+**Services & Components:**
+- `SseEmitterRegistryService` - ConcurrentHashMap emitter management, heartbeat every 30s
+- `InAppNotificationServiceImpl` - Persist & emit notifications, mark-as-read, broadcast
+- `InAppNotificationEventListener` (Kafka) - Consumes InAppNotificationEvent, broadcasts via SSE
+- `NotificationPublisherService` - Called by booking-service to publish InAppNotificationEvent
+- `EmailSenderService` - SMTP (Gmail, authenticated via MAIL_USERNAME/MAIL_PASSWORD)
+- `NotificationDeduplicationService` - Redis: key pattern notification:processed:{eventId}, TTL 24h
+
+**JPA Repository:**
+- `NotificationRepository`:
+  - findByUserIdOrderByCreatedAtDesc (paginated)
+  - countByUserIdAndIsReadFalse (unread count)
+  - markAllAsReadByUserId (bulk update)
+  - findDistinctUserIds (for broadcast, avoids OOM)
 
 **SSE Configuration:**
-- Heartbeat: 30-second keep-alive events (prevents connection timeout)
-- Reconnect: Exponential backoff (client-side) on disconnect
-- Max connections: Configurable per instance
-- 30-minute session timeout (configurable)
+- Heartbeat: Comment-only events every 30s (keep-alive, no disconnect on timeout)
+- Emitter timeout: 30 minutes (configurable)
+- Unique consumer group per instance ensures all SSE clients receive broadcasts
+- Graceful reconnect: Client implements exponential backoff (1s→30s max, 5 attempts)
+
+**Database (notificationdb):**
+- notifications table: id (PK), userId (FK), title, message, notificationType, isRead, createdAt
+- Indexed: (userId, createdAt DESC) for efficient pagination
 
 **Configuration:**
 - spring.mail.host: smtp.gmail.com
 - spring.mail.port: 587
-- MAIL_USERNAME, MAIL_PASSWORD (Gmail app-specific password)
-- NOTIFICATION_DB_HOST, NOTIFICATION_DB_PORT, NOTIFICATION_DB_NAME
+- spring.mail.username: ${MAIL_USERNAME}
+- spring.mail.password: ${MAIL_PASSWORD}
 
 **Error Handling:**
-- Kafka: 3 retries, exponential backoff (1s→2s→4s, capped 10s), DLT for failures
-- Redis fail-open: sends email even if Redis outage (may duplicate)
-- SSE: Graceful reconnect on connection loss; in-memory emitter registry (survives brief Redis outages)
+- Kafka: 3 retries, exponential backoff (1s→2s→4s capped 10s), DLT for failures
+- Redis fail-open: NotificationDeduplicationService is optional; proceeds if Redis unavailable
+- SSE race condition fix: Atomic computeIfPresent in removeEmitter to prevent concurrent issues
 
 ## kafka-events (Shared Library)
 
 **Purpose:** Shared event domain models for all services
 
-**Event Classes:**
-- PaymentCompletedEvent (bookingId, amount, status)
-- PaymentFailedEvent (bookingId, reason)
-- BookingCreatedEvent (bookingId, userId, showtimeId)
-- MovieCreatedEvent (movieId, title, genre)
-- ShowtimeCreatedEvent (showtimeId, movieId, theaterId, startTime)
-- NotificationRequestedEvent (recipientEmail, subject, body, eventType)
-- InAppNotificationEvent (userId, title, message, notificationType ENUM [PAYMENT_CONFIRMED, PAYMENT_FAILED, BOOKING_CONFIRMATION])
+**Enums:**
+- `NotificationType` [PAYMENT_SUCCESS, PAYMENT_FAILED, ADMIN_BROADCAST, SYSTEM]
+
+**Records (Java Records):**
+- `PaymentCompletedEvent` (bookingId, amount, status)
+- `PaymentFailedEvent` (bookingId, reason)
+- `BookingCreatedEvent` (bookingId, userId, showtimeId)
+- `MovieCreatedEvent` (movieId, title, genre)
+- `ShowtimeCreatedEvent` (showtimeId, movieId, theaterId, startTime)
+- `NotificationRequestedEvent` (recipientEmail, subject, body, eventType)
+- `InAppNotificationEvent` (userId, title, message, notificationType: NotificationType)
 
 **EventEnvelope Wrapper:**
 ```java
@@ -379,12 +396,15 @@ jwt.auth.secret: ${JWT_SECRET}
 - **ShowtimeFormDialogComponent:** Modal form for create/edit showtime
 - **PaymentManagementComponent:** List all payments in MatTable (admin-only view)
 
-**Real-Time Notifications (New):**
-- **NotificationSseService:** EventSource + exponential backoff reconnect, JWT auth via query param
-- **NotificationApiService:** GET /api/notifications, PATCH mark-as-read, GET unread-count
-- **NotificationBellComponent:** Toolbar badge displaying unread count, snackbar for incoming notifications
-- **NotificationListComponent:** Paginated notification list with mark-as-read action, pagination controls
-- **notifications route:** Lazy-loaded route for full notification history
+**Real-Time Notifications (New - March 14, 2026):**
+- **notification.model.ts:** Interfaces (Notification, NotificationPage, UnreadCountResponse)
+- **notification-sse.service.ts:** EventSource with exponential backoff (1s→30s max, 5 attempts), JWT auth via query param
+- **notification-api.service.ts:** REST calls (GET list, PATCH mark-as-read, GET unread-count, POST broadcast)
+- **notification-bell.component.ts:** Toolbar badge with matBadge, snackbar alerts, auto-increment on new notifications
+- **notification-list.component.ts:** Mat-card list with dark theme, colored borders per notificationType, pagination
+- **notifications.routes.ts:** Lazy route config
+- **Toolbar integration:** notification-bell added to toolbar.component.ts for persistent access
+- **App integration:** /notifications route added to app.routes.ts
 
 **Lazy-Loaded Routes:**
 - /auth (login, register, password reset)

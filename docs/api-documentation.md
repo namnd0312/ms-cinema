@@ -211,6 +211,76 @@ Documented in PaymentController with @Tag and @Operation annotations.
 
 Swagger UI: http://localhost:8084/swagger-ui.html
 
+### notification-service (/api/notifications)
+
+**Real-Time SSE Streaming:**
+| Endpoint | Auth | Description |
+|----------|------|-------------|
+| GET /api/notifications/stream | JWT (query param) | Server-Sent Events stream with 30s heartbeat |
+
+**Notification REST API:**
+| Endpoint | Auth | Method | Description |
+|----------|------|--------|-------------|
+| /api/notifications | USER | GET | Paginated list (page=0, size=20, ordered createdAt DESC) |
+| /api/notifications/{id}/read | USER (owner) | PATCH | Mark single notification as read |
+| /api/notifications/read-all | USER | PATCH | Mark all user's notifications as read |
+| /api/notifications/unread-count | USER | GET | Get count of unread notifications for badge |
+| /api/notifications/broadcast | ADMIN | POST | Admin-only test broadcast to all users |
+
+**SSE Stream Details:**
+- **Auth:** JWT token via query parameter: `?token=<JWT>`
+- **Events Received:**
+  - `event: InAppNotificationEvent` — payload with userId, title, message, notificationType
+  - `:heartbeat` (comment) — 30-second keep-alive, no processing needed
+- **Client Behavior:**
+  - Use EventSource API (browser native)
+  - Auto-reconnect on disconnect with exponential backoff (1s→30s max)
+  - Handle heartbeat as no-op (connection keep-alive)
+- **Response Codes:**
+  - 200 OK: Stream established, receive events
+  - 401 Unauthorized: Invalid/expired JWT
+  - 429 Too Many Requests: Emitter registry full (too many concurrent connections)
+
+**Notification CRUD Response Codes:**
+- 200 OK: Successful operation
+- 401 Unauthorized: Missing/expired token
+- 403 Forbidden: User not notification owner (for PATCH single)
+- 404 Not Found: Notification not found
+- 500 Internal Error: Server exception
+
+**Example Requests:**
+
+GET /api/notifications/stream?token=eyJhbGc...
+```
+Accept: text/event-stream
+```
+
+Returns SSE format:
+```
+event: InAppNotificationEvent
+data: {"userId":123,"title":"Payment Received","message":"Your booking payment confirmed","notificationType":"PAYMENT_SUCCESS"}
+
+:heartbeat
+
+event: InAppNotificationEvent
+data: {"userId":123,"title":"New Booking","message":"Booking confirmed for March 20","notificationType":"ADMIN_BROADCAST"}
+
+:heartbeat
+```
+
+PATCH /api/notifications/read-all
+```
+Authorization: Bearer <token>
+```
+
+GET /api/notifications/unread-count
+```
+Authorization: Bearer <token>
+Response: {"count": 3}
+```
+
+Swagger UI: http://localhost:8085/swagger-ui.html
+
 ## Security in OpenAPI
 
 ### Bearer Token Authentication
