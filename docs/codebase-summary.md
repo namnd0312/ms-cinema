@@ -76,7 +76,15 @@ src/main/java/com/namnd/cinema/
 - refresh_tokens (id, token UNIQUE, expiryDate, user_id FK)
 - password_reset_tokens (id, token UNIQUE, expiryDate, user_id FK)
 - activation_tokens (id, token UNIQUE, expiryDate, user_id FK, used)
+- password_history (id, user_id FK, password_hash, created_at)
 - blacklisted_tokens (id, jti UNIQUE, expiry_date)
+
+**Password History Feature:**
+- PasswordHistory entity: Stores up to 3 previous password hashes per user for reuse prevention
+- PasswordHistoryService: Manages history CRUD, validates new password against recent entries
+- POST /api/auth/change-password: Endpoint for authenticated password changes
+- Password reset (POST /api/auth/reset-password): Validates new password against 3 most recent hashes
+- Registration flow: Seeds initial password to history table on user creation
 
 ## movie-service (Port 8082)
 
@@ -411,9 +419,17 @@ jwt.auth.secret: ${JWT_SECRET}
 - /movies (browse, details)
 - /booking (seat selection, confirmation)
 - /payment (Stripe checkout)
-- /profile (user info, bookings)
+- /profile (user info, bookings, change password)
 - /admin (admin dashboard with tabs)
 - /notifications (notification history, mark-as-read)
+
+**Password Change Feature (Frontend):**
+- Route: /profile/change-password (protected, requires authentication)
+- Component: ChangePasswordComponent with reactive form
+- Fields: currentPassword, newPassword, confirmPassword
+- Validation: Passwords match check, current password verification
+- Integration: "Change Password" button on profile page (ProfileComponent)
+- Error handling: Display validation errors and server response messages
 
 **API Proxy:** Configured to route /api/* to http://api-gateway:8080
 

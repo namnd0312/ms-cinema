@@ -4,12 +4,14 @@ import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatIconModule } from '@angular/material/icon';
+import { MatButtonModule } from '@angular/material/button';
+import { RouterModule } from '@angular/router';
 import { User } from '../../../core/models/user.model';
 
 @Component({
   selector: 'app-profile-page',
   standalone: true,
-  imports: [MatCardModule, MatChipsModule, MatProgressSpinnerModule, MatIconModule],
+  imports: [MatCardModule, MatChipsModule, MatProgressSpinnerModule, MatIconModule, MatButtonModule, RouterModule],
   template: `
     @if (loading()) {
       <div class="loading"><mat-spinner diameter="40"></mat-spinner></div>
@@ -34,6 +36,11 @@ import { User } from '../../../core/models/user.model';
               </mat-chip-set>
             </div>
           </mat-card-content>
+          <mat-card-actions>
+            <a mat-raised-button color="primary" routerLink="/profile/change-password">
+              <mat-icon>lock</mat-icon> Change Password
+            </a>
+          </mat-card-actions>
         </mat-card>
       </div>
     }

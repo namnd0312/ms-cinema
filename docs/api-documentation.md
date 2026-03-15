@@ -114,6 +114,31 @@ Example OpenAPI 3.0 schema (from `/v3/api-docs`):
 }
 ```
 
+#### Password Change Endpoint
+
+**POST /api/auth/change-password** - Authenticated user changes password
+
+Request body:
+```json
+{
+  "currentPassword": "oldPassword123",
+  "newPassword": "newPassword456",
+  "confirmPassword": "newPassword456"
+}
+```
+
+Response codes:
+- 200 OK: Password changed successfully; new password added to history
+- 400 Bad Request: Validation failed (passwords don't match, new password matches recent history, missing fields)
+- 401 Unauthorized: Missing or invalid bearer token
+- 500 Internal Error: Server exception
+
+Security notes:
+- Current password verified via BCrypt comparison
+- New password validated against 3 most recent password hashes (prevents reuse)
+- Password history persisted to `password_history` table with timestamp
+- Initial password seeded to history on user registration
+
 ## API Gateway Aggregation
 
 The API Gateway (:8080) aggregates OpenAPI docs from all downstream services:
@@ -141,7 +166,8 @@ The API Gateway (:8080) aggregates OpenAPI docs from all downstream services:
 | GET /api/auth/activate | token param | Activate account via email link |
 | POST /api/auth/resend-activation | none | Resend activation email |
 | POST /api/auth/forgot-password | none | Initiate password reset flow |
-| POST /api/auth/reset-password | token | Complete password reset |
+| POST /api/auth/reset-password | token | Complete password reset (validates against 3 recent passwords) |
+| POST /api/auth/change-password | Bearer JWT | Change password for authenticated user |
 | POST /api/auth/refresh-token | refresh token | Obtain new access token |
 | POST /api/auth/logout | Bearer JWT | Logout and blacklist token |
 | POST /api/auth/validate-token | none | Validate JWT (for downstream services) |

@@ -97,6 +97,17 @@ MS Cinema is a comprehensive cinema ticket booking platform built on Spring Boot
 - ✓ API Gateway SSE support (skips ContentCachingResponseWrapper to prevent thread exhaustion)
 - ✓ Docker config updates (init-databases.sql, docker-compose notification-service env vars)
 
+**Completed Features (Password History Validation - COMPLETE ✓ March 15, 2026):**
+- ✓ POST /api/auth/change-password endpoint (Bearer JWT required, validates current & new passwords)
+- ✓ password_history table (id, user_id, password_hash, created_at) for tracking recent passwords
+- ✓ PasswordHistory JPA entity and repository with custom queries
+- ✓ PasswordHistoryService managing CRUD and 3-password reuse prevention
+- ✓ Enhanced password reset validation against 3 most recent hashes
+- ✓ Registration flow seeding initial password to history
+- ✓ Frontend ChangePasswordComponent with reactive form at /profile/change-password
+- ✓ Integration: "Change Password" button on ProfileComponent
+- ✓ DTOs: ChangePasswordRequest, ChangePasswordResponse
+
 **Planned Features:**
 
 **FR-3.0: Real-Time Notifications (COMPLETE ✓ - March 14, 2026)**

@@ -99,6 +99,12 @@ export class AuthService {
     return this.http.get('/api/auth/activate', { params: { token }, responseType: 'text' });
   }
 
+  changePassword(currentPassword: string, newPassword: string, confirmPassword: string): Observable<any> {
+    return this.http.post('/api/auth/change-password', {
+      currentPassword, newPassword, confirmPassword
+    }, { responseType: 'text' });
+  }
+
   resendActivation(email: string): Observable<any> {
     return this.http.post('/api/auth/resend-activation', { email }, { responseType: 'text' });
   }

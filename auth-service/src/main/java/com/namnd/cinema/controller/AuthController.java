@@ -22,6 +22,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import io.micrometer.core.instrument.Counter;
@@ -83,6 +84,9 @@ public class AuthController {
 
     @Autowired
     private Counter authTokenRefreshCounter;
+
+    @Autowired
+    private PasswordHistoryService passwordHistoryService;
 
     @Autowired
     private Counter authLogoutCounter;
@@ -203,6 +207,7 @@ public class AuthController {
 
         User user1 = registerDtoMapper.toEntity(registerDto);
         userService.save(user1);
+        passwordHistoryService.savePasswordToHistory(user1, user1.getPassword());
         activationService.createActivationToken(user1);
         authRegisterCounter.increment();
 
@@ -316,6 +321,37 @@ public class AuthController {
         authLogoutCounter.increment();
 
         return ResponseEntity.ok("Logged out successfully.");
+    }
+
+    @Operation(summary = "Change password for authenticated user")
+    @ApiResponse(responseCode = "200", description = "Password changed successfully")
+    @ApiResponse(responseCode = "400", description = "Validation error")
+    @SecurityRequirement(name = "bearerAuth")
+    @Transactional
+    @PostMapping("/change-password")
+    public ResponseEntity<?> changePassword(@Valid @RequestBody ChangePasswordDto dto) {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        User user = userService.findByEmail(email)
+            .orElseThrow(() -> new RuntimeException("User not found"));
+
+        if (!encoder.matches(dto.getCurrentPassword(), user.getPassword())) {
+            return ResponseEntity.badRequest().body("Current password is incorrect");
+        }
+
+        if (!dto.getNewPassword().equals(dto.getConfirmPassword())) {
+            return ResponseEntity.badRequest().body("New password and confirm password do not match");
+        }
+
+        if (passwordHistoryService.isPasswordReused(user, dto.getNewPassword())) {
+            return ResponseEntity.badRequest().body("Cannot reuse your 3 most recent passwords");
+        }
+
+        String encoded = encoder.encode(dto.getNewPassword());
+        user.setPassword(encoded);
+        userService.save(user);
+        passwordHistoryService.savePasswordToHistory(user, encoded);
+
+        return ResponseEntity.ok("Password changed successfully");
     }
 
     private String getJwtFromRequest(HttpServletRequest request) {

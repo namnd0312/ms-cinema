@@ -5,6 +5,7 @@ import com.namnd.cinema.model.User;
 import com.namnd.cinema.repository.PasswordResetTokenRepository;
 import com.namnd.cinema.repository.UserRepository;
 import com.namnd.cinema.service.EmailService;
+import com.namnd.cinema.service.PasswordHistoryService;
 import com.namnd.cinema.service.PasswordResetService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,6 +35,9 @@ public class PasswordResetServiceImpl implements PasswordResetService {
 
     @Autowired
     private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private PasswordHistoryService passwordHistoryService;
 
     @Override
     @Transactional
@@ -87,8 +91,15 @@ public class PasswordResetServiceImpl implements PasswordResetService {
         }
 
         User user = resetToken.getUser();
-        user.setPassword(passwordEncoder.encode(newPassword));
+
+        if (passwordHistoryService.isPasswordReused(user, newPassword)) {
+            throw new RuntimeException("Cannot reuse your 3 most recent passwords");
+        }
+
+        String encodedPassword = passwordEncoder.encode(newPassword);
+        user.setPassword(encodedPassword);
         userRepository.save(user);
+        passwordHistoryService.savePasswordToHistory(user, encodedPassword);
 
         resetToken.setUsed(true);
         passwordResetTokenRepository.save(resetToken);

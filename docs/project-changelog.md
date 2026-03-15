@@ -1,11 +1,37 @@
 # Project Changelog
 
 **Project:** ms-cinema
-**Updated:** March 12, 2026
+**Updated:** March 15, 2026
 
 ## Version 0.0.1-SNAPSHOT
 
 ### [Unreleased]
+
+#### Password History Validation (v0.0.1) — March 15, 2026
+- **New Endpoint:** POST `/api/auth/change-password` - Authenticated user password change
+  - Request body: { currentPassword, newPassword, confirmPassword }
+  - Validates current password, confirms new password match, checks password history
+  - Returns 200 on success, 400 for validation errors, 401 for auth failures
+- **Database:** `password_history` table (id, user_id, password_hash, created_at)
+- **Backend Implementation:**
+  - PasswordHistory JPA entity with user FK and BCrypt hash storage
+  - PasswordHistoryService: CRUD operations, recent password validation (3 most recent)
+  - POST /api/auth/change-password controller endpoint with @PreAuthorize("isAuthenticated()")
+  - POST /api/auth/reset-password enhanced: Validates reset password against 3 recent hashes
+  - Registration flow (POST /api/auth/register): Seeds initial password to history on user creation
+- **Frontend Implementation:**
+  - New ChangePasswordComponent at /profile/change-password route
+  - Reactive form with currentPassword, newPassword, confirmPassword fields
+  - "Change Password" button integration on ProfileComponent
+  - Real-time validation and error display from backend API
+- **Security & Authorization:**
+  - POST /api/auth/change-password requires Bearer JWT token
+  - Current password verified via BCrypt comparison
+  - New password prevented from reusing 3 most recent hashes
+  - All password changes logged with timestamp in history table
+- **DTOs Added:**
+  - ChangePasswordRequest (currentPassword, newPassword, confirmPassword)
+  - ChangePasswordResponse (success message or error details)
 
 #### Features Added
 - **Movie Ratings (v0.0.1)** — March 12, 2026
