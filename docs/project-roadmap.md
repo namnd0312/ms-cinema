@@ -87,26 +87,27 @@ MS Cinema is a comprehensive cinema ticket booking platform built on Spring Boot
 - ✓ NotificationBellComponent (toolbar badge with matBadge, snackbar alerts, increment on new)
 - ✓ NotificationListComponent (paginated Mat-card list, dark theme, colored borders per type)
 - ✓ PostgreSQL persistence (notificationdb: notifications table with userId, title, message, notificationType, isRead, createdAt)
-- ✓ InAppNotificationEvent (userId, title, message, notificationType) and NotificationType enum (PAYMENT_SUCCESS, PAYMENT_FAILED, ADMIN_BROADCAST, SYSTEM)
+- ✓ InAppNotificationEvent and NotificationType enum (PAYMENT_SUCCESS, PAYMENT_FAILED, ADMIN_BROADCAST, SYSTEM)
 - ✓ SseEmitterRegistryService (ConcurrentHashMap-based registry, atomic operations, 30s heartbeat)
 - ✓ NotificationRestController (GET list, PATCH mark-read, PATCH mark-all, GET unread-count, POST broadcast)
 - ✓ JWT authentication via query parameter (?token=JWT) for SSE endpoint
 - ✓ Payment event notifications (success/failure broadcast to user via SSE)
 - ✓ NotificationPublisherService in booking-service (publishes to notification.in_app topic)
-- ✓ Bug fixes: race condition (atomic), broadcast OOM (findDistinctUserIds), subscription leak (take(1)), 403 exception type, toolbar badge color, dark theme
+- ✓ Bug fixes: race condition, broadcast OOM, subscription leak, toolbar badge color, dark theme
 - ✓ API Gateway SSE support (skips ContentCachingResponseWrapper to prevent thread exhaustion)
 - ✓ Docker config updates (init-databases.sql, docker-compose notification-service env vars)
 
 **Completed Features (Password History Validation - COMPLETE ✓ March 15, 2026):**
 - ✓ POST /api/auth/change-password endpoint (Bearer JWT required, validates current & new passwords)
 - ✓ password_history table (id, user_id, password_hash, created_at) for tracking recent passwords
-- ✓ PasswordHistory JPA entity and repository with custom queries
-- ✓ PasswordHistoryService managing CRUD and 3-password reuse prevention
-- ✓ Enhanced password reset validation against 3 most recent hashes
-- ✓ Registration flow seeding initial password to history
+- ✓ PasswordHistory JPA entity and PasswordHistoryRepository with findTop3ByUserIdOrderByCreatedAtDesc()
+- ✓ PasswordHistoryService managing CRUD and 3-password reuse prevention (isPasswordReused, savePasswordToHistory)
+- ✓ Enhanced password reset validation against 3 most recent hashes via PasswordHistoryService.isPasswordReused()
+- ✓ Registration flow seeding initial password to history via PasswordHistoryService.savePasswordToHistory()
 - ✓ Frontend ChangePasswordComponent with reactive form at /profile/change-password
 - ✓ Integration: "Change Password" button on ProfileComponent
 - ✓ DTOs: ChangePasswordRequest, ChangePasswordResponse
+- ✓ SecurityConfig updated to require authentication for POST /api/auth/change-password
 
 **Planned Features:**
 

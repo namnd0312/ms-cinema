@@ -51,9 +51,16 @@ MS Cinema is an **11-module Spring Cloud microservices platform** for cinema tic
 
 - **Password Reset:** Email-driven password reset flow via Kafka notifications
   - Forgot Password: Accept email, generate 24-hour reset token, publish Kafka event
-  - Reset Password: Accept reset token + new password, validate token, update password
+  - Reset Password: Accept reset token + new password, validate token against 3 most recent password hashes, update password
   - notification-service consumes event, sends SMTP email
   - Security: Returns generic message regardless of email existence
+
+- **Change Password:** Allow authenticated users to change password with validation
+  - POST /api/auth/change-password (requires Bearer JWT token)
+  - Validate current password matches stored hash
+  - Verify new password not in 3 most recent password history entries
+  - Update password and record in password history table
+  - Return success/failure with descriptive error messages
 
 - **Logout:** Blacklist token and delete refresh token
   - Accept Authorization header with access token
@@ -382,6 +389,35 @@ Response (200 OK):
 
 Error (401 Unauthorized): missing/invalid/expired token
 
+### Change Password Endpoint
+**POST /api/auth/change-password**
+- Consumes: application/json
+- Produces: application/json
+- Auth: JWT Bearer token required
+- Header: `Authorization: Bearer <accessToken>`
+
+Request:
+```json
+{
+  "currentPassword": "oldPassword123",
+  "newPassword": "newPassword456",
+  "confirmPassword": "newPassword456"
+}
+```
+
+Response (200 OK):
+```
+"Password changed successfully."
+```
+
+Error (400 Bad Request):
+- Current password incorrect
+- New password matches one of 3 recent passwords (reuse not allowed)
+- Passwords don't match
+
+Error (401 Unauthorized):
+- Missing/invalid/expired token
+
 ### Protected Endpoint Example
 **GET /api/protected** (or any non-auth endpoint)
 - Auth: JWT Bearer token required
@@ -477,15 +513,15 @@ Response (403 Forbidden):
 - [ ] IP whitelisting
 - [ ] Token encryption at rest
 
-### Phase 5: Operations (IN PROGRESS)
-- [ ] CI/CD pipeline (GitHub Actions)
-- ✓ Metrics collection (Micrometer/Prometheus) — all 7 services instrumented
+### Phase 5: Operations (PARTIAL)
+- ✓ Metrics collection (Micrometer/Prometheus) — all 8 services instrumented
 - ✓ Grafana dashboards — JVM Micrometer + Spring Boot HTTP Overview
 - ✓ Custom business counters — auth, booking, payment events
-- [ ] Alerting rules (Prometheus alertmanager)
-- [ ] Centralized logging (ELK/Loki stack)
-- [ ] Kubernetes deployment manifests
-- [ ] Load testing & performance benchmarks
+- ✓ Centralized logging (Loki 3.0 with 7-day retention)
+- [ ] CI/CD pipeline (GitHub Actions) — planned
+- [ ] Alerting rules (Prometheus alertmanager) — planned
+- [ ] Kubernetes deployment manifests — planned
+- [ ] Load testing & performance benchmarks — planned
 
 ## Dependencies
 

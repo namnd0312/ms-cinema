@@ -80,13 +80,15 @@ Infrastructure:
 
 **auth-service (:8081)** - Authentication & user management
 - Controllers: AuthController, TokenValidationController
-- Services: JwtService, UserService, ActivationService, PasswordResetService, BlacklistedTokenService, AccountLockService, RedisService
+- Services: JwtService, UserService, ActivationService, PasswordResetService, BlacklistedTokenService, AccountLockService, PasswordHistoryService, RedisService
 - Security: Spring Security 6.x with @EnableMethodSecurity, SecurityFilterChain pattern
 - JWT: JJWT 0.12.6 HS512 (15-min access token, 7-day refresh, roles+userId claims)
 - Token Blacklist: Redis with auto-TTL (fail-closed on outage)
 - Account Lockout: 5 failed attempts → 15-min auto-unlock
+- Password History: Maintains last 3 password hashes per user, prevents reuse in password reset & change-password flows
 - Email Events: Publishes NotificationRequestedEvent to Kafka (no direct SMTP)
-- Database: testdb (7 tables: users, roles, user_roles, refresh_tokens, password_reset_tokens, activation_tokens, blacklisted_tokens)
+- Endpoints: /api/auth/login, /register, /refresh-token, /logout, /forgot-password, /reset-password, /change-password (auth required)
+- Database: testdb (8 tables: users, roles, user_roles, refresh_tokens, password_reset_tokens, activation_tokens, blacklisted_tokens, password_history)
 
 **movie-service (:8082)** - Movie catalog, showtimes, ratings, comments, reactions
 - Controllers: MovieController, TheaterController, ShowtimeController, MovieRatingController, MovieCommentController, CommentReactionController
@@ -174,9 +176,11 @@ Infrastructure:
 **cinema-frontend (Angular 18)** - Web UI
 - Port: 4200 (dev) → 80 (prod via Nginx)
 - Stack: TypeScript 5.5, Material 18, Stripe.js 8.9, RxJS
-- Lazy-loaded routes: /auth, /movies, /booking, /payment, /profile, /admin
+- Lazy-loaded routes: /auth, /movies, /booking, /payment, /profile (includes /profile/change-password), /admin, /notifications
+- Components: ChangePasswordComponent (reactive form with current/new/confirm fields, visibility toggles, validation)
 - API proxy: Configured to route /api/* to http://api-gateway:8080
 - Nginx SPA fallback for client-side routing
+- Password change integration: "Change Password" button on ProfileComponent
 
 ## Data Flow Patterns
 

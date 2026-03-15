@@ -85,7 +85,7 @@ See [docs/api-documentation.md](./docs/api-documentation.md) for full endpoint r
 
 Each service has own database:
 
-**auth-service (testdb):** users, roles, user_roles, refresh_tokens, password_reset_tokens, activation_tokens, blacklisted_tokens
+**auth-service (testdb):** users, roles, user_roles, refresh_tokens, password_reset_tokens, activation_tokens, blacklisted_tokens, password_history
 
 **movie-service (moviedb):** movies, theaters, seats, showtimes, movie_ratings, movie_comments, comment_reactions
 
