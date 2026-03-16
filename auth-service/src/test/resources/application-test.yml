@@ -1,0 +1,64 @@
+spring:
+  config:
+    import: ""
+  cloud:
+    config:
+      enabled: false
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    database-platform: org.hibernate.dialect.H2Dialect
+    properties:
+      hibernate:
+        format_sql: false
+  datasource:
+    url: jdbc:h2:mem:testdb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  h2:
+    console:
+      enabled: false
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password:
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: test-client-id
+            client-secret: test-client-secret
+            scope: openid,profile,email
+            redirect-uri: http://localhost:8080/login/oauth2/code/google
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+namnd:
+  app:
+    jwtSecret: kBJb8FEOvTCWEcfZB6RLMM5BLoI8p0FWOWEu7FSZBYn+ItVi7mHRePYCvum5Ic6l4M2nFw+kdl8du99Bxnb7zg==
+    jwtExpiration: 900000
+    jwtRefreshExpiration: 604800000
+    passwordResetBaseUrl: http://localhost:4200/auth/reset-password
+    activationBaseUrl: http://localhost:8080/api/auth/activate
+    maxFailedAttempts: 5
+    lockDurationMs: 900000
+    oauth2CallbackUrl: http://localhost:4200/auth/oauth2/callback
+
+eureka:
+  client:
+    enabled: false
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
