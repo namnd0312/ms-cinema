@@ -102,6 +102,11 @@ public class AuthController {
             Optional<User> userOpt = userService.findByEmail(loginRequest.getEmail());
             if (userOpt.isPresent()) {
                 User user = userOpt.get();
+                // OAuth-only users cannot login with password
+                if (user.getPassword() == null) {
+                    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                            .body("This account uses Google login. Please sign in with Google.");
+                }
                 if (!accountLockService.unlockIfExpired(user)) {
                     long remainingMs = accountLockService.getRemainingLockTimeMs(user);
                     long remainingMin = (remainingMs / 60000) + 1;
@@ -333,6 +338,12 @@ public class AuthController {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
         User user = userService.findByEmail(email)
             .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // OAuth-only users must set password via forgot-password flow first
+        if (user.getPassword() == null) {
+            return ResponseEntity.badRequest()
+                .body("Cannot change password for OAuth-only accounts. Use forgot-password to set a password first.");
+        }
 
         if (!encoder.matches(dto.getCurrentPassword(), user.getPassword())) {
             return ResponseEntity.badRequest().body("Current password is incorrect");

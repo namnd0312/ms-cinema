@@ -18,6 +18,14 @@ spring:
             uri: lb://auth-service
             predicates:
               - Path=/api/users/**
+          - id: auth-service-oauth2-authorization
+            uri: lb://auth-service
+            predicates:
+              - Path=/oauth2/authorization/**
+          - id: auth-service-oauth2-callback
+            uri: lb://auth-service
+            predicates:
+              - Path=/login/oauth2/code/**
           - id: movie-service
             uri: lb://movie-service
             predicates:

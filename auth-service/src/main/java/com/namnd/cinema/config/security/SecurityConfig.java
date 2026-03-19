@@ -2,6 +2,7 @@ package com.namnd.cinema.config.security;
 
 import com.namnd.cinema.config.custom.CustomAccesDeniedHandler;
 import com.namnd.cinema.config.filter.JwtAuthenticationFilter;
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -19,7 +20,10 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
+@RequiredArgsConstructor
 public class SecurityConfig {
+
+    private final OAuth2AuthenticationSuccessHandler oAuth2AuthenticationSuccessHandler;
 
     @Bean
     public JwtAuthenticationFilter jwtAuthenticationFilter() {
@@ -47,12 +51,23 @@ public class SecurityConfig {
         http
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/change-password").authenticated()
-                .requestMatchers("/api/auth/**", "/actuator/health", "/actuator/info", "/actuator/prometheus", "/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
+                .requestMatchers(
+                    "/api/auth/**",
+                    "/oauth2/authorization/**",
+                    "/login/oauth2/code/**",
+                    "/actuator/health", "/actuator/info", "/actuator/prometheus",
+                    "/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html"
+                ).permitAll()
                 .anyRequest().authenticated()
             )
             .csrf(csrf -> csrf.disable())
+            // IF_REQUIRED: allows temporary session for OAuth2 state param,
+            // JWT-based requests won't create sessions
             .sessionManagement(session -> session
-                .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
+            )
+            .oauth2Login(oauth2 -> oauth2
+                .successHandler(oAuth2AuthenticationSuccessHandler)
             )
             .exceptionHandling(ex -> ex
                 .accessDeniedHandler(customAccesDeniedHandler())

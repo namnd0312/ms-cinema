@@ -66,11 +66,12 @@ src/main/java/com/namnd/cinema/
 - **PasswordResetServiceImpl** (~80 lines): 24-hour password reset tokens
 - **BlacklistedTokenServiceImpl** (~50 lines): Redis JTI blacklist with auto-TTL (fail-closed)
 - **AccountLockServiceImpl** (~60 lines): 5-attempt lockout, auto-unlock after 15 minutes
+- **OAuth2UserLinkingService** (~100 lines): Finds/creates users from OAuth2 provider data, auto-links by email if verified, handles race conditions
 
 **API Endpoints:** See README.md API Reference section
 
 **Database Schema:**
-- users (id, username, email UNIQUE, password, fullName, active, failedAttempts, lockTime)
+- users (id, username, email UNIQUE, password [nullable for OAuth-only], fullName, active, failedAttempts, lockTime)
 - roles (id, name)
 - user_roles (user_id FK, role_id FK)
 - refresh_tokens (id, token UNIQUE, expiryDate, user_id FK)
@@ -78,13 +79,23 @@ src/main/java/com/namnd/cinema/
 - activation_tokens (id, token UNIQUE, expiryDate, user_id FK, used)
 - password_history (id, user_id FK, password_hash, created_at)
 - blacklisted_tokens (id, jti UNIQUE, expiry_date)
+- user_oauth_providers (id, user_id FK, provider_name, provider_user_id, provider_email, linked_at; UC: (provider_name+provider_user_id, user_id+provider_name))
 
 **Password History Feature:**
 - PasswordHistory entity: Stores up to 3 previous password hashes per user for reuse prevention
 - PasswordHistoryService: Manages history CRUD, validates new password against recent entries
-- POST /api/auth/change-password: Endpoint for authenticated password changes
+- POST /api/auth/change-password: Endpoint for authenticated password changes (blocked for OAuth-only users)
 - Password reset (POST /api/auth/reset-password): Validates new password against 3 most recent hashes
 - Registration flow: Seeds initial password to history table on user creation
+
+**OAuth2 Integration:**
+- UserOAuthProvider entity: Stores provider linkage (provider_name, provider_user_id, providerEmail, linkedAt)
+- UserOAuthProviderRepository: findByProviderNameAndProviderUserId(), existsByUserIdAndProviderName()
+- OAuth2AuthenticationSuccessHandler: Generates JWT+refresh token, redirects to frontend with tokens as query params
+- OAuth2UserLinkingService: Lookup order (1) existing provider link (2) email match if verified (3) create new
+- Unique constraints prevent duplicate links per provider and per user
+- Concurrent login race condition: Handled via DataIntegrityViolationException catch during provider link creation
+- Auto-create OAuth-only users: password=NULL, active=true, default ROLE_USER assignment
 
 ## movie-service (Port 8082)
 
@@ -415,7 +426,7 @@ jwt.auth.secret: ${JWT_SECRET}
 - **App integration:** /notifications route added to app.routes.ts
 
 **Lazy-Loaded Routes:**
-- /auth (login, register, password reset)
+- /auth (login, register, password reset, OAuth2 callback)
 - /movies (browse, details)
 - /booking (seat selection, confirmation)
 - /payment (Stripe checkout)
@@ -430,6 +441,19 @@ jwt.auth.secret: ${JWT_SECRET}
 - Validation: Passwords match check, current password verification
 - Integration: "Change Password" button on profile page (ProfileComponent)
 - Error handling: Display validation errors and server response messages
+- Guard: Block access for OAuth-only users (password=NULL)
+
+**OAuth2 Integration (Frontend):**
+- Route: /oauth2-callback (standalone component, handles OAuth2 callback)
+- Component: OAuth2CallbackComponent
+  - Extracts token + refreshToken from URL query params
+  - Clears tokens from browser history immediately (security: prevent leakage)
+  - Calls AuthService.handleOAuth2Callback() to store tokens
+  - Redirects to /movies on success, /auth/login on error (2-second delay)
+  - Displays "Signing in..." spinner during processing
+- AuthService update: handleOAuth2Callback() stores tokens identically to traditional login
+- Login Component: "Sign in with Google" button redirects to /oauth2/authorization/google
+- Error handling: Display error message if missing email or invalid callback
 
 **API Proxy:** Configured to route /api/* to http://api-gateway:8080
 

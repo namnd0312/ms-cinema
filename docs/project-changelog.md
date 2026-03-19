@@ -7,6 +7,47 @@
 
 ### [Unreleased]
 
+#### Google OAuth2 Login (v0.0.1) — March 16, 2026
+- **Feature:** Google OAuth2 authentication with Spring Security OAuth2 Client
+  - OAuth2 authorization endpoint: GET /oauth2/authorization/google
+  - OAuth2 callback handler: GET /login/oauth2/code/google (with authorization code)
+  - Auto-create user on first OAuth2 login (password=NULL, active=true, ROLE_USER)
+  - Auto-link existing user by email when Google email_verified=true
+  - Concurrent login race condition handling via DataIntegrityViolationException catch
+- **Backend Implementation:**
+  - UserOAuthProvider JPA entity with unique constraints (provider_name+provider_user_id, user_id+provider_name)
+  - UserOAuthProviderRepository: findByProviderNameAndProviderUserId(), existsByUserIdAndProviderName()
+  - OAuth2AuthenticationSuccessHandler: Handles successful OAuth2 login, generates JWT+refresh token, redirects with query params
+  - OAuth2UserLinkingService & Impl: Lookup by provider link → lookup by email (if verified) → create new user
+  - SecurityConfig updated: sessionCreationPolicy=IF_REQUIRED (allows OAuth2 state param), oauth2Login(successHandler)
+  - API Gateway routes: /oauth2/authorization/**, /login/oauth2/code/** → auth-service
+- **Frontend Implementation:**
+  - OAuth2CallbackComponent: Extracts token+refreshToken from URL, stores via AuthService, clears URL history (security), navigates to /movies
+  - AuthService.handleOAuth2Callback(): Stores tokens, initializes auth state
+  - Login component: "Sign in with Google" button redirects to /oauth2/authorization/google
+  - Route: /oauth2-callback (handles OAuth2 callback processing)
+- **Database Schema (auth-service):**
+  - user_oauth_providers table: id, user_id FK, provider_name (50 chars), provider_user_id, provider_email, linked_at
+  - Unique constraints: (provider_name, provider_user_id), (user_id, provider_name)
+  - PrePersist: Automatically sets linked_at to current UTC time
+- **Security & Authorization:**
+  - OAuth-only users have password=NULL; POST /api/auth/change-password blocked for these users (guard check)
+  - Email verification by provider: Auto-link only when email_verified=true from Google
+  - Tokens generated identically to traditional login (same JWT claims: sub, roles, userId)
+  - OAuth state parameter and CSRF protection handled by Spring Security
+- **Configuration:**
+  - namnd.app.oauth2CallbackUrl: Frontend OAuth2 callback URL (e.g., http://localhost:4200/oauth2-callback)
+  - Google OAuth2 credentials: Configured via application.yml spring.security.oauth2.client.registration
+- **Error Handling:**
+  - Missing email: Redirect to callback with ?error=no_email
+  - Concurrent first-time login: Catch DataIntegrityViolationException, re-query provider link
+  - Frontend callback errors: 2-second delay before redirect to /auth/login
+- **DTOs:** No new DTOs; reuses JwtResponseDto pattern via query params
+- **Testing:**
+  - Integration tests: OAuth2 flow with Google mocked response
+  - Unit tests: OAuth2UserLinkingService (create, auto-link, concurrent scenarios)
+  - Frontend: OAuth2CallbackComponent token extraction, navigation
+
 #### Password History Validation (v0.0.1) — March 15, 2026
 - **New Endpoint:** POST `/api/auth/change-password` - Authenticated user password change
   - Request body: { currentPassword, newPassword, confirmPassword }

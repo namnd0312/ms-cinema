@@ -64,6 +64,8 @@ Infrastructure:
 - Routes:
   - `/api/auth/**` → auth-service
   - `/api/users/**` → auth-service
+  - `/oauth2/authorization/**` → auth-service (OAuth2 authorization endpoint)
+  - `/login/oauth2/code/**` → auth-service (OAuth2 callback endpoint)
   - `/api/movies/**` → movie-service (CRUD, ratings, comments, reactions)
   - `/api/showtimes/**` → movie-service
   - `/api/theaters/**` → movie-service
@@ -80,15 +82,19 @@ Infrastructure:
 
 **auth-service (:8081)** - Authentication & user management
 - Controllers: AuthController, TokenValidationController
-- Services: JwtService, UserService, ActivationService, PasswordResetService, BlacklistedTokenService, AccountLockService, PasswordHistoryService, RedisService
-- Security: Spring Security 6.x with @EnableMethodSecurity, SecurityFilterChain pattern
+- Services: JwtService, UserService, ActivationService, PasswordResetService, BlacklistedTokenService, AccountLockService, PasswordHistoryService, RedisService, OAuth2UserLinkingService
+- Security: Spring Security 6.x with @EnableMethodSecurity, OAuth2 client, SecurityFilterChain pattern
 - JWT: JJWT 0.12.6 HS512 (15-min access token, 7-day refresh, roles+userId claims)
 - Token Blacklist: Redis with auto-TTL (fail-closed on outage)
 - Account Lockout: 5 failed attempts → 15-min auto-unlock
 - Password History: Maintains last 3 password hashes per user, prevents reuse in password reset & change-password flows
+- OAuth2 Login: Google OAuth2 integration via Spring Security (email_verified auto-link)
+  - UserOAuthProvider entity: Stores provider linkage (provider_name, provider_user_id, linkedAt)
+  - OAuth2AuthenticationSuccessHandler: Generates JWT + refresh token, redirects to frontend with query params
+  - OAuth2UserLinkingService: Find/create user, auto-link by email if verified, handle race conditions
 - Email Events: Publishes NotificationRequestedEvent to Kafka (no direct SMTP)
-- Endpoints: /api/auth/login, /register, /refresh-token, /logout, /forgot-password, /reset-password, /change-password (auth required)
-- Database: testdb (8 tables: users, roles, user_roles, refresh_tokens, password_reset_tokens, activation_tokens, blacklisted_tokens, password_history)
+- Endpoints: /api/auth/login, /register, /refresh-token, /logout, /forgot-password, /reset-password, /change-password (auth required), /oauth2/authorization/**, /login/oauth2/code/**
+- Database: testdb (9 tables: users, roles, user_roles, refresh_tokens, password_reset_tokens, activation_tokens, blacklisted_tokens, password_history, user_oauth_providers)
 
 **movie-service (:8082)** - Movie catalog, showtimes, ratings, comments, reactions
 - Controllers: MovieController, TheaterController, ShowtimeController, MovieRatingController, MovieCommentController, CommentReactionController
@@ -185,6 +191,8 @@ Infrastructure:
 ## Data Flow Patterns
 
 ### Authentication Flow
+
+#### Traditional Login (Email + Password)
 ```
 CLIENT: POST /api/auth/login
         └─► api-gateway (routes to auth-service)
@@ -197,9 +205,40 @@ CLIENT: POST /api/auth/login
                 ├─ JwtService.generateTokenLogin(auth) → HS512 signed, JTI, roles+userId, 15min
                 ├─ RefreshTokenService.createRefreshToken() → 7-day token, DB
                 └─ 200 OK JwtResponseDto(token, refreshToken, id, email, username, roles)
+```
 
-CLIENT: [Subsequent requests]
-        Authorization: Bearer {accessToken}
+#### OAuth2 Login (Google)
+```
+CLIENT: Click "Sign in with Google" button
+        └─► GET /oauth2/authorization/google
+            └─► api-gateway → auth-service (Spring Security OAuth2)
+                ├─ Redirect to Google consent screen
+                └─ User grants permission → Google redirects to callback
+
+CLIENT: [OAuth2 callback with authorization code]
+        └─► GET /login/oauth2/code/google?code=...&state=...
+            └─► api-gateway → auth-service
+                └─► OAuth2AuthenticationSuccessHandler.onAuthenticationSuccess()
+                    ├─ Extract OAuth2User attributes (sub, email, name, email_verified)
+                    ├─ OAuth2UserLinkingService.processOAuth2User()
+                    │  ├─ [1] Check existing provider link (sub) → return user
+                    │  ├─ [2] Check email match + email_verified=true → auto-link
+                    │  ├─ [3] Create new user (password=NULL, active=true, ROLE_USER)
+                    │  └─ Create UserOAuthProvider record
+                    ├─ JwtService.generateTokenFromEmail() → HS512, 15min
+                    ├─ RefreshTokenService.createRefreshToken() → 7-day, DB
+                    └─ Redirect to frontend: /oauth2-callback?token={jwt}&refreshToken={refreshToken}
+
+FRONTEND: OAuth2CallbackComponent
+         └─► Extract token + refreshToken from URL
+             ├─ Clear tokens from browser history (security)
+             ├─ AuthService.handleOAuth2Callback() → store in localStorage
+             └─ Navigate to /movies
+```
+
+#### Subsequent Authenticated Requests
+```
+CLIENT: GET /api/movies, Authorization: Bearer {accessToken}
         └─► api-gateway/auth-service
             └─► JwtAuthenticationFilter.doFilterInternal()
                 ├─ Extract Bearer token

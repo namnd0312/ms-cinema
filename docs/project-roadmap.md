@@ -190,13 +190,19 @@ MS Cinema is a comprehensive cinema ticket booking platform built on Spring Boot
 - **Priority:** MEDIUM
 - **Effort:** Large (6-8 days)
 
-**FR-4.3: OAuth2 Integration**
-- Google OAuth2 login
-- GitHub OAuth2 login
-- Auto-create user on first OAuth2 login
-- Link OAuth2 account to existing user
-- **Priority:** LOW
-- **Effort:** Large (7-10 days)
+**FR-4.3: OAuth2 Integration (COMPLETE ✓ March 16, 2026)**
+- ✓ Google OAuth2 login via Spring Security OAuth2 Client
+- ✓ Auto-create user on first OAuth2 login (password=NULL, ROLE_USER, active=true)
+- ✓ Auto-link existing user by email when email_verified=true (verification by Google)
+- ✓ UserOAuthProvider table for provider linkage tracking
+- ✓ OAuth2AuthenticationSuccessHandler: JWT + refresh token generation, redirect to frontend
+- ✓ Custom OAuth2UserLinkingService: Find/create user, handle concurrent logins
+- ✓ API Gateway routes: /oauth2/authorization/**, /login/oauth2/code/**
+- ✓ Frontend: OAuth2CallbackComponent, "Sign in with Google" button
+- ✓ Guards: Password change blocked for OAuth-only users (password=NULL)
+- **Status:** COMPLETE (March 16, 2026)
+- **Priority:** Was LOW, now COMPLETE
+- **Implementation Time:** ~7 days
 
 **FR-4.4: Distributed Tracing**
 - OpenTelemetry integration

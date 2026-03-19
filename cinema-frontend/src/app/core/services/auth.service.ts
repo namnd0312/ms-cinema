@@ -109,6 +109,34 @@ export class AuthService {
     return this.http.post('/api/auth/resend-activation', { email }, { responseType: 'text' });
   }
 
+  /**
+   * Handles OAuth2 callback by storing tokens and fetching user profile.
+   * Called from OAuth2CallbackComponent after redirect from backend.
+   */
+  handleOAuth2Callback(token: string, refreshToken: string): Observable<any> {
+    // Store tokens first so the auth interceptor can attach Bearer header
+    this.setTokens(token, refreshToken);
+    return this.http.get<any>('/api/users/me').pipe(
+      tap({
+        next: (userInfo) => {
+          const user: User = {
+            id: userInfo.id,
+            username: userInfo.username,
+            email: userInfo.email,
+            fullName: userInfo.fullName,
+            roles: userInfo.roles
+          };
+          localStorage.setItem(this.USER_KEY, JSON.stringify(user));
+          this.currentUser.set(user);
+        },
+        error: () => {
+          // Clear tokens if profile fetch fails
+          this.clearTokens();
+        }
+      })
+    );
+  }
+
   hasRole(role: string): boolean {
     return this.currentUser()?.roles?.includes(role) ?? false;
   }
