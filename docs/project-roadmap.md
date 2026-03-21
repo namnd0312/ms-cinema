@@ -37,14 +37,14 @@ MS Cinema is a comprehensive cinema ticket booking platform built on Spring Boot
 **Focus:** Multi-module architecture with service discovery & event streaming
 
 **Completed Features:**
-- ✓ 11-module Maven structure (5 business services, 3 infrastructure, 2 shared libs, 1 frontend)
+- ✓ 10-module Maven structure (5 business services, 3 infrastructure, 2 shared libs, 1 frontend)
 - ✓ Spring Cloud Eureka service discovery (:8761)
 - ✓ Spring Cloud Config Server (:8888, classpath:/config-repo/)
 - ✓ Spring Cloud Gateway MVC (:8080, OpenAPI aggregation)
 - ✓ JWT tokens embed roles+userId claims for downstream use
 - ✓ POST /api/auth/validate-token (microservice JWT validation, no DB hit)
 - ✓ GET /api/users/me (authenticated user profile retrieval)
-- ✓ jwt-auth-spring-boot-starter library (plug-in JWT auth for all services)
+- ✓ jwt-auth-autoconfigure library (plug-in JWT auth for all services)
 - ✓ **OpenAPI 3.0 documentation (Swagger UI, SpringDoc 2.8.4)**
 - ✓ movie-service (CRUD movies/theaters/showtimes, auto-seat generation)
 - ✓ booking-service (Redis locking, lifecycle states, Feign to movie-service)
@@ -55,7 +55,7 @@ MS Cinema is a comprehensive cinema ticket booking platform built on Spring Boot
 - ✓ Prometheus (:9090, 15s scrape) + Grafana (:3000, 2 dashboards) + Loki (:3100)
 
 **Success Metrics:**
-- 11 services successfully deployed via docker-compose
+- 10 services + infrastructure successfully deployed via docker-compose
 - Cross-service JWT validation < 50ms
 - Booking-to-payment event latency < 2s (p95)
 - All endpoints documented in OpenAPI (0 manual docs needed)

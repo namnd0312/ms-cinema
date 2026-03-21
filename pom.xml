@@ -31,8 +31,7 @@
     <modules>
         <module>kafka-events</module>
         <module>auth-service</module>
-        <module>jwt-auth-spring-boot-autoconfigure</module>
-        <module>jwt-auth-spring-boot-starter</module>
+        <module>jwt-auth-autoconfigure</module>
         <module>eureka-server</module>
         <module>config-server</module>
         <module>api-gateway</module>

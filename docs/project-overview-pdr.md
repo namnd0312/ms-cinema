@@ -8,7 +8,7 @@
 
 ## Executive Summary
 
-MS Cinema is an **11-module Spring Cloud microservices platform** for cinema ticket booking with event-driven architecture, JWT authentication, Stripe payments, and comprehensive monitoring. The system consists of infrastructure services (Eureka, Config Server, API Gateway), 5 business services, 2 shared libraries, and Angular frontend.
+MS Cinema is a **10-module Spring Cloud microservices platform** for cinema ticket booking with event-driven architecture, JWT authentication, Stripe payments, and comprehensive monitoring. The system consists of infrastructure services (Eureka, Config Server, API Gateway), 5 business services, 2 shared libraries, and Angular frontend.
 
 **Key Characteristics:**
 - Single external entry point: API Gateway (port 8080)
@@ -18,7 +18,7 @@ MS Cinema is an **11-module Spring Cloud microservices platform** for cinema tic
 - **Payment-service** (port 8084): Stripe integration, idempotent payment intents, webhook verification
 - **Notification-service** (port 8085): Kafka consumer, SMTP email delivery, Redis dedup (24h TTL)
 - **kafka-events module:** Shared domain events (PaymentCompletedEvent, BookingCreatedEvent, etc.)
-- **jwt-auth-spring-boot-starter:** Reusable JWT validator for all services (JJWT 0.12.6, HS512)
+- **jwt-auth-autoconfigure:** Reusable JWT validator for all services (JJWT 0.12.6, HS512)
 - Spring Cloud Eureka for service discovery, Config Server for centralized configuration
 - **Kafka topics:** payment-events, movie-events, notification-events (3 retries, exponential backoff, DLT)
 - Redis for token blacklist, booking locks, notification dedup
@@ -487,14 +487,14 @@ Response (403 Forbidden):
 - ✓ Account lockout after N failed attempts (auto-unlock)
 
 ### Phase 3: Microservice Integration (COMPLETE)
-- ✓ 11-module Maven project: 5 business services, 3 infrastructure, 2 shared libs, 1 frontend
+- ✓ 10-module Maven project: 5 business services, 3 infrastructure, 2 shared libs, 1 frontend
 - ✓ Spring Cloud Eureka (service registry, :8761)
 - ✓ Spring Cloud Config Server (shared JWT secret, :8888, classpath:/config-repo/)
 - ✓ Spring Cloud Gateway MVC (single entry :8080, routes, OpenAPI aggregation, HttpLoggingFilter)
 - ✓ JWT tokens include `roles` + `userId` claims for downstream use
 - ✓ POST /api/auth/validate-token (microservice validation, no DB lookup)
 - ✓ GET /api/users/me (authenticated user profile retrieval)
-- ✓ jwt-auth-spring-boot-starter (JJWT 0.12.6, reusable JWT validator, @ConditionalOnProperty)
+- ✓ jwt-auth-autoconfigure (JJWT 0.12.6, reusable JWT validator, @ConditionalOnProperty)
 - ✓ **OpenAPI 3.0 documentation** (Swagger UI on all services, aggregated at gateway)
 - ✓ notification-service (Kafka consumer, SMTP via Spring Mail, fail-open on Redis)
 - ✓ kafka-events module (PaymentCompletedEvent, BookingCreatedEvent, MovieCreatedEvent, etc.)
@@ -592,7 +592,7 @@ Config Server and Eureka must be running before auth-service and api-gateway sta
 Config Server loads `config-repo/application.yml` (shared JWT secret) and per-service configs.
 
 ### JWT Starter Library Usage
-Downstream services add `jwt-auth-spring-boot-starter` as a dependency, configure:
+Downstream services add `jwt-auth-autoconfigure` as a dependency, configure:
 ```yaml
 jwt:
   auth:

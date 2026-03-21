@@ -2,12 +2,12 @@
 
 **Project:** ms-cinema
 **Generated:** March 2026
-**Architecture:** 11-module Maven microservices (Spring Cloud)
+**Architecture:** 10-module Maven microservices (Spring Cloud)
 **Java Version:** 21 LTS
 **Spring Boot:** 3.4.3
 **Spring Cloud:** 2024.0.1
 
-## 11 Maven Modules Overview
+## 10 Maven Modules Overview
 
 ```
 ms-cinema/ (root pom: packaging=pom)
@@ -23,7 +23,7 @@ ms-cinema/ (root pom: packaging=pom)
 │   └── notification-service (:8085) - Kafka consumer, email (SMTP)
 ├── Shared Libraries (2 modules)
 │   ├── kafka-events - Event domain models
-│   └── jwt-auth-spring-boot-starter - Reusable JWT validator
+│   └── jwt-auth-autoconfigure - Reusable JWT validator
 ├── Frontend (1 module)
 │   └── cinema-frontend (:4200→80) - Angular 18
 └── Infrastructure Config
@@ -289,7 +289,7 @@ spring.kafka.consumer.max.poll.records: 100
 spring.kafka.listener.error-handler: org.springframework.kafka.listener.DefaultErrorHandler (3 retries, exponential backoff 1s-4s-10s)
 ```
 
-## jwt-auth-spring-boot-starter (Shared Library)
+## jwt-auth-autoconfigure (Shared Library)
 
 **Purpose:** Reusable JWT validator for downstream services (booking, payment, etc.)
 
@@ -312,7 +312,7 @@ jwt:
 **Activation:** @ConditionalOnProperty(name="jwt.auth.enabled", havingValue="true")
 
 **Usage in Downstream Services:**
-- Add jwt-auth-spring-boot-starter as dependency
+- Add jwt-auth-autoconfigure as dependency
 - Configure jwt.auth.secret in application.yml (from config-server)
 - Annotate controller methods with @PreAuthorize("hasRole('ROLE_USER')")
 - JwtAuthenticationFilter auto-wired via auto-config
@@ -566,7 +566,7 @@ docker build -t movie-service ./movie-service
 | Event-Driven (Async) | payment-service → booking-service (PaymentCompletedEvent) | Kafka |
 | Configuration Sharing | all services ← config-server (JWT secret) | Spring Cloud Config |
 | Service Discovery | all services ← eureka-server (dynamic routing) | Eureka |
-| Token Validation | downstream services validate JWT | jwt-auth-spring-boot-starter |
+| Token Validation | downstream services validate JWT | jwt-auth-autoconfigure |
 
 ## Data Isolation
 

@@ -6,7 +6,7 @@
 
 ## High-Level Overview
 
-MS Cinema is an 11-module Spring Cloud microservices platform for cinema ticket booking:
+MS Cinema is a 10-module Spring Cloud microservices platform for cinema ticket booking:
 
 ```
                         CLIENT (Web/Mobile)
@@ -167,7 +167,7 @@ Infrastructure:
 
 ### Shared Libraries (2 modules)
 
-**jwt-auth-spring-boot-starter** - Reusable JWT validator for downstream services
+**jwt-auth-autoconfigure** - Reusable JWT validator for downstream services
 - JwtAutoConfiguration: Conditional beans via @ConditionalOnProperty(jwt.auth.enabled=true)
 - JwtAuthProperties: Configuration properties (prefix=jwt.auth)
 - JwtTokenValidator: Validates HS512 signature, expiration

@@ -91,7 +91,7 @@
         <!-- JWT auth starter -->
         <dependency>
             <groupId>com.namnd</groupId>
-            <artifactId>jwt-auth-spring-boot-starter</artifactId>
+            <artifactId>jwt-auth-autoconfigure</artifactId>
             <version>${project.version}</version>
         </dependency>
 

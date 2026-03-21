@@ -292,7 +292,7 @@ Complete real-time notification system with Server-Sent Events (SSE) streaming +
 ## Phase 2 Releases (Historical)
 
 **Phase 2: Microservice Integration (COMPLETE)** — December 2025 - February 2026
-- 11-module Maven structure with Spring Cloud
+- 10-module Maven structure with Spring Cloud
 - Eureka service discovery, Config Server, API Gateway
 - JWT authentication (JJWT 0.12.6 HS512)
 - movie-service, booking-service, payment-service, notification-service

@@ -47,7 +47,7 @@ graph TD
     Prometheus["Prometheus :9090"]
     Grafana["Grafana :3000"]
 
-    JwtStarter["jwt-auth-spring-boot-starter\n(shared lib)"]
+    JwtStarter["jwt-auth-autoconfigure\n(shared lib)"]
     KafkaEvents["kafka-events\n(shared lib)"]
 
     Client --> Gateway

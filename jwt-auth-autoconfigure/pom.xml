@@ -11,7 +11,7 @@
         <version>0.0.1-SNAPSHOT</version>
     </parent>
 
-    <artifactId>jwt-auth-spring-boot-autoconfigure</artifactId>
+    <artifactId>jwt-auth-autoconfigure</artifactId>
     <name>JWT Auth Spring Boot Autoconfigure</name>
 
     <dependencies>
