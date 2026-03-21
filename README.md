@@ -54,6 +54,7 @@ mvn -pl notification-service spring-boot:run    # port 8085
 | payment-service | 8084 | Payment processing | Stripe, webhook verification, payment notifications |
 | notification-service | 8085 | Real-time notifications | SSE streaming, Kafka consumer, email (SMTP), PostgreSQL persistence |
 | zipkin | 9411 | Distributed tracing | Trace visualization, span analysis |
+| kafdrop | 9000 | Kafka topic browser | Topic inspection, message viewing |
 | cinema-frontend | 4200→80 | Web UI | Angular 18, Material, Stripe.js, real-time notification bell |
 
 ## API Documentation

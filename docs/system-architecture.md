@@ -42,6 +42,8 @@ Infrastructure:
 - Redis (:6379) - token blacklist, locks, dedup
 - Kafka (:9092) - event streaming (3 topics: movie-events, payment-events, notification-events)
 - Prometheus (:9090) + Grafana (:3000) + Loki (:3100) - monitoring
+- Zipkin (:9411) - distributed tracing
+- Kafdrop (:9000) - Kafka topic browser
 ```
 
 ## Module Architecture
@@ -423,6 +425,12 @@ cinema-frontend: Real-Time SSE Connection
 - Traces all service-to-service requests, Kafka events, database calls
 - traceId/spanId auto-injected into logs via MDC for correlation
 - No code changes required: auto-configured by Spring Boot 3.4.3
+- Docker image: openzipkin/zipkin:3.4 (pinned version)
+
+**Kafdrop (:9000)**
+- Kafka topic browser UI for local development and debugging
+- Inspect topics, view messages, monitor consumer groups
+- Docker image: obsidiandynamics/kafdrop:4.0.2
 
 ## Technology Stack Summary
 

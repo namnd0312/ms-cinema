@@ -483,10 +483,17 @@ jwt.auth.secret: ${JWT_SECRET}
 **Zipkin (Port 9411)**
 - Distributed tracing via Micrometer Tracing + OpenTelemetry bridge
 - Centralized trace collection from all 8 services
+- Docker image: openzipkin/zipkin:3.4 (pinned version)
 - Config: `management.zipkin.tracing.endpoint: http://zipkin:9411/api/v2/spans`
 - Sampling: 100% by default (via TRACING_SAMPLING_PROBABILITY env var)
 - Auto-traces: service-to-service (HTTP/Feign), Kafka, database operations
 - Zero code changes: enabled by Spring Boot 3.4.3 auto-configuration
+
+**Kafdrop (Port 9000)**
+- Kafka topic browser UI for local development
+- Docker image: obsidiandynamics/kafdrop:4.0.2
+- Browse topics, inspect messages, monitor consumer groups
+- Not for production; use for troubleshooting Kafka events
 
 **Actuator Metrics (/actuator/prometheus):**
 - Exposed on all services

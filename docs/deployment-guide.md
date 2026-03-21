@@ -236,19 +236,20 @@ docker images | grep auth-service
 ### 2. Run with Docker Compose (Recommended)
 
 ```bash
-# Start all services (postgres, redis, kafka, eureka, config-server, zipkin, all 8 services)
+# Start all services (postgres, redis, kafka, eureka, config-server, zipkin, kafdrop, all 8 services)
 docker-compose up -d
 
 # Verify services running
 docker-compose ps
-# Output: All services (auth-service, notification-service, postgres, redis, kafka, zipkin, etc.) should show UP
+# Output: All services (auth-service, notification-service, postgres, redis, kafka, zipkin, kafdrop, etc.) should show UP
 
 # View logs
 docker-compose logs -f auth-service
 docker-compose logs -f notification-service
 
-# Access Zipkin UI for trace visualization
-# http://localhost:9411/zipkin
+# Access monitoring UIs
+# Zipkin (distributed tracing): http://localhost:9411/zipkin
+# Kafdrop (Kafka topics): http://localhost:9000
 
 # Test app
 curl http://localhost:8080/api/auth/register
@@ -257,6 +258,7 @@ curl http://localhost:8080/api/auth/register
 **Service Dependencies:**
 - auth-service: postgres, redis (token blacklist), kafka, eureka, config-server
 - notification-service: kafka, redis (event dedup), eureka, config-server
+- grafana: depends_on zipkin (for tracing datasource provisioning)
 
 ### 3. Environment Variables for Docker
 
@@ -727,6 +729,9 @@ management:
   zipkin:
     tracing:
       endpoint: http://zipkin:9411/api/v2/spans
+
+# Fallback: All 6 business services have local application.yml copies as startup safeguard
+# (when config-server is unavailable during boot)
 ```
 
 **Production Tuning:**
