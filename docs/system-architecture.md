@@ -409,10 +409,20 @@ cinema-frontend: Real-Time SSE Connection
   - JVM Micrometer (memory, GC, threads, CPU)
   - Spring Boot HTTP Overview (req rate, latency, errors, DB pool, business counters)
 - Business Counters: auth.login/logout/register, booking.created/confirmed/cancelled, payment.initiated/completed/failed
+- Zipkin datasource provisioned for trace visualization
 
 **Loki (:3100)**
 - Log aggregation, 7-day retention
 - Labels: job, instance, application (service name)
+- Auto-injects traceId/spanId via MDC + LogstashEncoder (visible in log queries)
+
+**Zipkin (:9411)**
+- Distributed tracing via Micrometer Tracing (OpenTelemetry bridge)
+- Endpoint: http://zipkin:9411/api/v2/spans
+- Sampling: 100% (configurable via TRACING_SAMPLING_PROBABILITY env var)
+- Traces all service-to-service requests, Kafka events, database calls
+- traceId/spanId auto-injected into logs via MDC for correlation
+- No code changes required: auto-configured by Spring Boot 3.4.3
 
 ## Technology Stack Summary
 
@@ -430,7 +440,8 @@ cinema-frontend: Real-Time SSE Connection
 | Redis | 7 | Caching, locks, dedup |
 | Kafka | 3.7 KRaft | Message broker |
 | Stripe SDK | latest | Payment processing |
-| Micrometer | (via Boot) | Metrics |
+| Micrometer Tracing | (via Boot) | OpenTelemetry bridge for distributed tracing |
+| Zipkin | latest | Trace aggregation & visualization |
 | SpringDoc OpenAPI | 2.8.4 | API documentation |
 | Lombok | 1.18.x | Boilerplate reduction |
 

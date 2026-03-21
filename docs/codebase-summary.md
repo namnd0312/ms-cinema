@@ -468,7 +468,7 @@ jwt.auth.secret: ${JWT_SECRET}
 - Metrics: JVM (memory, GC, threads), HTTP (req rate, latency, errors), custom business counters
 
 **Grafana (Port 3000)**
-- Auto-provisioned datasources: Prometheus, Loki
+- Auto-provisioned datasources: Prometheus, Loki, Zipkin
 - 2 prebuilt dashboards:
   - JVM Micrometer (memory, GC, threads, CPU usage)
   - Spring Boot HTTP Overview (request rate, error rate, latency, database pool, business counters)
@@ -478,6 +478,15 @@ jwt.auth.secret: ${JWT_SECRET}
 - 7-day retention
 - Log labels: job, instance, application (service name)
 - Log discovery via Grafana
+- Auto-includes traceId and spanId from Micrometer Tracing MDC
+
+**Zipkin (Port 9411)**
+- Distributed tracing via Micrometer Tracing + OpenTelemetry bridge
+- Centralized trace collection from all 8 services
+- Config: `management.zipkin.tracing.endpoint: http://zipkin:9411/api/v2/spans`
+- Sampling: 100% by default (via TRACING_SAMPLING_PROBABILITY env var)
+- Auto-traces: service-to-service (HTTP/Feign), Kafka, database operations
+- Zero code changes: enabled by Spring Boot 3.4.3 auto-configuration
 
 **Actuator Metrics (/actuator/prometheus):**
 - Exposed on all services
@@ -492,7 +501,7 @@ jwt.auth.secret: ${JWT_SECRET}
 - JJWT: 0.12.6 (api, impl, jackson)
 
 **Key Dependencies Versions:**
-- Spring Boot: 3.4.3
+- Spring Boot: 3.4.3 (includes Micrometer Tracing, Spring Cloud Sleuth)
 - Spring Cloud: 2024.0.1
 - Spring Kafka: (via Boot)
 - JJWT: 0.12.6
@@ -500,6 +509,9 @@ jwt.auth.secret: ${JWT_SECRET}
 - SpringDoc OpenAPI: 2.8.4
 - PostgreSQL Driver: 42.x
 - Lombok: 1.18.x (BOM-managed)
+- Micrometer Tracing: (auto-included via Spring Boot 3.4.3)
+- OpenTelemetry: (via Micrometer bridge)
+- Zipkin Exporter: (via Spring Boot auto-config)
 
 ## Build & Deployment
 

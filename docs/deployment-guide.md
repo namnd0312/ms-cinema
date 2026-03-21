@@ -236,16 +236,19 @@ docker images | grep auth-service
 ### 2. Run with Docker Compose (Recommended)
 
 ```bash
-# Start all services (postgres, redis, kafka, eureka, config-server, auth-service, notification-service)
+# Start all services (postgres, redis, kafka, eureka, config-server, zipkin, all 8 services)
 docker-compose up -d
 
 # Verify services running
 docker-compose ps
-# Output: All services (auth-service, notification-service, postgres, redis, kafka, etc.) should show UP
+# Output: All services (auth-service, notification-service, postgres, redis, kafka, zipkin, etc.) should show UP
 
 # View logs
 docker-compose logs -f auth-service
 docker-compose logs -f notification-service
+
+# Access Zipkin UI for trace visualization
+# http://localhost:9411/zipkin
 
 # Test app
 curl http://localhost:8080/api/auth/register
@@ -701,7 +704,37 @@ spring:
 
 ## Monitoring & Logging
 
-### 1. Structured Logging
+### 1. Distributed Tracing (Zipkin)
+
+**Access Zipkin UI:**
+```
+http://localhost:9411/zipkin
+```
+
+**Features:**
+- Visualize request traces across all microservices
+- Track end-to-end request latency
+- Identify bottlenecks in service-to-service calls
+- View traceId correlation in logs (Loki) and traces (Zipkin)
+
+**Configuration:**
+```yaml
+# Centralized in config-server (application.yml)
+management:
+  tracing:
+    sampling:
+      probability: 1.0  # 100% sampling (change via TRACING_SAMPLING_PROBABILITY env var)
+  zipkin:
+    tracing:
+      endpoint: http://zipkin:9411/api/v2/spans
+```
+
+**Production Tuning:**
+- Reduce sampling to 10-20% for high-traffic systems: `TRACING_SAMPLING_PROBABILITY=0.1`
+- Traces auto-include service-to-service (Feign), Kafka, database operations
+- traceId/spanId auto-injected into logs via MDC for cross-log correlation
+
+### 2. Structured Logging
 
 **Log Output Example**
 ```json
@@ -714,9 +747,13 @@ spring:
   "user_id": 123,
   "username": "john",
   "ip_address": "192.168.1.100",
-  "duration_ms": 145
+  "duration_ms": 145,
+  "traceId": "a1b2c3d4e5f6",
+  "spanId": "x7y8z9a0"
 }
 ```
+
+Note: traceId and spanId are auto-injected via MDC (Micrometer Tracing) and visible in JSON logs and Loki queries.
 
 **Enable JSON Logging**
 ```xml

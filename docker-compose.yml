@@ -37,10 +37,30 @@ services:
       - KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1
       - CLUSTER_ID=MkU3OEVBNTcwNTJENDM2Qk
 
+  kafdrop:
+    image: obsidiandynamics/kafdrop:4.0.2
+    ports:
+      - "9000:9000"
+    environment:
+      KAFKA_BROKERCONNECT: kafka:9092
+    depends_on:
+      - kafka
+    networks:
+      - my-net
+    restart: unless-stopped
+
   redis-service:
     image: 'redis:7-alpine'
     ports:
       - "6379:6379"
+    networks:
+      - my-net
+    restart: unless-stopped
+
+  zipkin:
+    image: openzipkin/zipkin:3.4
+    ports:
+      - "9411:9411"
     networks:
       - my-net
     restart: unless-stopped
@@ -55,6 +75,7 @@ services:
       - my-net
     environment:
       <<: *java-tz
+      ZIPKIN_HOST: zipkin
     restart: unless-stopped
 
   config-server:
@@ -70,6 +91,7 @@ services:
     environment:
       <<: *java-tz
       EUREKA_HOST: eureka-server
+      ZIPKIN_HOST: zipkin
     restart: unless-stopped
 
   api-gateway:
@@ -87,6 +109,7 @@ services:
       <<: *java-tz
       EUREKA_HOST: eureka-server
       CONFIG_SERVER_HOST: config-server
+      ZIPKIN_HOST: zipkin
     restart: unless-stopped
 
   auth-service:
@@ -113,6 +136,9 @@ services:
       SPRING_DATASOURCE_PASSWORD: postgres
       REDIS_HOST: redis-service
       KAFKA_HOST: kafka
+      ZIPKIN_HOST: zipkin
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-placeholder}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-placeholder}
     restart: unless-stopped
 
   movie-service:
@@ -137,6 +163,7 @@ services:
       DB_USERNAME: postgres
       DB_PASSWORD: postgres
       KAFKA_HOST: kafka
+      ZIPKIN_HOST: zipkin
     restart: unless-stopped
 
   booking-service:
@@ -163,6 +190,7 @@ services:
       DB_PASSWORD: postgres
       REDIS_HOST: redis-service
       KAFKA_HOST: kafka
+      ZIPKIN_HOST: zipkin
     restart: unless-stopped
 
   payment-service:
@@ -189,6 +217,7 @@ services:
       KAFKA_HOST: kafka
       STRIPE_API_KEY: ${STRIPE_API_KEY:-sk_test_51O4nq6JasULoPDKqIHl2vL6vmmYhcNxXTVLpgQOkj7nZluIRtO36qbylQeHtAqV09CeHgZeacGTw20y6M5tdlIyx00hfdmO8Ry}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-whsec_7df692974e96a694944751bcabfc16ffd0e19d504f9803f3eae1ced2e2989c10}
+      ZIPKIN_HOST: zipkin
     restart: unless-stopped
 
   notification-service:
@@ -217,6 +246,7 @@ services:
       REDIS_HOST: redis-service
       MAIL_USERNAME: ${MAIL_USERNAME:-nghiemducnam0312@gmail.com}
       MAIL_PASSWORD: ${MAIL_PASSWORD:-sdxm fmia vuzf bvmq}
+      ZIPKIN_HOST: zipkin
     restart: unless-stopped
 
   cinema-frontend:
@@ -260,6 +290,7 @@ services:
     depends_on:
       - prometheus
       - loki
+      - zipkin
     restart: unless-stopped
 
   loki:

@@ -22,7 +22,7 @@ Enterprise-grade cinema ticket booking system built on Spring Boot 3.4.3 microse
 ### Option 1: Docker Compose (Recommended)
 ```bash
 docker-compose up --build
-# Starts: PostgreSQL, Kafka, Redis, Prometheus, Grafana, Loki, all 8 services
+# Starts: PostgreSQL, Kafka, Redis, Prometheus, Grafana, Loki, Zipkin, all 8 services
 ```
 
 ### Option 2: Local Setup
@@ -53,6 +53,7 @@ mvn -pl notification-service spring-boot:run    # port 8085
 | booking-service | 8083 | Seat reservation | Redis locking, lifecycle states, notification publishing |
 | payment-service | 8084 | Payment processing | Stripe, webhook verification, payment notifications |
 | notification-service | 8085 | Real-time notifications | SSE streaming, Kafka consumer, email (SMTP), PostgreSQL persistence |
+| zipkin | 9411 | Distributed tracing | Trace visualization, span analysis |
 | cinema-frontend | 4200→80 | Web UI | Angular 18, Material, Stripe.js, real-time notification bell |
 
 ## API Documentation
@@ -77,9 +78,11 @@ See [docs/api-documentation.md](./docs/api-documentation.md) for full endpoint r
 
 **Payments:** Stripe (idempotency, webhook verification)
 
-**Monitoring:** Prometheus (9090), Grafana (3000), Loki 3.0 (3100)
+**Monitoring:** Prometheus (9090), Grafana (3000), Loki 3.0 (3100), Zipkin (9411)
 
 **Frontend:** Angular 18, TypeScript 5.5, Material 18, Stripe.js 8.9
+
+**Distributed Tracing:** Micrometer Tracing (OpenTelemetry bridge) + Zipkin exporter
 
 ## Database Schema
 
