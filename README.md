@@ -9,7 +9,7 @@ Enterprise-grade cinema ticket booking system built on Spring Boot 3.4.3 microse
 **11 Maven modules:**
 - 6 Business Services (auth, movie, booking, payment, notification, audit)
 - 3 Infrastructure Services (eureka-server, config-server, api-gateway)
-- 2 Shared Libraries (jwt-auth-autoconfigure, kafka-events)
+- 2 Shared Libraries (jwt-auth-autoconfigure, kafka-events with @Auditable support)
 - 1 Frontend (Angular 18)
 
 ## Quick Start

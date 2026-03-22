@@ -15,6 +15,7 @@ All services export interactive OpenAPI 3.0 documentation via SpringDoc OpenAPI 
 | movie-service | http://localhost:8082/swagger-ui.html | /v3/api-docs | 8082 |
 | booking-service | http://localhost:8083/swagger-ui.html | /v3/api-docs | 8083 |
 | payment-service | http://localhost:8084/swagger-ui.html | /v3/api-docs | 8084 |
+| audit-service | http://localhost:8086/swagger-ui.html | /v3/api-docs | 8086 |
 
 ## Configuration Architecture
 
@@ -154,6 +155,8 @@ The API Gateway (:8080) aggregates OpenAPI docs from all downstream services:
 - movie-service routes: /api/movies/**
 - booking-service routes: /api/bookings/**
 - payment-service routes: /api/payments/**
+- notification-service routes: /api/notifications/**
+- audit-service routes: /api/audit/** (admin-only)
 
 ## Service-Specific Documentation
 
@@ -353,6 +356,68 @@ openapi-generator-cli generate \
   -g java \
   -o ./java-client
 ```
+
+### audit-service (/api/audit)
+
+**Audit Log Management (Admin-Only):**
+
+| Endpoint | Auth | Method | Description |
+|----------|------|--------|-------------|
+| /api/audit/logs | ADMIN | GET | List audit logs (paginated, filtered) |
+| /api/audit/logs/{id} | ADMIN | GET | Retrieve single audit log entry |
+
+**GET /api/audit/logs Query Parameters:**
+- `page` (default: 0) - Pagination page number
+- `size` (default: 20, max: 100) - Results per page
+- `userId` (optional) - Filter by user ID
+- `action` (optional) - Filter by audit action [LOGIN, LOGOUT, REGISTER, CHANGE_PASSWORD, CREATE_MOVIE, UPDATE_MOVIE, DELETE_MOVIE, CREATE_SHOWTIME, UPDATE_SHOWTIME, RESERVE_BOOKING, CANCEL_BOOKING, CREATE_PAYMENT]
+- `entityType` (optional) - Filter by entity type (e.g., USER, MOVIE, BOOKING)
+- `startDate` (optional) - Filter from date (ISO 8601: yyyy-MM-dd)
+- `endDate` (optional) - Filter to date (ISO 8601: yyyy-MM-dd)
+
+**Response Format:**
+```json
+{
+  "content": [
+    {
+      "id": 1,
+      "eventId": "550e8400-e29b-41d4-a716-446655440000",
+      "userId": "user123",
+      "userIp": "192.168.1.1",
+      "action": "LOGIN",
+      "entityType": "USER",
+      "entityId": "user123",
+      "beforeState": null,
+      "afterState": null,
+      "sourceService": "auth-service",
+      "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+      "requestPath": "/api/auth/login",
+      "createdAt": "2026-03-22T10:30:45Z"
+    }
+  ],
+  "pageable": {
+    "pageNumber": 0,
+    "pageSize": 20,
+    "totalElements": 1500,
+    "totalPages": 75
+  }
+}
+```
+
+**Response Codes:**
+- 200 OK: Audit logs retrieved successfully
+- 400 Bad Request: Invalid query parameters or date format
+- 401 Unauthorized: Missing or invalid Bearer token
+- 403 Forbidden: User lacks ADMIN role
+- 500 Internal Error: Server exception
+
+**Notes:**
+- All endpoints require `@PreAuthorize("hasRole('ADMIN')")`
+- Results sorted by `createdAt DESC` (newest first)
+- `beforeState` is NULL in v1 (reserved for Envers integration v2)
+- `afterState` contains JSON serialized entity state post-change
+- LOGIN action omits `afterState` to prevent JWT token leakage
+- `eventId` is globally unique; prevents duplicate audits on Kafka retries
 
 ### Swagger Editor
 

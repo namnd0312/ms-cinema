@@ -251,6 +251,39 @@ public class UserServiceImpl {
 }
 ```
 
+**Audit Logging Pattern (After-Commit Event Publishing)**
+```java
+// ✓ Good: Publish audit events after transaction commit
+@Service
+@RequiredArgsConstructor
+public class UserServiceImpl {
+    private final ApplicationEventPublisher eventPublisher;
+    private final UserRepository userRepository;
+
+    @Transactional
+    @Auditable(action = "CREATE_USER")
+    public User createUser(UserDto dto) {
+        User user = new User(dto);
+        userRepository.save(user);
+        // Event published AFTER commit, not before
+        return user;
+    }
+}
+
+// Listener captures event after transaction commit
+@Component
+@RequiredArgsConstructor
+public class AuditAfterCommitListener {
+    private final AuditEventPublisher auditPublisher;
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onAuditEvent(AuditSpringEvent event) {
+        // Send to Kafka only after DB commit succeeds
+        auditPublisher.publishAuditEvent(event.getAuditEvent());
+    }
+}
+```
+
 **Exception Handling**
 - Catch specific exceptions, avoid generic Exception
 - Log at appropriate level (error vs warn)

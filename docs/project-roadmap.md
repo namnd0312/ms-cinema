@@ -37,7 +37,7 @@ MS Cinema is a comprehensive cinema ticket booking platform built on Spring Boot
 **Focus:** Multi-module architecture with service discovery & event streaming
 
 **Completed Features:**
-- ✓ 10-module Maven structure (5 business services, 3 infrastructure, 2 shared libs, 1 frontend)
+- ✓ 11-module Maven structure (6 business services, 3 infrastructure, 2 shared libs, 1 frontend)
 - ✓ Spring Cloud Eureka service discovery (:8761)
 - ✓ Spring Cloud Config Server (:8888, classpath:/config-repo/)
 - ✓ Spring Cloud Gateway MVC (:8080, OpenAPI aggregation)
@@ -55,7 +55,7 @@ MS Cinema is a comprehensive cinema ticket booking platform built on Spring Boot
 - ✓ Prometheus (:9090, 15s scrape) + Grafana (:3000, 2 dashboards) + Loki (:3100)
 
 **Success Metrics:**
-- 10 services + infrastructure successfully deployed via docker-compose
+- 11 services + infrastructure successfully deployed via docker-compose
 - Cross-service JWT validation < 50ms
 - Booking-to-payment event latency < 2s (p95)
 - All endpoints documented in OpenAPI (0 manual docs needed)
@@ -108,6 +108,28 @@ MS Cinema is a comprehensive cinema ticket booking platform built on Spring Boot
 - ✓ Integration: "Change Password" button on ProfileComponent
 - ✓ DTOs: ChangePasswordRequest, ChangePasswordResponse
 - ✓ SecurityConfig updated to require authentication for POST /api/auth/change-password
+
+**Completed Features (Centralized Audit Logging - COMPLETE ✓ March 22, 2026):**
+- ✓ audit-service (port 8086) - Kafka consumer for audit-events topic
+- ✓ AuditEvent record in kafka-events library with AuditAction enum
+- ✓ @Auditable annotation on auth-service (login, register, logout, change-password)
+- ✓ @Auditable annotation on movie-service (create/update/delete movie, create/update showtime)
+- ✓ @Auditable annotation on booking-service (reserve, cancelBooking)
+- ✓ @Auditable annotation on payment-service (createPaymentIntent)
+- ✓ AuditAspect (AOP) for method interception and event capture
+- ✓ AuditEntityListener (JPA lifecycle hooks) for entity-level audit
+- ✓ AuditEventPublisher with @TransactionalEventListener(AFTER_COMMIT, fallbackExecution=true)
+- ✓ AuditAutoConfiguration (@ConditionalOnClass) for optional audit beans
+- ✓ AdminAuditLogController (GET /api/audit/logs with filtering, GET /api/audit/logs/{id})
+- ✓ Audit API: filter by userId, action, entityType, dateRange (paginated, 20/page max 100)
+- ✓ PostgreSQL auditdb with audit_logs table (eventId UNIQUE, userId, action ENUM, entityType, afterState JSON, 90-day retention)
+- ✓ Kafka topic: audit-events (3 partitions, 90-day retention, DLT)
+- ✓ Idempotent consumer: eventId UNIQUE constraint + DataIntegrityViolationException catch
+- ✓ @JsonIgnore on User.password for API security
+- ✓ api-gateway route /api/audit/** → audit-service
+- ✓ Requires ADMIN role (@PreAuthorize("hasRole('ADMIN')"))
+- ✓ CONFIG: config-server/config-repo/audit-service.yml
+- ✓ DOCKER: audit-service Dockerfile, docker-compose.yml service definition, init-databases.sql auditdb creation
 
 **Planned Features:**
 

@@ -14,21 +14,22 @@ ms-cinema/ (root pom: packaging=pom)
 ├── Infrastructure (3 modules)
 │   ├── eureka-server (:8761) - Service registry
 │   ├── config-server (:8888) - Centralized config
-│   └── api-gateway (:8080) - Single entry point
+│   └── api-gateway (:8080) - Single entry point, OpenAPI aggregation, /api/audit/** route
 ├── Business Services (6 modules)
-│   ├── auth-service (:8081) - JWT auth, user management
-│   ├── movie-service (:8082) - Movies, theaters, showtimes
-│   ├── booking-service (:8083) - Seat reservation, Feign → movie-service
-│   ├── payment-service (:8084) - Stripe payments, webhooks
-│   ├── notification-service (:8085) - Kafka consumer, email (SMTP)
-│   └── audit-service (:8086) - Audit event consumer, admin API
+│   ├── auth-service (:8081) - JWT auth, user management, @Auditable integration
+│   ├── movie-service (:8082) - Movies, theaters, showtimes, @Auditable on CRUD operations
+│   ├── booking-service (:8083) - Seat reservation, Feign → movie-service, @Auditable
+│   ├── payment-service (:8084) - Stripe payments, webhooks, @Auditable on payments
+│   ├── notification-service (:8085) - Kafka consumer, email (SMTP), SSE real-time
+│   └── audit-service (:8086) - Kafka consumer for audit-events, admin API with filtering
 ├── Shared Libraries (2 modules)
-│   ├── kafka-events - Event domain models
+│   ├── kafka-events - Event domain models, AuditEvent record, AuditAction enum, audit/ package
 │   └── jwt-auth-autoconfigure - Reusable JWT validator
 ├── Frontend (1 module)
 │   └── cinema-frontend (:4200→80) - Angular 18
 └── Infrastructure Config
-    ├── docker-compose.yml - PostgreSQL, Kafka, Redis, Prometheus, Grafana, Loki
+    ├── docker-compose.yml - PostgreSQL (6 DBs), Kafka, Redis, monitoring stack
+    ├── config-server/config-repo/ - audit-service.yml config
     ├── monitoring/ - Prometheus.yml, Grafana dashboards, Loki config
     └── docs/ - Documentation files
 ```
@@ -69,10 +70,15 @@ src/main/java/com/namnd/cinema/
 - **AccountLockServiceImpl** (~60 lines): 5-attempt lockout, auto-unlock after 15 minutes
 - **OAuth2UserLinkingService** (~100 lines): Finds/creates users from OAuth2 provider data, auto-links by email if verified, handles race conditions
 
+**Audit Integration:**
+- AuthController: @Auditable on login, register, logout, change-password methods
+- Audit actions: LOGIN, REGISTER, LOGOUT, CHANGE_PASSWORD
+- UserService: @Auditable marks user modification operations
+
 **API Endpoints:** See README.md API Reference section
 
 **Database Schema:**
-- users (id, username, email UNIQUE, password [nullable for OAuth-only], fullName, active, failedAttempts, lockTime)
+- users (id, username, email UNIQUE, password [nullable for OAuth-only], fullName, active, failedAttempts, lockTime; @JsonIgnore added to password field for API security)
 - roles (id, name)
 - user_roles (user_id FK, role_id FK)
 - refresh_tokens (id, token UNIQUE, expiryDate, user_id FK)
@@ -127,6 +133,11 @@ src/main/java/com/namnd/cinema/
 - MovieCommentService - Create, list (paginated), update, soft-delete
 - CommentReactionService - Toggle like/dislike, remove reaction
 
+**Audit Integration:**
+- MovieController: @Auditable on create, update, delete methods (admin-only)
+- ShowtimeController: @Auditable on create, update methods (admin-only)
+- Audit actions: CREATE_MOVIE, UPDATE_MOVIE, DELETE_MOVIE, CREATE_SHOWTIME, UPDATE_SHOWTIME
+
 **Repositories (Custom Queries):**
 - MovieRatingRepository - findAverageRatingByMovieId(), countByMovieId()
 - MovieCommentRepository - findByMovieIdAndStatusActive (custom @Query)
@@ -163,6 +174,10 @@ src/main/java/com/namnd/cinema/
 **Schedulers:**
 - BookingExpiryScheduler (60s): Finds PENDING bookings past expiresAt, transitions EXPIRED, releases Redis locks
 
+**Audit Integration:**
+- BookingController: @Auditable on reserve, cancelBooking methods
+- Audit actions: RESERVE_BOOKING, CANCEL_BOOKING
+
 **Redis Lock Key Pattern:** `seat:lock:{showtimeId}:{seatId}`
 **Lock TTL:** 5 minutes (configurable)
 
@@ -187,6 +202,10 @@ src/main/java/com/namnd/cinema/
 - Publishes PaymentCompletedEvent/PaymentFailedEvent after DB commit (TransactionalEventListener)
 
 **Kafka Events Published:** PaymentCompletedEvent, PaymentFailedEvent → topic: payment-events
+
+**Audit Integration:**
+- PaymentController: @Auditable on createPaymentIntent method
+- Audit actions: CREATE_PAYMENT
 
 ## notification-service (Port 8085)
 
@@ -247,10 +266,11 @@ src/main/java/com/namnd/cinema/
 
 ## kafka-events (Shared Library)
 
-**Purpose:** Shared event domain models for all services
+**Purpose:** Shared event domain models for all services (business events + audit events)
 
 **Enums:**
 - `NotificationType` [PAYMENT_SUCCESS, PAYMENT_FAILED, ADMIN_BROADCAST, SYSTEM]
+- `AuditAction` [LOGIN, LOGOUT, REGISTER, CHANGE_PASSWORD, CREATE_MOVIE, UPDATE_MOVIE, DELETE_MOVIE, CREATE_SHOWTIME, UPDATE_SHOWTIME, RESERVE_BOOKING, CANCEL_BOOKING, CREATE_PAYMENT]
 
 **Records (Java Records):**
 - `PaymentCompletedEvent` (bookingId, amount, status)
@@ -260,6 +280,7 @@ src/main/java/com/namnd/cinema/
 - `ShowtimeCreatedEvent` (showtimeId, movieId, theaterId, startTime)
 - `NotificationRequestedEvent` (recipientEmail, subject, body, eventType)
 - `InAppNotificationEvent` (userId, title, message, notificationType: NotificationType)
+- `AuditEvent` (userId, userIp, action: AuditAction, entityType, entityId, beforeState, afterState, sourceService, traceId, requestPath)
 
 **EventEnvelope Wrapper:**
 ```java
@@ -273,22 +294,33 @@ EventEnvelope<T> {
 }
 ```
 
-**Kafka Topics Configuration:**
-- movie-events (partition 1, replication 3)
-- payment-events (partition 1, replication 3)
-- notification-events (partition 1, replication 3)
-- notification.in_app (partition 1, replication 3, broadcast to all SSE connections)
+**Audit Support Package (com.namnd.cinema.audit/):**
+- `@Auditable` annotation: Method-level marker for audit logging
+- `AuditAspect` (AOP): Intercepts @Auditable methods, captures userId/action/entityType
+- `AuditEntityListener` (JPA): Post-persist/update/remove lifecycle hooks for entity audit
+- `AuditEventPublisher`: Publishes AuditEvent to Kafka (calls KafkaTemplate.send)
+- `AuditAfterCommitListener`: @TransactionalEventListener(AFTER_COMMIT, fallbackExecution=true) pattern
+- `AuditAutoConfiguration`: @ConditionalOnClass(KafkaTemplate) enables audit beans
+- `AuditBeanProvider`: Utility for retrieving userId from principal (email-based)
+- `AuditHttpContext`: Thread-local storage for request context (userIp, requestPath)
 
-**Error Handling (Docker Compose Kafka Config):**
-```
-num.network.threads: 8
-offsets.topic.replication.factor: 3
-transaction.state.log.replication.factor: 3
-spring.kafka.producer.retries: 3
-spring.kafka.producer.properties.linger.ms: 10
-spring.kafka.consumer.max.poll.records: 100
-spring.kafka.listener.error-handler: org.springframework.kafka.listener.DefaultErrorHandler (3 retries, exponential backoff 1s-4s-10s)
-```
+**Optional Dependencies (kafka-events pom.xml):**
+- spring-boot-starter-aop (for @Auditable aspect)
+- spring-kafka (for KafkaTemplate)
+- spring-boot-starter-data-jpa (for entity lifecycle)
+- spring-boot-starter-security (for principal extraction)
+- micrometer-tracing-core (for traceId access)
+
+**Kafka Topics Configuration:**
+- movie-events (3 partitions, replication 3, 7-day retention)
+- payment-events (3 partitions, replication 3, 7-day retention)
+- notification-events (3 partitions, replication 3, 7-day retention)
+- notification.in_app (3 partitions, replication 3, 7-day retention, broadcast to all SSE instances)
+- audit-events (3 partitions, replication 3, 90-day retention)
+- audit-events.DLT (Dead Letter Topic for failed audit messages)
+
+**Constants:**
+- `AUDIT_EVENTS` = "audit-events" (topic name)
 
 ## jwt-auth-autoconfigure (Shared Library)
 
@@ -580,33 +612,41 @@ docker build -t movie-service ./movie-service
 
 ## audit-service (Port 8086)
 
-**Key Features:** Centralized audit logging via Kafka consumer, admin API with filtering, PostgreSQL persistence
+**Key Features:** Centralized audit logging via Kafka consumer, admin API with filtering, PostgreSQL persistence, idempotent event processing, 90-day retention
 
 **Controllers:**
 - AdminAuditLogController - GET /api/audit/logs (paginated, filtered), GET /api/audit/logs/{id}
+  - Filters: userId, action [ENUM], entityType, startDate, endDate
+  - Pagination: 20/page (max 100), sorted createdAt DESC
+  - Requires @PreAuthorize("hasRole('ADMIN')")
 
 **Models:**
-- AuditLog (eventId UNIQUE, userId, userIp, action [ENUM], entityType, entityId, beforeState, afterState, sourceService, traceId, requestPath, createdAt)
+- AuditLog JPA entity: id PK, eventId UNIQUE, userId, userIp, action [ENUM], entityType, entityId, beforeState, afterState, sourceService, traceId, requestPath, createdAt
+  - afterState: JSON of entity state post-change
+  - beforeState: NULL in v1 (reserved for Envers v2)
+  - LOGIN action skips afterState to prevent JWT token leakage
 
 **Services:**
-- AuditEventConsumer: Kafka listener for audit-events topic, persists to PostgreSQL
-- AuditLogRepository: Custom queries with Specification pattern for filtering (userId, action, entityType, dateRange)
+- AuditEventConsumer (Kafka listener): Converts EventEnvelope<AuditEvent> to AuditLog via ObjectMapper.convertValue()
+- AuditLogRepository: Specification pattern for dynamic filtering (userId, action, entityType, dateRange)
 
 **Kafka Consumer:**
-- Topic: audit-events (AuditEvent records from @Auditable-annotated services)
+- Topic: audit-events (3 partitions, 90-day retention)
 - Consumer group: audit-service
-- Error handling: 3 retries, exponential backoff (1s→2s→4s capped 10s), DLT for failures
-
-**REST API:**
-- GET /api/audit/logs?userId={id}&action={action}&entityType={type}&startDate={date}&endDate={date} (paginated, 20/page max 100)
-- GET /api/audit/logs/{id} (retrieve single audit log entry)
-- Requires ADMIN role (@PreAuthorize)
+- Message format: EventEnvelope<AuditEvent>
+- Dedup: eventId UNIQUE constraint prevents duplicates on Kafka retries
+- Error handling: 3 retries (1s→2s→4s backoff), DLT (audit-events.DLT) for failures
 
 **Database (auditdb):**
-- audit_logs table (id PK, eventId UNIQUE, userId, userIp, action, entityType, entityId, beforeState, afterState, sourceService, traceId, requestPath, createdAt)
-- Indexes: (user_id), (action), (entity_type), (created_at) for query performance
+- audit_logs table (id PK, eventId UNIQUE, userId FK, userIp, action ENUM, entityType, entityId, beforeState TEXT, afterState TEXT, sourceService VARCHAR, traceId VARCHAR, requestPath TEXT, createdAt TIMESTAMP)
+- Indexes: (user_id), (action), (entity_type), (created_at) for efficient filtering
 
-**Shared Resources:**
-- PostgreSQL cluster (all databases on same instance)
-- Redis (all services share token blacklist, locks, notifications)
-- Kafka (all topics, configurable partitions/replicas)
+**Integration Points:**
+- All @Auditable-annotated methods (auth-service login/register/logout/change-password, movie-service CRUD, booking-service reserve/cancel, payment-service createPaymentIntent)
+- After-commit pattern: Spring @TransactionalEventListener(AFTER_COMMIT, fallbackExecution=true) publishes to Kafka
+- userId extraction: Reflection-based email() from JwtAuthenticatedUser principal
+
+**Configuration:**
+- application.yml: kafka.brokers, audit.retention-days=90
+- Dockerfile: Maven build, Spring Boot jar, port 8086
+- docker-compose.yml: Spring profile, Kafka topic auto-creation, auditdb creation (init-databases.sql)

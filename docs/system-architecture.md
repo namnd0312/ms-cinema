@@ -75,12 +75,13 @@ Infrastructure:
   - `/api/payments/**` → payment-service
   - `/api/notifications/**` → notification-service (SSE stream, REST CRUD, broadcast)
   - `/api/notifications/stream` → notification-service (SSE endpoint, **ContentCachingResponseWrapper skipped to prevent thread exhaustion**)
+  - `/api/audit/**` → audit-service (admin-only audit log API, requires ADMIN role)
 - Aggregates OpenAPI documentation: `/v3/api-docs`
 - Swagger UI: `/swagger-ui.html`
 - HttpLoggingFilter: Logs requests with X-Correlation-ID, skips response caching for SSE paths
 - Actuator endpoints (internal only, not exposed via gateway)
 
-### Business Services (5 modules)
+### Business Services (6 modules)
 
 **auth-service (:8081)** - Authentication & user management
 - Controllers: AuthController, TokenValidationController
@@ -166,23 +167,28 @@ Infrastructure:
 - **Fail-Open:** Redis unavailable doesn't block email send or SSE emit; dedup is optional
 
 **audit-service (:8086)** - Centralized audit logging
-- **Purpose:** Consumes audit events from business services, persists immutable audit log, exposes admin API
+- **Purpose:** Consumes audit events from business services, persists immutable audit log, exposes admin API with filtering
 - **Kafka Listener:**
-  - Topic: audit-events (AuditEvent records from @Auditable-annotated service methods)
+  - Topic: audit-events (3 partitions, 90-day retention, EventEnvelope<AuditEvent>)
   - Consumer group: audit-service
-  - Dedup: eventId (Kafka retries won't create duplicate rows)
+  - Dedup: eventId UNIQUE constraint prevents duplicates on Kafka retries
+  - Processing: ObjectMapper.convertValue() for generic payload deserialization
 - **REST API:**
   - GET /api/audit/logs (paginated, sorted createdAt DESC, max 100 per page)
-    - Filter params: userId, action [ENUM], entityType, startDate, endDate
+    - Filter params: userId, action [ENUM: LOGIN/LOGOUT/REGISTER/CHANGE_PASSWORD/CREATE_MOVIE/UPDATE_MOVIE/DELETE_MOVIE/CREATE_SHOWTIME/UPDATE_SHOWTIME/RESERVE_BOOKING/CANCEL_BOOKING/CREATE_PAYMENT], entityType, startDate, endDate
   - GET /api/audit/logs/{id} (retrieve single audit log entry)
   - Requires @PreAuthorize("hasRole('ADMIN')")
-- **Models:** AuditLog JPA entity (id, eventId UNIQUE, userId, userIp, action, entityType, entityId, beforeState, afterState, sourceService, traceId, requestPath, createdAt)
+- **Models:** AuditLog JPA entity (id, eventId UNIQUE, userId, userIp, action ENUM, entityType, entityId, beforeState TEXT, afterState TEXT, sourceService, traceId, requestPath, createdAt)
+  - afterState: JSON serialized state post-change (v1 implementation)
+  - beforeState: NULL in v1 (reserved for Envers integration in v2)
+  - LOGIN afterState skipped to prevent JWT token leakage
 - **Repositories:** AuditLogRepository with Specification pattern for dynamic filtering
 - **Database (auditdb):** audit_logs table
-  - Indexes: (user_id), (action), (entity_type), (created_at) for query performance
+  - Indexes: (user_id), (action), (entity_type), (created_at) for efficient filtering
+  - 90-day retention policy (configurable via audit.retention-days)
 - **Error Handling:**
-  - Kafka: 3 retries, exponential backoff (1s→2s→4s capped 10s), DLT for failures
-  - Dedup: eventId UNIQUE constraint prevents duplicates on retry
+  - Kafka: 3 retries, exponential backoff (1s→2s→4s capped 10s), DLT (audit-events.DLT) for failures
+  - Dedup: eventId UNIQUE constraint + DataIntegrityViolationException catch prevents duplicate inserts
 
 ### Shared Libraries (2 modules)
 
@@ -193,10 +199,14 @@ Infrastructure:
 - JwtAuthenticationFilter: Extracts token, validates, sets SecurityContext
 - Usage: Downstream services add this dependency, configure jwt.auth.secret from config-server, auto-enable via SecurityFilterChain
 
-**kafka-events** - Shared domain event models
+**kafka-events** - Shared domain event models & audit infrastructure
 - EventEnvelope<T>: Wrapper (eventId UUID, eventType, source service, correlationId, timestamp, payload)
-- Event Classes: PaymentCompletedEvent, PaymentFailedEvent, BookingCreatedEvent, MovieCreatedEvent, ShowtimeCreatedEvent, NotificationRequestedEvent
-- Topics: movie-events, payment-events, notification-events (configured in docker-compose.yml)
+- Event Classes: PaymentCompletedEvent, PaymentFailedEvent, BookingCreatedEvent, MovieCreatedEvent, ShowtimeCreatedEvent, NotificationRequestedEvent, AuditEvent
+- AuditAction Enum: LOGIN, LOGOUT, REGISTER, CHANGE_PASSWORD, CREATE_MOVIE, UPDATE_MOVIE, DELETE_MOVIE, CREATE_SHOWTIME, UPDATE_SHOWTIME, RESERVE_BOOKING, CANCEL_BOOKING, CREATE_PAYMENT
+- Audit Infrastructure: @Auditable annotation, AuditAspect (AOP), AuditEntityListener (JPA), AuditEventPublisher, AuditAfterCommitListener (@TransactionalEventListener)
+- Auto-Configuration: AuditAutoConfiguration (@ConditionalOnClass(KafkaTemplate)), AuditBeanProvider, AuditHttpContext
+- Optional dependencies: spring-boot-starter-aop, spring-kafka, spring-boot-starter-data-jpa, spring-boot-starter-security, micrometer-tracing-core
+- Topics: movie-events, payment-events, notification-events, notification.in_app, audit-events (all configured in docker-compose.yml)
 
 ### Frontend (1 module)
 
@@ -383,6 +393,50 @@ cinema-frontend: Real-Time SSE Connection
          └─ Badge updates: GET /api/notifications/unread-count
 ```
 
+### Audit Logging Flow (@Auditable AOP + @TransactionalEventListener)
+```
+SERVICE: @Auditable-annotated method (auth/movie/booking/payment)
+      ├─ AuditAspect intercepts before method execution
+      ├─ Extract userId from JwtAuthenticatedUser principal (reflection-based email())
+      ├─ Extract userIp from AuditHttpContext (request IP)
+      ├─ Extract traceId from Micrometer tracing context
+      ├─ Execute business logic (create/update/delete entity)
+      ├─ Capture afterState: ObjectMapper to JSON
+      ├─ Build AuditEvent: userId, action [ENUM], entityType, entityId, afterState, sourceService, traceId
+      ├─ Store AuditSpringEvent in ApplicationEventPublisher
+      └─ Return business result
+
+SPRING TRANSACTION COMMIT (after-commit pattern):
+      └─► @TransactionalEventListener(AFTER_COMMIT, fallbackExecution=true)
+          ├─ AuditAfterCommitListener.onAuditSpringEvent()
+          ├─ AuditEventPublisher.publishAuditEvent()
+          └─ KafkaTemplate.send("audit-events", EventEnvelope<AuditEvent>)
+
+audit-service: Kafka Consumer (audit-events topic)
+      ├─ KafkaListener.handleAuditEvent(EventEnvelope<AuditEvent>)
+      │  ├─ ObjectMapper.convertValue() payload to AuditEvent
+      │  ├─ Build AuditLog entity
+      │  ├─ eventId dedup: UNIQUE constraint prevents duplicates
+      │  ├─ Save to auditdb.audit_logs
+      │  └─ Commit Kafka offset
+      │
+      └─ Error Handling: If exception (e.g., DataIntegrityViolationException on duplicate)
+         └─ Kafka error handler
+            ├─ Catch DataIntegrityViolationException → log (duplicate, skip)
+            ├─ 1st retry: 1s delay
+            ├─ 2nd retry: 2s delay
+            ├─ 3rd retry: 4s delay
+            └─ Failure: Send to DLT (audit-events.DLT)
+
+ADMIN: Query audit logs
+      └─► GET /api/audit/logs?userId={id}&action={action}&entityType={type}&startDate={date}&endDate={date}
+          └─► audit-service AdminAuditLogController
+              ├─ Build Specification from filter params
+              ├─ Query auditdb with indexes (user_id, action, entity_type, created_at)
+              ├─ Pagination: 20/page (max 100)
+              └─ Return Page<AuditLogResponse> (sorted createdAt DESC)
+```
+
 ### Audit Logging Flow (@Auditable AOP)
 ```
 SERVICE: @Auditable-annotated method (auth, movie, booking, payment)
@@ -419,12 +473,12 @@ ADMIN: Query audit logs
 ## Data Persistence
 
 **Per-Service Databases (PostgreSQL 16):**
-- auth-service: testdb (9 tables: users, roles, user_roles, refresh_tokens, password_reset_tokens, activation_tokens, blacklisted_tokens, password_history, user_oauth_providers)
+- auth-service: testdb (9 tables: users [with @JsonIgnore on password], roles, user_roles, refresh_tokens, password_reset_tokens, activation_tokens, blacklisted_tokens, password_history, user_oauth_providers)
 - movie-service: moviedb (7 tables: movies, theaters, seats, showtimes, movie_ratings, movie_comments, comment_reactions)
 - booking-service: bookingdb (2 tables: bookings, booking_seats)
 - payment-service: paymentdb (1 table: payments)
-- notification-service: notificationdb (1 table: notifications with columns userId, title, message, notificationType, isRead, createdAt; indexed (userId, createdAt DESC))
-- audit-service: auditdb (1 table: audit_logs with eventId UNIQUE, userId, action, entityType, entityId, beforeState, afterState, createdAt; indexed userId, action, entityType, createdAt)
+- notification-service: notificationdb (1 table: notifications with columns userId, eventId, title, message, notificationType ENUM, isRead, createdAt; indexed (userId, createdAt DESC))
+- audit-service: auditdb (1 table: audit_logs with id PK, eventId UNIQUE, userId, userIp, action ENUM, entityType, entityId, beforeState TEXT, afterState TEXT, sourceService, traceId, requestPath, createdAt; indexed userId, action, entityType, createdAt; 90-day retention)
 
 **Shared Resources:**
 - PostgreSQL cluster (same instance, different databases)

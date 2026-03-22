@@ -8,22 +8,23 @@
 
 ## Executive Summary
 
-MS Cinema is a **10-module Spring Cloud microservices platform** for cinema ticket booking with event-driven architecture, JWT authentication, Stripe payments, and comprehensive monitoring. The system consists of infrastructure services (Eureka, Config Server, API Gateway), 5 business services, 2 shared libraries, and Angular frontend.
+MS Cinema is an **11-module Spring Cloud microservices platform** for cinema ticket booking with event-driven architecture, JWT authentication, Stripe payments, comprehensive audit logging, and observability. The system consists of infrastructure services (Eureka, Config Server, API Gateway), 6 business services, 2 shared libraries, and Angular frontend.
 
 **Key Characteristics:**
 - Single external entry point: API Gateway (port 8080)
-- **Auth-service** (port 8081): JWT auth lifecycle, email activation, account lockout (5 attempts/15min), token rotation
-- **Movie-service** (port 8082): Movies, theaters, showtimes; auto-generates seat grids (A-Z rows); star ratings (1-5), paginated comments with soft-delete, comment reactions (like/dislike)
-- **Booking-service** (port 8083): Seat reservation with Redis locking (5-min TTL), lifecycle states (PENDING→CONFIRMED/CANCELLED/EXPIRED)
-- **Payment-service** (port 8084): Stripe integration, idempotent payment intents, webhook verification
-- **Notification-service** (port 8085): Kafka consumer, SMTP email delivery, Redis dedup (24h TTL)
-- **kafka-events module:** Shared domain events (PaymentCompletedEvent, BookingCreatedEvent, etc.)
+- **Auth-service** (port 8081): JWT auth lifecycle, email activation, account lockout (5 attempts/15min), token rotation, @Auditable integration
+- **Movie-service** (port 8082): Movies, theaters, showtimes; auto-generates seat grids (A-Z rows); star ratings (1-5), paginated comments with soft-delete, comment reactions (like/dislike), @Auditable on CRUD
+- **Booking-service** (port 8083): Seat reservation with Redis locking (5-min TTL), lifecycle states (PENDING→CONFIRMED/CANCELLED/EXPIRED), @Auditable on operations
+- **Payment-service** (port 8084): Stripe integration, idempotent payment intents, webhook verification, @Auditable on payments
+- **Notification-service** (port 8085): Kafka consumer, SMTP email delivery, Redis dedup (24h TTL), real-time SSE notifications
+- **Audit-service** (port 8086): Centralized audit logging, Kafka consumer for audit-events, admin API with filtering, PostgreSQL immutable audit logs, 90-day retention
+- **kafka-events module:** Shared domain events (PaymentCompletedEvent, BookingCreatedEvent, AuditEvent), @Auditable annotation, AOP aspect, JPA listeners
 - **jwt-auth-autoconfigure:** Reusable JWT validator for all services (JJWT 0.12.6, HS512)
 - Spring Cloud Eureka for service discovery, Config Server for centralized configuration
-- **Kafka topics:** payment-events, movie-events, notification-events (3 retries, exponential backoff, DLT)
+- **Kafka topics:** payment-events, movie-events, notification-events, notification.in_app, audit-events (3 retries, exponential backoff, DLT, 90-day audit retention)
 - Redis for token blacklist, booking locks, notification dedup
-- PostgreSQL per-service (auth→testdb, movie→moviedb, booking→bookingdb, payment→paymentdb)
-- Prometheus (9090) + Grafana (3000) + Loki 3.0 (3100) observability stack
+- PostgreSQL per-service (auth→testdb, movie→moviedb, booking→bookingdb, payment→paymentdb, notification→notificationdb, audit→auditdb)
+- Prometheus (9090) + Grafana (3000) + Loki 3.0 (3100) + Zipkin (9411) observability stack
 
 ## Functional Requirements
 
