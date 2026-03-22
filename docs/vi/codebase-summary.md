@@ -2,12 +2,12 @@
 
 **Dự án:** ms-cinema
 **Ngày tạo:** Tháng 3 năm 2026
-**Kiến trúc:** 10 module Maven microservices (Spring Cloud)
+**Kiến trúc:** 11 module Maven microservices (Spring Cloud)
 **Java Version:** 21 LTS
 **Spring Boot:** 3.4.3
 **Spring Cloud:** 2024.0.1
 
-## Tổng Quan 10 Module Maven
+## Tổng Quan 11 Module Maven
 
 ```
 ms-cinema/ (root pom: packaging=pom)
@@ -15,20 +15,22 @@ ms-cinema/ (root pom: packaging=pom)
 │   ├── eureka-server (:8761) - Registry dịch vụ
 │   ├── config-server (:8888) - Cấu hình tập trung
 │   └── api-gateway (:8080) - Điểm truy cập duy nhất
-├── Dịch vụ Nghiệp vụ (5 module)
+├── Dịch vụ Nghiệp vụ (6 module)
 │   ├── auth-service (:8081) - Xác thực JWT, quản lý người dùng
 │   ├── movie-service (:8082) - Phim, rạp, suất chiếu
 │   ├── booking-service (:8083) - Đặt chỗ ghế, Feign → movie-service
 │   ├── payment-service (:8084) - Thanh toán Stripe, webhook
-│   └── notification-service (:8085) - Kafka consumer, email (SMTP)
+│   ├── notification-service (:8085) - Kafka consumer, email (SMTP), thông báo SSE
+│   └── audit-service (:8086) - Kafka consumer, ghi nhật ký kiểm toán vào auditdb
 ├── Thư viện Dùng chung (2 module)
-│   ├── kafka-events - Model sự kiện domain
+│   ├── kafka-events - Model sự kiện domain (AuditEvent, AuditAction)
 │   └── jwt-auth-autoconfigure - Bộ xác thực JWT tái sử dụng
 ├── Frontend (1 module)
 │   └── cinema-frontend (:4200→80) - Angular 18
 └── Cấu hình Hạ tầng
-    ├── docker-compose.yml - PostgreSQL, Kafka, Redis, Prometheus, Grafana, Loki
+    ├── docker-compose.yml - PostgreSQL, Kafka, Redis, Prometheus, Grafana, Loki, Zipkin
     ├── monitoring/ - Prometheus.yml, dashboard Grafana, cấu hình Loki
+    ├── init-databases.sql - Khởi tạo schema (testdb, moviedb, bookingdb, paymentdb, notificationdb, auditdb)
     └── docs/ - Tài liệu
 ```
 
@@ -244,12 +246,38 @@ src/main/java/com/namnd/cinema/
 - Redis fail-open: NotificationDeduplicationService là tùy chọn; tiếp tục nếu Redis không khả dụng
 - Sửa race condition SSE: computeIfPresent atomic trong removeEmitter để ngăn lỗi đồng thời
 
+## audit-service (Cổng 8086)
+
+**Tính năng chính:** Kafka consumer, ghi nhật ký kiểm toán vào PostgreSQL auditdb, Admin API để truy vấn nhật ký
+
+**Controller:**
+- AuditLogController - GET /api/audit/logs (lọc theo userId, action, entityType, dateRange), GET /api/audit/logs/{id}
+
+**Model:**
+- AuditLog (id, userId, action: AuditAction, entityType, entityId, beforeState JSON, afterState JSON, ipAddress, userAgent, timestamp)
+
+**Service:**
+- AuditLogService - CRUD, truy vấn với filter, lưu trữ Kafka event
+- AuditEventListener - Kafka consumer cho topic audit-events
+
+**Kafka Listener:**
+- Topic audit-events: AuditEvent → AuditLogService → PostgreSQL auditdb
+
+**Bảo mật:**
+- GET /api/audit/logs yêu cầu ROLE_ADMIN
+- GET /api/audit/logs/{id} yêu cầu ROLE_ADMIN
+
+**Schema cơ sở dữ liệu (auditdb):**
+- Bảng audit_logs: id (PK), userId (FK), action (ENUM), entityType, entityId, beforeState (JSONB), afterState (JSONB), ipAddress, userAgent, timestamp
+- Chỉ mục: (userId, timestamp DESC), (action, timestamp DESC), (entityType, entityId)
+
 ## kafka-events (Thư viện Dùng chung)
 
 **Mục đích:** Model sự kiện domain dùng chung cho tất cả dịch vụ
 
 **Enum:**
 - `NotificationType` [PAYMENT_SUCCESS, PAYMENT_FAILED, ADMIN_BROADCAST, SYSTEM]
+- `AuditAction` [LOGIN, REGISTER, LOGOUT, CREATE, UPDATE, DELETE, RESERVE, CANCEL, CONFIRM_PAYMENT, CREATE_PAYMENT_INTENT, CHANGE_PASSWORD]
 
 **Record (Java Records):**
 - `PaymentCompletedEvent` (bookingId, amount, status)
@@ -259,6 +287,7 @@ src/main/java/com/namnd/cinema/
 - `ShowtimeCreatedEvent` (showtimeId, movieId, theaterId, startTime)
 - `NotificationRequestedEvent` (recipientEmail, subject, body, eventType)
 - `InAppNotificationEvent` (userId, title, message, notificationType: NotificationType)
+- `AuditEvent` (userId, action: AuditAction, entityType, entityId, beforeState, afterState, ipAddress, userAgent, timestamp)
 
 **EventEnvelope Wrapper:**
 ```java
@@ -277,6 +306,7 @@ EventEnvelope<T> {
 - payment-events (partition 1, replication 3)
 - notification-events (partition 1, replication 3)
 - notification.in_app (partition 1, replication 3, broadcast đến tất cả kết nối SSE)
+- audit-events (partition 1, replication 3, tiêu thụ bởi audit-service)
 
 **Xử lý lỗi (Cấu hình Docker Compose Kafka):**
 ```
@@ -575,7 +605,8 @@ docker build -t movie-service ./movie-service
 - movie-service: moviedb (7 bảng: movies, theaters, seats, showtimes, movie_ratings, movie_comments, comment_reactions)
 - booking-service: bookingdb (2 bảng: bookings, booking_seats)
 - payment-service: paymentdb (1 bảng: payments)
-- notification-service: notificationdb (1 bảng: notifications với userId, eventId, notificationType, status, isRead)
+- notification-service: notificationdb (1 bảng: notifications với userId, title, message, notificationType, isRead, createdAt)
+- audit-service: auditdb (1 bảng: audit_logs với userId, action, entityType, entityId, beforeState, afterState, ipAddress, userAgent, timestamp)
 
 **Tài nguyên dùng chung:**
 - Cụm PostgreSQL (tất cả cơ sở dữ liệu trên cùng instance)

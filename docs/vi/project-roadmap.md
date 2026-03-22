@@ -80,6 +80,7 @@ MS Cinema là nền tảng đặt vé xem phim toàn diện được xây dựng
 - ✓ Form MatDialog cho thao tác tạo/sửa (HOÀN THÀNH: 13 tháng 3, 2026)
 - ✓ Điều hướng tab admin (HOÀN THÀNH: 13 tháng 3, 2026)
 - ✓ PaymentManagementComponent với GET /api/payments chỉ admin (HOÀN THÀNH: 13 tháng 3, 2026)
+- ✓ Ghi nhật ký kiểm toán tập trung (HOÀN THÀNH: 22 tháng 3, 2026)
 
 **Tính năng đã hoàn thành (Thông báo thời gian thực - HOÀN THÀNH ✓ 14 tháng 3, 2026):**
 - ✓ Thông báo thời gian thực (SSE + Kafka) - Server-Sent Events với heartbeat 30s cho giao hàng tức thì

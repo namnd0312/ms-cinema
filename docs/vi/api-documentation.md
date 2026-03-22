@@ -307,6 +307,57 @@ Response: {"count": 3}
 
 Swagger UI: http://localhost:8085/swagger-ui.html
 
+### audit-service (/api/audit)
+
+**Truy vấn Nhật Ký Kiểm Toán:**
+
+| Endpoint | Xác thực | Mô tả |
+|----------|----------|-------|
+| GET /api/audit/logs | ADMIN | Danh sách nhật ký phân trang (lọc userId, action, entityType, startDate, endDate) |
+| GET /api/audit/logs/{id} | ADMIN | Chi tiết nhật ký theo ID |
+
+**Chi tiết Query Parameters:**
+- `userId` (tùy chọn): Lọc nhật ký của người dùng cụ thể
+- `action` (tùy chọn): Lọc theo hành động (LOGIN, REGISTER, LOGOUT, CREATE, UPDATE, DELETE, RESERVE, CANCEL, CONFIRM_PAYMENT, CREATE_PAYMENT_INTENT, CHANGE_PASSWORD)
+- `entityType` (tùy chọn): Lọc theo loại thực thể (User, Movie, Booking, Payment)
+- `startDate` (tùy chọn): Lọc từ ngày (ISO format: 2026-03-22)
+- `endDate` (tùy chọn): Lọc đến ngày (ISO format: 2026-03-22)
+- `page` (mặc định 0): Trang hiện tại
+- `size` (mặc định 20): Kích thước trang
+
+**Mã phản hồi:**
+- 200 OK: Truy vấn thành công
+- 401 Unauthorized: Thiếu/hết hạn token
+- 403 Forbidden: Người dùng không có role ADMIN
+- 404 Not Found: Nhật ký không tìm thấy
+- 500 Internal Error: Lỗi server
+
+**Ví dụ Response:**
+
+GET /api/audit/logs?userId=1&action=LOGIN&page=0&size=10
+```json
+{
+  "content": [
+    {
+      "id": 1,
+      "userId": 1,
+      "action": "LOGIN",
+      "entityType": "User",
+      "entityId": 1,
+      "beforeState": null,
+      "afterState": {"email": "user@example.com", "loginTime": "2026-03-22T10:30:00Z"},
+      "ipAddress": "192.168.1.100",
+      "userAgent": "Mozilla/5.0...",
+      "timestamp": "2026-03-22T10:30:00Z"
+    }
+  ],
+  "pageable": {"pageNumber": 0, "pageSize": 10, "totalElements": 150},
+  "totalPages": 15
+}
+```
+
+Swagger UI: http://localhost:8086/swagger-ui.html
+
 ## Bảo Mật trong OpenAPI
 
 ### Xác Thực Bearer Token

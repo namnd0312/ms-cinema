@@ -6,7 +6,7 @@
 
 ## Tổng Quan Cấp Cao
 
-MS Cinema là nền tảng microservices Spring Cloud gồm 10 module dành cho đặt vé xem phim:
+MS Cinema là nền tảng microservices Spring Cloud gồm 11 module dành cho đặt vé xem phim:
 
 ```
                         CLIENT (Web/Mobile)
@@ -31,16 +31,17 @@ MS Cinema là nền tảng microservices Spring Cloud gồm 10 module dành cho 
            │  (:8082)    │        │  (:8083)     │    │  (:8084)     │
            └─────────────┘        └──────────────┘    └──────────────┘
                                         │
-                                        ▼
-                                  ┌─────────────┐
-                                  │notification │
-                                  │  (:8085)    │
-                                  └─────────────┘
+                                        ├─────────────────┐
+                                        ▼                 ▼
+                                  ┌─────────────┐  ┌──────────────┐
+                                  │notification │  │audit-service │
+                                  │  (:8085)    │  │  (:8086)     │
+                                  └─────────────┘  └──────────────┘
 
 Hạ tầng:
-- PostgreSQL (auth→testdb, movie→moviedb, booking→bookingdb, payment→paymentdb)
+- PostgreSQL (auth→testdb, movie→moviedb, booking→bookingdb, payment→paymentdb, notification→notificationdb, audit→auditdb)
 - Redis (:6379) - danh sách đen token, khóa, dedup
-- Kafka (:9092) - event streaming (3 topic: movie-events, payment-events, notification-events)
+- Kafka (:9092) - event streaming (5 topic: movie-events, payment-events, notification-events, notification.in_app, audit-events)
 - Prometheus (:9090) + Grafana (:3000) + Loki (:3100) - giám sát
 - Zipkin (:9411) - distributed tracing
 - Kafdrop (:9000) - trình duyệt Kafka topic
@@ -75,6 +76,7 @@ Hạ tầng:
   - `/api/payments/**` → payment-service
   - `/api/notifications/**` → notification-service (SSE stream, REST CRUD, broadcast)
   - `/api/notifications/stream` → notification-service (endpoint SSE, **ContentCachingResponseWrapper bỏ qua để ngăn cạn kiệt thread**)
+  - `/api/audit/**` → audit-service (truy vấn nhật ký kiểm toán, yêu cầu ADMIN)
 - Tổng hợp tài liệu OpenAPI: `/v3/api-docs`
 - Swagger UI: `/swagger-ui.html`
 - HttpLoggingFilter: Ghi log yêu cầu với X-Correlation-ID, bỏ qua cache phản hồi cho đường dẫn SSE
@@ -164,6 +166,13 @@ Hạ tầng:
   - Sửa race condition: computeIfPresent atomic trong removeEmitter ngăn lỗi sửa đổi đồng thời
   - Tối ưu broadcast: findDistinctUserIds thay vì findAll để tránh OOM trên tập dữ liệu lớn
 - **Fail-Open:** Redis không khả dụng không chặn gửi email hoặc SSE emit; dedup là tùy chọn
+
+**audit-service (:8086)** - Ghi nhật ký kiểm toán tập trung
+- Kafka Listener: Tiêu thụ AuditEvent từ topic audit-events
+- Service: Lưu trữ vào PostgreSQL auditdb (bảng audit_logs)
+- Controller: REST API GET /api/audit/logs (lọc userId, action, entityType, dateRange), GET /api/audit/logs/{id}
+- Bảo mật: Yêu cầu ROLE_ADMIN cho tất cả endpoints
+- Cơ sở dữ liệu: auditdb (1 bảng audit_logs với userId, action, entityType, entityId, beforeState JSONB, afterState JSONB, ipAddress, userAgent, timestamp)
 
 ### Thư Viện Dùng Chung (2 module)
 
@@ -367,11 +376,12 @@ cinema-frontend: Kết Nối SSE Thời Gian Thực
 ## Lưu Trữ Dữ Liệu
 
 **Cơ sở dữ liệu riêng cho từng dịch vụ (PostgreSQL 16):**
-- auth-service: testdb (8 bảng: users, roles, user_roles, refresh_tokens, password_reset_tokens, activation_tokens, blacklisted_tokens)
+- auth-service: testdb (9 bảng: users, roles, user_roles, refresh_tokens, password_reset_tokens, activation_tokens, blacklisted_tokens, password_history, user_oauth_providers)
 - movie-service: moviedb (7 bảng: movies, theaters, seats, showtimes, movie_ratings, movie_comments, comment_reactions)
 - booking-service: bookingdb (2 bảng: bookings, booking_seats)
 - payment-service: paymentdb (1 bảng: payments)
 - notification-service: notificationdb (1 bảng: notifications với các cột userId, title, message, notificationType, isRead, createdAt; index (userId, createdAt DESC))
+- audit-service: auditdb (1 bảng: audit_logs với userId, action, entityType, entityId, beforeState JSONB, afterState JSONB, ipAddress, userAgent, timestamp; index (userId, timestamp DESC), (action, timestamp DESC))
 
 **Tài nguyên dùng chung:**
 - Cụm PostgreSQL (cùng instance, cơ sở dữ liệu khác nhau)

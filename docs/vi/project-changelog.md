@@ -7,6 +7,47 @@
 
 ### [Chưa phát hành]
 
+#### Ghi Nhật Ký Kiểm Toán Tập Trung (v0.0.1) — 22 tháng 3, 2026
+- **Tính năng:** Dịch vụ audit-service độc lập với Kafka consumer, ghi nhật ký kiểm toán chi tiết vào PostgreSQL auditdb
+  - Theo dõi tất cả hành động: LOGIN, REGISTER, LOGOUT, CREATE, UPDATE, DELETE, RESERVE, CANCEL, CONFIRM_PAYMENT, CREATE_PAYMENT_INTENT, CHANGE_PASSWORD
+  - Lưu trữ: userId, action, entityType, entityId, beforeState (JSONB), afterState (JSONB), ipAddress, userAgent, timestamp
+  - Admin API: GET /api/audit/logs (lọc userId, action, entityType, dateRange), GET /api/audit/logs/{id}
+- **Triển khai Backend:**
+  - Module audit-service (cổng 8086) với controller AuditLogController
+  - Service AuditLogService (CRUD, truy vấn với filter), AuditEventListener (Kafka consumer)
+  - Entity JPA AuditLog với JSONB beforeState/afterState cho lưu trữ uốn dẻo
+  - Topic Kafka audit-events với listener tiêu thụ AuditEvent từ tất cả dịch vụ
+  - Bảo mật: Tất cả endpoints yêu cầu ROLE_ADMIN (@PreAuthorize("hasRole('ROLE_ADMIN')"))
+  - Chỉ mục: (userId, timestamp DESC), (action, timestamp DESC), (entityType, entityId) cho truy vấn nhanh
+- **Kafka Events:**
+  - Record AuditEvent (userId, action, entityType, entityId, beforeState, afterState, ipAddress, userAgent, timestamp)
+  - Enum AuditAction [LOGIN, REGISTER, LOGOUT, CREATE, UPDATE, DELETE, RESERVE, CANCEL, CONFIRM_PAYMENT, CREATE_PAYMENT_INTENT, CHANGE_PASSWORD]
+  - Topic audit-events: Tiêu thụ bởi audit-service
+- **AOP @Auditable:**
+  - Annotation @Auditable(action="...", entityType="...") trên controller/service methods
+  - Aspect tự động bắt các phương thức được đánh dấu, trích xuất entityId, phát AuditEvent
+  - Áp dụng trên: auth (login/register/logout/change-password), movie (CRUD), booking (reserve/cancel), payment (createPaymentIntent)
+- **Pattern After-Commit:**
+  - @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+  - Chỉ phát AuditEvent đến Kafka sau khi DB transaction commit thành công
+  - Ngăn nhật ký được ghi nếu DB rollback
+- **Schema Cơ Sở Dữ Liệu:**
+  - Bảng audit_logs: id (PK), userId (FK), action (ENUM), entityType, entityId, beforeState (JSONB), afterState (JSONB), ipAddress, userAgent, timestamp
+  - Chỉ mục: (userId, timestamp DESC), (action, timestamp DESC), (entityType, entityId)
+- **Cấu hình:**
+  - Topic audit-events trong Kafka config
+  - auth-service, movie-service, booking-service, payment-service được trang bị @Auditable annotation
+  - Gateway route /api/audit/** → audit-service
+  - Config-server profile cho audit-service
+- **Xử lý Lỗi:**
+  - Kafka: 3 lần thử lại, exponential backoff (1s→2s→4s giới hạn 10s), DLT cho thất bại
+  - Serialization JSONB: Jackson ObjectMapper cho beforeState/afterState
+- **DTOs:** AuditLogDto, AuditLogFilterRequest
+- **Kiểm Thử:**
+  - Integration tests: Luồng audit (action → AuditEvent → Kafka → audit-service → DB)
+  - Unit tests: AuditEventListener, query filter, RBAC admin-only
+  - Query tests: Lọc userId, action, entityType, dateRange
+
 #### Đăng Nhập Google OAuth2 (v0.0.1) — 16 tháng 3, 2026
 - **Tính năng:** Xác thực Google OAuth2 với Spring Security OAuth2 Client
   - Endpoint ủy quyền OAuth2: GET /oauth2/authorization/google

@@ -59,6 +59,8 @@ docker --version
 
 docker-compose --version
 # Output: Docker Compose version 1.29.0 or higher
+
+# Docker Compose phải hỗ trợ services định dạng 3.8+ cho PostgreSQL, Kafka, Zipkin, audit-service
 ```
 
 ### Mạng & Tường Lửa
@@ -122,30 +124,31 @@ createdb -U postgres testdb
 ### 3. Khởi Tạo Schema Cơ Sở Dữ Liệu
 
 ```bash
-# Phương pháp 1: Dùng Docker Compose (dễ nhất)
-docker-compose up postgres-service
+# Phương pháp 1: Dùng Docker Compose (tự động)
+# docker-compose.yml chạy init-databases.sql tự động khi khởi động PostgreSQL
+docker-compose up -d postgres
 
-# Đợi postgres khởi động (30 giây)
-# Sau đó mở terminal khác:
+# Đợi postgres khởi động (30-60 giây)
+docker-compose logs postgres | grep "database system is ready"
 
-docker exec jwt-postgres psql -U postgres -d testdb \
-  -f /docker-entrypoint-initdb.d/roles.sql
-
-# Phương pháp 2: psql thủ công
-psql -U postgres -d testdb -c "
-INSERT INTO roles (name) VALUES ('ROLE_USER');
-INSERT INTO roles (name) VALUES ('ROLE_PM');
-INSERT INTO roles (name) VALUES ('ROLE_ADMIN');
-"
+# Xác minh tất cả 6 databases được tạo
+docker exec postgres psql -U postgres -c "\l"
+# Output: testdb, moviedb, bookingdb, paymentdb, notificationdb, auditdb
 ```
 
-**Xác minh Schema:**
+**Xác minh Schema Chi Tiết:**
 ```bash
-psql -U postgres -d testdb -c "\dt"
-# Output: users, roles, user_roles tables
+# Xác minh auth-service (testdb)
+docker exec postgres psql -U postgres -d testdb -c "\dt"
+# Output: users, roles, user_roles, refresh_tokens, password_reset_tokens, activation_tokens, blacklisted_tokens, password_history, user_oauth_providers
 
-psql -U postgres -d testdb -c "SELECT * FROM roles;"
-# Output: 3 rows (ROLE_USER, ROLE_PM, ROLE_ADMIN)
+# Xác minh movie-service (moviedb)
+docker exec postgres psql -U postgres -d moviedb -c "\dt"
+# Output: movies, theaters, seats, showtimes, movie_ratings, movie_comments, comment_reactions
+
+# Xác minh audit-service (auditdb)
+docker exec postgres psql -U postgres -d auditdb -c "\dt"
+# Output: audit_logs
 ```
 
 ### 4. Build Ứng Dụng
@@ -236,12 +239,12 @@ docker images | grep auth-service
 ### 2. Chạy với Docker Compose (Khuyến nghị)
 
 ```bash
-# Khởi động tất cả dịch vụ (postgres, redis, kafka, eureka, config-server, zipkin, kafdrop, tất cả 8 dịch vụ)
+# Khởi động tất cả dịch vụ (postgres, redis, kafka, eureka, config-server, zipkin, kafdrop, tất cả 9 dịch vụ + hạ tầng)
 docker-compose up -d
 
 # Xác minh các dịch vụ đang chạy
 docker-compose ps
-# Output: Tất cả dịch vụ (auth-service, notification-service, postgres, redis, kafka, zipkin, kafdrop, v.v.) hiển thị UP
+# Output: Tất cả dịch vụ (auth-service, movie-service, booking-service, payment-service, notification-service, audit-service, postgres, redis, kafka, zipkin, kafdrop, v.v.) hiển thị UP
 
 # Xem log
 docker-compose logs -f auth-service
@@ -257,17 +260,22 @@ curl http://localhost:8080/api/auth/register
 
 **Phụ thuộc dịch vụ:**
 - auth-service: postgres, redis (token blacklist), kafka, eureka, config-server
-- notification-service: kafka, redis (event dedup), eureka, config-server
-- grafana: depends_on zipkin (cho việc cung cấp tracing datasource)
+- notification-service: postgres (notificationdb), kafka, redis (event dedup), eureka, config-server
+- audit-service: postgres (auditdb), kafka, eureka, config-server
+- grafana: depends_on prometheus, zipkin (cho việc cung cấp tracing datasource)
+- Thứ tự khởi động: postgres → redis → kafka → eureka → config-server → tất cả 9 dịch vụ
 
 ### 3. Biến Môi Trường cho Docker
 
 Tạo file `.env` ở thư mục gốc dự án:
 ```env
-# Cơ sở dữ liệu
+# Cơ sở dữ liệu (chung cho tất cả instance PostgreSQL)
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=secure_password_here
 POSTGRES_DB=testdb
+
+# Databases (sẽ được tạo bởi init-databases.sql)
+# testdb, moviedb, bookingdb, paymentdb, notificationdb, auditdb
 
 # Cấu hình JWT
 JWT_SECRET=your-secret-key-here
@@ -278,6 +286,13 @@ SERVER_PORT=8080
 
 # Ghi log
 LOG_LEVEL=DEBUG
+
+# Kafka
+KAFKA_BROKERS=kafka:9092
+
+# Zipkin (tracing)
+ZIPKIN_ENDPOINT=http://zipkin:9411/api/v2/spans
+TRACING_SAMPLING_PROBABILITY=1.0
 ```
 
 **Cập nhật docker-compose.yml** để dùng env file:

@@ -744,6 +744,120 @@ public void handlePaymentCompleted(PaymentCompletedEvent event) {
 // spring.kafka.listener.ack-mode: manual_immediate
 ```
 
+## Mẫu Ghi Nhật Ký Kiểm Toán (@Auditable)
+
+**Annotation @Auditable để tự động ghi sự kiện:**
+```java
+// Annotation: Đánh dấu phương thức cần ghi nhật ký kiểm toán
+@Target(ElementType.METHOD)
+@Retention(RetentionPolicy.RUNTIME)
+public @interface Auditable {
+    String action();                    // AuditAction: LOGIN, CREATE, UPDATE, DELETE, etc.
+    String entityType() default "";     // Loại thực thể: User, Movie, Booking, Payment
+    String entityIdParam() default "";  // Tên parameter chứa ID thực thể
+}
+
+// Sử dụng trên controller/service
+@PostMapping("/login")
+@Auditable(action = "LOGIN", entityType = "User", entityIdParam = "userId")
+public ResponseEntity<?> login(@RequestBody LoginRequest request) {
+    // ...
+}
+
+@PostMapping("/movies")
+@Auditable(action = "CREATE", entityType = "Movie")
+public ResponseEntity<?> createMovie(@RequestBody CreateMovieRequest request) {
+    // ...
+}
+
+@Transactional
+@PostMapping("/api/auth/change-password")
+@Auditable(action = "CHANGE_PASSWORD", entityType = "User")
+public ResponseEntity<?> changePassword(
+    @RequestBody ChangePasswordRequest request,
+    @AuthenticationPrincipal UserDetails user) {
+    // ...
+}
+```
+
+**After-Commit Pattern cho Kafka publish:**
+```java
+// Service: Phát sự kiện sau khi transaction commit
+@Service
+@RequiredArgsConstructor
+public class PaymentService {
+    private final ApplicationEventPublisher eventPublisher;
+    private final PaymentRepository paymentRepository;
+
+    @Transactional
+    public Payment createPaymentIntent(Long bookingId) {
+        Payment payment = paymentRepository.save(new Payment(bookingId, /* ... */));
+
+        // AOP @Auditable tự động phát event sau khi method return
+        // Hoặc phát thủ công:
+        AuditEvent event = new AuditEvent(
+            getCurrentUserId(),
+            AuditAction.CREATE_PAYMENT_INTENT,
+            "Payment",
+            payment.getId(),
+            null,  // beforeState
+            serialize(payment),  // afterState
+            getClientIpAddress(),
+            getUserAgent()
+        );
+        eventPublisher.publishEvent(event);
+
+        return payment;
+    }
+}
+
+// Listener: Tiêu thụ event sau khi transaction commit
+@Component
+@RequiredArgsConstructor
+public class AuditEventPublisher {
+    private final KafkaTemplate<String, AuditEvent> kafkaTemplate;
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    public void onAuditEvent(AuditEvent event) {
+        // Chỉ phát đến Kafka sau khi DB transaction commit thành công
+        kafkaTemplate.send("audit-events", event);
+    }
+}
+```
+
+**Annotation Aspect (AOP) để tự động bắt @Auditable:**
+```java
+@Aspect
+@Component
+public class AuditableAspect {
+    private final ApplicationEventPublisher eventPublisher;
+
+    @Around("@annotation(auditable)")
+    public Object audit(ProceedingJoinPoint joinPoint, Auditable auditable) throws Throwable {
+        Object result = joinPoint.proceed();
+
+        // Trích xuất entityId từ parameters hoặc result
+        Long entityId = extractEntityId(joinPoint, auditable.entityIdParam());
+
+        AuditEvent event = new AuditEvent(
+            getCurrentUserId(),
+            AuditAction.valueOf(auditable.action()),
+            auditable.entityType(),
+            entityId,
+            null,  // beforeState
+            serialize(result),  // afterState
+            getClientIpAddress(),
+            getUserAgent()
+        );
+
+        // Phát event (listener sẽ gửi Kafka sau commit)
+        eventPublisher.publishEvent(event);
+
+        return result;
+    }
+}
+```
+
 ## Mẫu Lịch Sử Mật Khẩu
 
 **Ngăn tái sử dụng mật khẩu:**

@@ -8,7 +8,7 @@
 
 ## Tóm Tắt
 
-MS Cinema là một **nền tảng microservices Spring Cloud gồm 10 module** dành cho đặt vé xem phim với kiến trúc hướng sự kiện, xác thực JWT, thanh toán Stripe và giám sát toàn diện. Hệ thống bao gồm các dịch vụ hạ tầng (Eureka, Config Server, API Gateway), 5 dịch vụ nghiệp vụ, 2 thư viện dùng chung và giao diện Angular.
+MS Cinema là một **nền tảng microservices Spring Cloud gồm 11 module** dành cho đặt vé xem phim với kiến trúc hướng sự kiện, xác thực JWT, thanh toán Stripe và giám sát toàn diện. Hệ thống bao gồm các dịch vụ hạ tầng (Eureka, Config Server, API Gateway), 5 dịch vụ nghiệp vụ, 2 thư viện dùng chung và giao diện Angular.
 
 **Đặc điểm chính:**
 - Điểm truy cập bên ngoài duy nhất: API Gateway (cổng 8080)
@@ -16,13 +16,14 @@ MS Cinema là một **nền tảng microservices Spring Cloud gồm 10 module** 
 - **Movie-service** (cổng 8082): Phim, rạp, suất chiếu; tự động tạo lưới ghế (hàng A-Z); đánh giá sao (1-5), bình luận phân trang với xóa mềm, phản hồi bình luận (thích/không thích)
 - **Booking-service** (cổng 8083): Đặt chỗ ghế với khóa Redis (TTL 5 phút), các trạng thái vòng đời (PENDING→CONFIRMED/CANCELLED/EXPIRED)
 - **Payment-service** (cổng 8084): Tích hợp Stripe, payment intent idempotent, xác minh webhook
-- **Notification-service** (cổng 8085): Kafka consumer, gửi email SMTP, Redis dedup (TTL 24 giờ)
+- **Notification-service** (cổng 8085): Kafka consumer, gửi email SMTP, SSE thời gian thực, Redis dedup (TTL 24 giờ)
+- **Audit-service** (cổng 8086): Kafka consumer, ghi nhật ký kiểm toán đầy đủ (login, register, logout, các thao tác CRUD), Admin API truy vấn
 - **Module kafka-events:** Các sự kiện domain dùng chung (PaymentCompletedEvent, BookingCreatedEvent, v.v.)
 - **jwt-auth-autoconfigure:** Bộ xác thực JWT tái sử dụng cho tất cả dịch vụ (JJWT 0.12.6, HS512)
 - Spring Cloud Eureka cho khám phá dịch vụ, Config Server cho cấu hình tập trung
 - **Kafka topics:** payment-events, movie-events, notification-events (3 lần thử lại, exponential backoff, DLT)
 - Redis cho danh sách đen token, khóa đặt chỗ, dedup thông báo
-- PostgreSQL riêng cho từng dịch vụ (auth→testdb, movie→moviedb, booking→bookingdb, payment→paymentdb)
+- PostgreSQL riêng cho từng dịch vụ (auth→testdb, movie→moviedb, booking→bookingdb, payment→paymentdb, notification→notificationdb, audit→auditdb)
 - Bộ giám sát Prometheus (9090) + Grafana (3000) + Loki 3.0 (3100)
 
 ## Yêu Cầu Chức Năng
