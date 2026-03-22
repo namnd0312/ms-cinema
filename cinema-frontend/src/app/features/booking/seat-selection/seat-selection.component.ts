@@ -141,23 +141,13 @@ export class SeatSelectionComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     const showtimeId = Number(this.route.snapshot.paramMap.get('showtimeId'));
     this.movieService.getShowtime(showtimeId).subscribe({
-      next: (st) => this.showtime.set(st)
-    });
-    forkJoin({
-      seats: this.movieService.getShowtimeSeats(showtimeId),
-      bookedIds: this.bookingService.getBookedSeatIds(showtimeId)
-    }).subscribe({
-      next: ({ seats, bookedIds }) => {
-        const bookedSet = new Set(bookedIds);
-        this.seats.set(seats.map(s => ({
-          ...s, status: bookedSet.has(s.id) ? 'OCCUPIED' : 'AVAILABLE'
-        })));
-        this.loadingSeats.set(false);
-        this.subscribeToSeatUpdates(showtimeId);
+      next: (st) => {
+        this.showtime.set(st);
+        this.loadSeats(showtimeId, (st as any).basePrice ?? 0);
       },
       error: () => {
         this.loadingSeats.set(false);
-        this.snackBar.open('Failed to load seats. Please try again.', 'OK', { duration: 5000 });
+        this.snackBar.open('Failed to load showtime. Please try again.', 'OK', { duration: 5000 });
       }
     });
   }
@@ -214,6 +204,26 @@ export class SeatSelectionComponent implements OnInit, OnDestroy {
   clearSuggestions(): void {
     this.suggestedGroups.set([]);
     this.suggestionNoResults.set(false);
+  }
+
+  private loadSeats(showtimeId: number, basePrice: number): void {
+    forkJoin({
+      seats: this.movieService.getShowtimeSeats(showtimeId, basePrice),
+      bookedIds: this.bookingService.getBookedSeatIds(showtimeId)
+    }).subscribe({
+      next: ({ seats, bookedIds }) => {
+        const bookedSet = new Set(bookedIds);
+        this.seats.set(seats.map(s => ({
+          ...s, status: bookedSet.has(s.id) ? 'OCCUPIED' : 'AVAILABLE'
+        })));
+        this.loadingSeats.set(false);
+        this.subscribeToSeatUpdates(showtimeId);
+      },
+      error: () => {
+        this.loadingSeats.set(false);
+        this.snackBar.open('Failed to load seats. Please try again.', 'OK', { duration: 5000 });
+      }
+    });
   }
 
   private subscribeToSeatUpdates(showtimeId: number): void {

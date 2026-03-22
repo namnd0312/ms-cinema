@@ -1,6 +1,5 @@
 package com.namnd.bookingservice.dto;
 
-import java.time.Instant;
 import java.util.List;
 
 /**
@@ -10,9 +9,9 @@ import java.util.List;
 public record SeatStatusMessage(
         List<Long> seatIds,
         String status, // LOCKED, UNLOCKED, RESERVED, RELEASED, CONFIRMED
-        Instant timestamp
+        String timestamp
 ) {
     public SeatStatusMessage(List<Long> seatIds, String status) {
-        this(seatIds, status, Instant.now());
+        this(seatIds, status, java.time.Instant.now().toString());
     }
 }

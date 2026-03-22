@@ -137,8 +137,8 @@ services:
       REDIS_HOST: redis-service
       KAFKA_HOST: kafka
       ZIPKIN_HOST: zipkin
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-placeholder}
-      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-placeholder}
+      GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-1089359077505-9bplo54297vhkb3v7vdg321cfa57v0to.apps.googleusercontent.com}"
+      GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET:-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}"
     restart: unless-stopped
 
   movie-service:

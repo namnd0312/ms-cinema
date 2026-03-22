@@ -39,7 +39,9 @@ public class OAuth2UserLinkingServiceImpl implements OAuth2UserLinkingService {
 
         if (existingLink.isPresent()) {
             log.info("OAuth2 login: existing link for provider={} sub={}", providerName, providerUserId);
-            return existingLink.get().getUser();
+            User linkedUser = existingLink.get().getUser();
+            linkedUser.getRoles().size(); // force-initialize lazy roles before session closes
+            return linkedUser;
         }
 
         // 2. Try auto-link by email (only if email verified by provider)
@@ -66,10 +68,12 @@ public class OAuth2UserLinkingServiceImpl implements OAuth2UserLinkingService {
             // Concurrent login already linked — re-read and return
             log.warn("OAuth2 login: concurrent link detected for provider={} sub={}, re-reading",
                 providerName, providerUserId);
-            return oauthProviderRepository
+            User conflictUser = oauthProviderRepository
                 .findByProviderNameAndProviderUserId(providerName, providerUserId)
                 .orElseThrow(() -> new RuntimeException("OAuth2 provider link not found after conflict"))
                 .getUser();
+            conflictUser.getRoles().size(); // force-initialize lazy roles before session closes
+            return conflictUser;
         }
 
         return user;

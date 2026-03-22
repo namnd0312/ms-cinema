@@ -14,6 +14,7 @@ import com.namnd.bookingservice.websocket.SeatWebSocketPublisher;
 import com.namnd.kafka.events.audit.Auditable;
 import com.namnd.kafka.events.domain.AuditAction;
 import io.micrometer.core.instrument.Counter;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,6 +28,7 @@ import java.util.stream.Collectors;
 /**
  * Core booking business logic: seat reservation, confirmation, and cancellation.
  */
+@Slf4j
 @Service
 @Transactional
 public class BookingServiceImpl implements BookingService {
@@ -102,8 +104,9 @@ public class BookingServiceImpl implements BookingService {
         bookingCreatedCounter.increment();
         try {
             seatWebSocketPublisher.publishSeatUpdate(request.showtimeId(), request.seatIds(), "RESERVED");
+            log.info("WebSocket: published RESERVED for showtime={} seats={}", request.showtimeId(), request.seatIds());
         } catch (Exception e) {
-            // Non-critical: WS notification failure should not break the booking
+            log.error("WebSocket: failed to publish RESERVED for showtime={}", request.showtimeId(), e);
         }
         return toResponseDto(saved);
     }
@@ -138,8 +141,9 @@ public class BookingServiceImpl implements BookingService {
         seatLockService.unlockSeats(booking.getShowtimeId(), seatIds);
         try {
             seatWebSocketPublisher.publishSeatUpdate(booking.getShowtimeId(), seatIds, "CONFIRMED");
+            log.info("WebSocket: published CONFIRMED for showtime={} seats={}", booking.getShowtimeId(), seatIds);
         } catch (Exception e) {
-            // Non-critical: WS notification failure should not break confirmation
+            log.error("WebSocket: failed to publish CONFIRMED for showtime={}", booking.getShowtimeId(), e);
         }
     }
 
