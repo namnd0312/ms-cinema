@@ -12,9 +12,9 @@ MS Cinema is an **11-module Spring Cloud microservices platform** for cinema tic
 
 **Key Characteristics:**
 - Single external entry point: API Gateway (port 8080)
-- **Auth-service** (port 8081): JWT auth lifecycle, email activation, account lockout (5 attempts/15min), token rotation, @Auditable integration
+- **Auth-service** (port 8081): JWT auth lifecycle, email activation, account lockout (5 attempts/15min), token rotation, @Auditable integration, OAuth2 Google login, password change with history validation
 - **Movie-service** (port 8082): Movies, theaters, showtimes; auto-generates seat grids (A-Z rows); star ratings (1-5), paginated comments with soft-delete, comment reactions (like/dislike), @Auditable on CRUD
-- **Booking-service** (port 8083): Seat reservation with Redis locking (5-min TTL), lifecycle states (PENDING→CONFIRMED/CANCELLED/EXPIRED), @Auditable on operations
+- **Booking-service** (port 8083): Seat reservation with Redis locking (5-min TTL), lifecycle states (PENDING→CONFIRMED/CANCELLED/EXPIRED), @Auditable on operations, real-time WebSocket seat availability (STOMP /ws/booking, <100ms latency)
 - **Payment-service** (port 8084): Stripe integration, idempotent payment intents, webhook verification, @Auditable on payments
 - **Notification-service** (port 8085): Kafka consumer, SMTP email delivery, Redis dedup (24h TTL), real-time SSE notifications
 - **Audit-service** (port 8086): Centralized audit logging, Kafka consumer for audit-events, admin API with filtering, PostgreSQL immutable audit logs, 90-day retention

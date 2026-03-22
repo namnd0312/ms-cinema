@@ -77,6 +77,7 @@ Hạ tầng:
   - `/api/notifications/**` → notification-service (SSE stream, REST CRUD, broadcast)
   - `/api/notifications/stream` → notification-service (endpoint SSE, **ContentCachingResponseWrapper bỏ qua để ngăn cạn kiệt thread**)
   - `/api/audit/**` → audit-service (truy vấn nhật ký kiểm toán, yêu cầu ADMIN)
+  - `/ws/**` → Proxy Nginx trực tiếp đến booking-service (endpoint STOMP WebSocket, **MỚI 22 tháng 3, 2026**, vượt gateway)
 - Tổng hợp tài liệu OpenAPI: `/v3/api-docs`
 - Swagger UI: `/swagger-ui.html`
 - HttpLoggingFilter: Ghi log yêu cầu với X-Correlation-ID, bỏ qua cache phản hồi cho đường dẫn SSE
@@ -120,6 +121,14 @@ Hạ tầng:
 - Kafka Listener: Tiêu thụ PaymentCompletedEvent (CONFIRMED), PaymentFailedEvent (CANCELLED)
 - Khóa Redis: Seat:lock:{showtimeId}:{seatId} với TTL 5 phút
 - Scheduler: BookingExpiryScheduler (kiểm tra 60 giây) chuyển đổi đặt vé PENDING đã hết hạn
+- **Cấu hình WebSocket (MỚI 22 tháng 3, 2026):**
+  - WebSocketConfig.java: Spring WebSocket + STOMP, in-memory broker (app:/topic/showtime/*)
+  - SeatStatusMessage.java: DTO (showtimeId, seatId, status, userId, action: LOCK/RESERVE/CANCEL)
+  - SeatWebSocketPublisher.java: Broadcasts SeatStatusMessage đến endpoint /topic/showtime/{showtimeId}/seats
+  - BookingServiceImpl sửa đổi: Gọi publishSeatStatusChange() khi lock/reserve/cancel
+  - BookingExpiryScheduler sửa đổi: Phát hành CANCEL khi hết hạn đặt vé
+  - **Proxy Nginx:** Endpoint /ws/* định tuyến trực tiếp đến booking-service:8083 với header upgrade WebSocket (Connection: Upgrade, Upgrade: websocket)
+  - **Kết nối Frontend:** Endpoint /ws kết nối qua Nginx đến booking-service (vượt api-gateway để tối ưu độ trễ WebSocket)
 - Cơ sở dữ liệu: bookingdb (2 bảng: bookings, booking_seats)
 
 **payment-service (:8084)** - Xử lý thanh toán Stripe
@@ -296,6 +305,61 @@ TRƯỜNG HỢP LỖI: Thanh toán thất bại
             ├─ Chuyển Booking → CANCELLED
             ├─ Giải phóng khóa Redis (thất bại → trả ghế)
             └─ Gửi thông báo thất bại
+```
+
+### Luồng Khả Dụng Ghế Thời Gian Thực (WebSocket STOMP - MỚI 22 tháng 3, 2026 - FR-3.1 HOÀN THÀNH)
+```
+cinema-frontend: Tải Trang Chọn Ghế (Triển Khai FR-3.1)
+      ├─ seat-websocket.service.ts: Kết nối /ws qua SockJS+STOMP (proxy Nginx đến booking-service:8083)
+      │  └─ Xác thực JWT trong WebSocket handshake (tích hợp SpringSecurity)
+      │
+      ├─ Đăng ký /topic/showtime/{showtimeId}/seats
+      │  └─ Lắng nghe sự kiện SeatStatusMessage (showtimeId, seatId, status, userId, action)
+      │
+      └─ Người dùng chọn ghế → BookingController.reserve()
+         └─ booking-service BookingService.reserveSeats()
+            ├─ Lấy khóa Redis (seat:lock:{showtimeId}:{seatId}, TTL 5 phút)
+            ├─ Tạo Booking (PENDING), BookingSeat (LOCKED)
+            ├─ SeatWebSocketPublisher.publishSeatStatusChange() → STOMP endpoint
+            │  └─ Thông báo /topic/showtime/{showtimeId}/seats (action: LOCK, userId, seatId, status)
+            └─ Tất cả client kết nối nhận cập nhật LOCK, ghế UI đánh dấu không khả dụng
+
+USER: Thanh toán hoàn tất → payment-service webhook
+      ├─ PaymentWebhookService.handlePaymentCompleted()
+      ├─ booking-service PaymentCompletedEvent listener
+      │  ├─ Chuyển Booking → CONFIRMED
+      │  ├─ SeatWebSocketPublisher.publishSeatStatusChange() → STOMP
+      │  │  └─ /topic/showtime/{showtimeId}/seats (action: RESERVE, userId, seatId, status)
+      │  └─ Tất cả client: ghế đánh dấu RESERVED (màu xám, vĩnh viễn)
+      │
+      └─ Trường hợp Hết hạn: Đặt vé hết hạn (PENDING quá expiresAt)
+         ├─ BookingExpiryScheduler (kiểm tra 60 giây) phát hiện hết hạn
+         ├─ Chuyển Booking → EXPIRED, giải phóng khóa Redis
+         ├─ SeatWebSocketPublisher.publishSeatStatusChange() → STOMP
+         │  └─ /topic/showtime/{showtimeId}/seats (action: CANCEL, userId, seatId, status)
+         └─ Tất cả client: màu ghế đặt lại AVAILABLE (xanh lục/xanh dương/hổ phách)
+
+FRONTEND: seat-websocket.service.ts event handlers
+      ├─ onSeatStatusChange(message) xử lý SeatStatusMessage đến
+      │  ├─ LOCK: Cập nhật seat-grid component (màu người dùng, đánh dấu bận)
+      │  ├─ RESERVE: Mờ ghế, hiển thị chỉ báo đặt vé vĩnh viễn
+      │  ├─ CANCEL: Đặt lại màu khả dụng (xanh lục/xanh dương/hổ phách)
+      │  └─ Cập nhật trạng thái nội bộ, hiển thị lại lưới ghế
+      │
+      ├─ Logik Kết nối lại: Tự động kết nối lại với exponential backoff
+      │  └─ Phát hiện ngắt kết nối → thử lại 1 giây, 2 giây, 4 giây, 8 giây, 16 giây, 30 giây tối đa
+      │
+      ├─ Định tuyến Nginx (MỚI 22 tháng 3, 2026):**
+      │  ├─ /ws/* định tuyến trực tiếp đến booking-service:8083 (vượt api-gateway)
+      │  ├─ Header upgrade WebSocket: Connection: Upgrade, Upgrade: websocket
+      │  └─ Độ trễ <100ms (so với 2-3 giây polling; nhanh hơn 100 lần)
+      │
+      └─ Bảng Đề xuất Ghế Lân cận (nếu chọn không đầy đủ)
+         └─ seat-suggestion.service.ts: findBestAdjacentGroup()
+            ├─ Thuật toán phía client O(n*m) trên ghế khả dụng
+            ├─ Số liệu: gần (khoảng cách Euclidean), căn chỉnh hàng, tính đồng nhất loại
+            ├─ Đánh điểm ghế: cùng hàng tối ưu, phù hợp loại PREMIUM/VIP, khoảng cách gần nhất
+            └─ seat-suggestion-panel.component.ts hiển thị đề xuất hàng đầu + nút chấp nhận/bỏ qua
 ```
 
 ### Luồng Thông Báo (Email + SSE Thời Gian Thực)

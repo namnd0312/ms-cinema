@@ -12,9 +12,9 @@ MS Cinema là một **nền tảng microservices Spring Cloud gồm 11 module** 
 
 **Đặc điểm chính:**
 - Điểm truy cập bên ngoài duy nhất: API Gateway (cổng 8080)
-- **Auth-service** (cổng 8081): Vòng đời xác thực JWT, kích hoạt email, khóa tài khoản (5 lần thử/15 phút), xoay vòng token
+- **Auth-service** (cổng 8081): Vòng đời xác thực JWT, kích hoạt email, khóa tài khoản (5 lần thử/15 phút), xoay vòng token, @Auditable integration, Google OAuth2 login, thay đổi mật khẩu với xác thực lịch sử
 - **Movie-service** (cổng 8082): Phim, rạp, suất chiếu; tự động tạo lưới ghế (hàng A-Z); đánh giá sao (1-5), bình luận phân trang với xóa mềm, phản hồi bình luận (thích/không thích)
-- **Booking-service** (cổng 8083): Đặt chỗ ghế với khóa Redis (TTL 5 phút), các trạng thái vòng đời (PENDING→CONFIRMED/CANCELLED/EXPIRED)
+- **Booking-service** (cổng 8083): Đặt chỗ ghế với khóa Redis (TTL 5 phút), các trạng thái vòng đời (PENDING→CONFIRMED/CANCELLED/EXPIRED), @Auditable on operations, khả năng sẵn có ghế thời gian thực WebSocket (STOMP /ws/booking, độ trễ <100ms)
 - **Payment-service** (cổng 8084): Tích hợp Stripe, payment intent idempotent, xác minh webhook
 - **Notification-service** (cổng 8085): Kafka consumer, gửi email SMTP, SSE thời gian thực, Redis dedup (TTL 24 giờ)
 - **Audit-service** (cổng 8086): Kafka consumer, ghi nhật ký kiểm toán đầy đủ (login, register, logout, các thao tác CRUD), Admin API truy vấn

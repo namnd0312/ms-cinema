@@ -48,16 +48,16 @@ mvn -pl audit-service spring-boot:run           # port 8086
 |---------|------|---------|--------------|
 | eureka-server | 8761 | Service discovery | Dynamic registration |
 | config-server | 8888 | Centralized config | Git/classpath profiles |
-| api-gateway | 8080 | Request routing | OpenAPI aggregation, logging, SSE streaming support |
-| auth-service | 8081 | Authentication | JWT, email activation, account lockout |
+| api-gateway | 8080 | Request routing | OpenAPI aggregation, logging, SSE streaming support, WebSocket proxy |
+| auth-service | 8081 | Authentication | JWT, email activation, account lockout, OAuth2 Google login, password history |
 | movie-service | 8082 | Movies/ratings/comments | Showtimes, auto seat grids, star ratings, comments, reactions |
-| booking-service | 8083 | Seat reservation | Redis locking, lifecycle states, notification publishing |
+| booking-service | 8083 | Seat reservation | Redis locking, lifecycle states, WebSocket real-time seat updates |
 | payment-service | 8084 | Payment processing | Stripe, webhook verification, payment notifications |
 | notification-service | 8085 | Real-time notifications | SSE streaming, Kafka consumer, email (SMTP), PostgreSQL persistence |
 | audit-service | 8086 | Audit logging | Kafka consumer, PostgreSQL persistence, admin API with filtering |
 | zipkin | 9411 | Distributed tracing | Trace visualization, span analysis |
 | kafdrop | 9000 | Kafka topic browser | Topic inspection, message viewing |
-| cinema-frontend | 4200→80 | Web UI | Angular 18, Material, Stripe.js, real-time notification bell |
+| cinema-frontend | 4200→80 | Web UI | Angular 18, Material, Stripe.js, real-time notification bell, seat grid with WebSocket |
 
 ## API Documentation
 

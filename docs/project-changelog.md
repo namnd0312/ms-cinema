@@ -7,6 +7,13 @@
 
 ### [Unreleased]
 
+#### Bug Fixes (March 22, 2026)
+- **OAuth2 LazyInitializationException Fix:** Force-initialize user.getRoles() within @Transactional context in OAuth2UserLinkingService to prevent lazy loading issues
+- **WebSocket nginx Proxy Fix:** Add conditional Connection header (Connection: Upgrade on WebSocket requests, keep-alive otherwise) to support WebSocket upgrade while maintaining regular HTTP requests
+- **Seat Data Mapping Fix:** Map API responses correctly (rowLabel/seatNumber API fields → rowNumber/columnNumber/price frontend fields) in seat grid display
+- **Global Polyfill Fix:** Added global sockjs-client polyfill to support older browsers and resolve compatibility issues
+- **SecurityConfig WebSocket Fix:** Added /ws/** permitAll route in SecurityConfig to ensure WebSocket connections are not intercepted by default authentication filters
+
 #### Seat Grid Display & Booking UI Improvements (FR-3.1 COMPLETE ✓) — March 22, 2026
 - **Feature:** Complete theater seat visualization with real-time availability, accessibility, and adjacent seat suggestions
   - Phase 1: Color-coded seats (STANDARD=green, PREMIUM=blue, VIP=amber) with row A-Z labels and type+price legend

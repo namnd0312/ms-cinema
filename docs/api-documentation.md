@@ -310,6 +310,69 @@ Response: {"count": 3}
 
 Swagger UI: http://localhost:8085/swagger-ui.html
 
+### booking-service (/ws WebSocket)
+
+**Real-Time Seat Availability Updates (NEW - March 22, 2026):**
+| Endpoint | Auth | Protocol | Description |
+|----------|------|----------|-------------|
+| /ws | JWT | WebSocket STOMP | Subscribe to real-time seat status updates |
+
+**WebSocket Connection Details:**
+- **Endpoint:** `ws://localhost/ws` (nginx proxy) or `ws://localhost:8083/ws` (direct to booking-service)
+- **Protocol:** STOMP v1.2 over WebSocket (SockJS fallback supported)
+- **Authentication:** JWT Bearer token required during WebSocket handshake
+- **Subscribe to:** `/topic/showtime/{showtimeId}/seats` — Receive seat status updates for specific showtime
+
+**Message Format (SeatStatusMessage):**
+```json
+{
+  "showtimeId": 123,
+  "seatId": "A5",
+  "status": "LOCKED",
+  "userId": 456,
+  "action": "LOCK"
+}
+```
+
+**Action Types:**
+- `LOCK` — User reserved seat (temporary, waiting for payment confirmation)
+- `RESERVE` — Payment confirmed, seat permanently booked
+- `CANCEL` — Booking expired or payment failed, seat released back to available
+
+**Connection Example (JavaScript):**
+```javascript
+import SockJS from 'sockjs-client';
+import Stomp from '@stomp/stompjs';
+
+const socket = new SockJS('http://localhost/ws');
+const stompClient = Stomp.over(socket);
+
+stompClient.connect(
+  { 'Authorization': `Bearer ${jwtToken}` },
+  () => {
+    stompClient.subscribe(`/topic/showtime/${showtimeId}/seats`, (message) => {
+      const seatUpdate = JSON.parse(message.body);
+      console.log(`Seat ${seatUpdate.seatId} status: ${seatUpdate.action}`);
+    });
+  }
+);
+```
+
+**Error Handling:**
+- 401 Unauthorized: Invalid/expired JWT during handshake
+- Connection timeout: 30s inactivity on nginx proxy (keep-alive heartbeat recommended)
+- Disconnection: Auto-reconnect with exponential backoff (1s→30s max)
+
+**Performance:**
+- Latency: <100ms (direct connection, bypasses HTTP gateway)
+- Broadcast: All connected clients receive updates simultaneously
+- Scalability: Spring WebSocket in-memory broker for single-instance deployment
+
+**Nginx Routing (NEW March 22, 2026):**
+- /ws/* routes directly to booking-service:8083
+- WebSocket upgrade headers configured: `Connection: Upgrade`, `Upgrade: websocket`
+- Bypasses api-gateway for low-latency WebSocket connections
+
 ## Security in OpenAPI
 
 ### Bearer Token Authentication

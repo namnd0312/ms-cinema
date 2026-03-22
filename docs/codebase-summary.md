@@ -103,6 +103,7 @@ src/main/java/com/namnd/cinema/
 - Unique constraints prevent duplicate links per provider and per user
 - Concurrent login race condition: Handled via DataIntegrityViolationException catch during provider link creation
 - Auto-create OAuth-only users: password=NULL, active=true, default ROLE_USER assignment
+- **March 16 Fix:** LazyInitializationException on user.getRoles() resolved by force-initializing roles within @Transactional context in OAuth2UserLinkingService
 
 ## movie-service (Port 8082)
 
@@ -184,15 +185,15 @@ src/main/java/com/namnd/cinema/
 **Lock TTL:** 5 minutes (configurable)
 
 **WebSocket Configuration (NEW - March 22, 2026):**
-- WebSocketConfig.java: Spring WebSocket configuration, STOMP endpoint /ws/booking, SockJS fallback
+- WebSocketConfig.java: Spring WebSocket configuration, STOMP endpoint /ws/booking, SockJS fallback, JWT validation during handshake
 - Message broker: In-memory (app:/booking/seats/*)
-- Authenticated via JWT during WebSocket handshake
+- Authenticated via JWT during WebSocket handshake (SpringSecurity-integrated)
 - SeatStatusMessage.java: DTO (showtimeId, seatId, status, userId, action: LOCK/RESERVE/CANCEL)
-- SeatWebSocketPublisher.java: Service to broadcast seat status changes to connected clients via STOMP
+- SeatWebSocketPublisher.java: Service to broadcast seat status changes to connected clients via STOMP (/topic/showtime/{id}/seats)
 - Event actions: LOCK (user acquiring seat), RESERVE (payment confirmed), CANCEL (booking expired/failed)
-- Modified BookingServiceImpl: Calls SeatWebSocketPublisher.publishSeatStatusChange() on lock/reserve/cancel
+- Modified BookingServiceImpl: Calls SeatWebSocketPublisher.publishSeatStatusChange() on lock/reserve/cancel operations
 - Modified BookingExpiryScheduler: Publishes CANCEL action when booking expires
-- Frontend subscribes to /booking/seats/{showtimeId} for real-time updates
+- Frontend subscribes to /topic/showtime/{showtimeId}/seats for real-time updates (<100ms latency)
 
 ## payment-service (Port 8084)
 
@@ -473,7 +474,7 @@ jwt.auth.secret: ${JWT_SECRET}
 
 **Seat Grid Display & Booking UI (NEW - March 22, 2026 - FR-3.1 COMPLETE):**
 - **Services:**
-  - seat-websocket.service.ts: STOMP/SockJS WebSocket client (connects /ws/booking, listens LOCK/RESERVE/CANCEL events)
+  - seat-websocket.service.ts: STOMP/SockJS WebSocket client (connects to /ws on booking-service via nginx proxy, listens for LOCK/RESERVE/CANCEL events on /topic/showtime/{id}/seats)
   - seat-suggestion.service.ts: Client-side O(n*m) algorithm (proximity distance, row preference, type uniformity)
 - **Components:**
   - seat-suggestion-panel.component.ts: UI panel with recommended seat groups + accept/dismiss actions
@@ -482,10 +483,12 @@ jwt.auth.secret: ${JWT_SECRET}
   - seat-grid-keyboard-navigation.utils.ts: Arrow keys (up/down/left/right), roving tabindex, focus-visible
   - seat-selection-timer.utils.ts: Booking countdown timer with expiration logic
 - **Modified Components:**
-  - seat-grid.component.ts: Color-coded seats (STANDARD=green, PREMIUM=blue, VIP=amber), row A-Z labels, legend (type+price)
-  - seat-selection.component.ts: WebSocket integration, suggestion panel UI, timer countdown
-- **Dependencies:** @stomp/stompjs, sockjs-client (added to package.json)
+  - seat-grid.component.ts: Color-coded seats (STANDARD=green, PREMIUM=blue, VIP=amber), row A-Z labels, legend (type+price), Instant→String serialization fix for seat data
+  - seat-selection.component.ts: WebSocket integration, suggestion panel UI, timer countdown, global polyfill for sockjs-client
+- **Nginx Configuration:** nginx.conf configured to proxy /ws/ directly to booking-service:8083 (bypass api-gateway), includes WebSocket upgrade headers (Connection: Upgrade, Upgrade: websocket)
+- **Dependencies:** @stomp/stompjs, sockjs-client (added to package.json with global import)
 - **Accessibility:** WCAG 2.1 AA (ARIA role=grid, keyboard nav, color+icons, MatTooltip, aria-live)
+- **API Data Mapping:** Fixed rowLabel/seatNumber (API) → rowNumber/columnNumber/price (frontend) in seat grid display
 
 **Lazy-Loaded Routes:**
 - /auth (login, register, password reset, OAuth2 callback)

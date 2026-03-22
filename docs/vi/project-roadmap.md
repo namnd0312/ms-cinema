@@ -124,13 +124,21 @@ MS Cinema là nền tảng đặt vé xem phim toàn diện được xây dựng
 - **Trạng thái:** HOÀN THÀNH (14 tháng 3, 2026)
 - **Triển khai:** SSE emitter registry theo người dùng, heartbeat 30s, Kafka consumer group riêng mỗi instance
 
-**FR-3.1: Hiển Thị Lưới Ghế & Giao Diện Đặt Vé**
-- Trực quan hóa bản đồ ghế frontend (bố trí rạp hàng A-Z)
-- Chọn ghế tương tác với hover/highlight
-- Cập nhật tình trạng ghế thời gian thực
-- Chọn nhiều ghế cho đặt nhóm
-- **Ưu tiên:** CAO
-- **Công sức:** Trung bình (4-5 ngày)
+**FR-3.1: Hiển Thị Lưới Ghế & Giao Diện Đặt Vé (HOÀN THÀNH ✓ 22 tháng 3, 2026)**
+- ✓ Triển khai 6 giai đoạn: ghế màu, tính thực tế rạp, thiết kế phản ứng, khả năng tiếp cận, WebSocket, đề xuất
+- ✓ Bản đồ ghế frontend (hàng A-Z, STANDARD=xanh lục, PREMIUM=xanh dương, VIP=hổ phách)
+- ✓ Tính thực tế bố cục rạp (màn hình cong với hiệu ứng phát sáng, lỗ lối tại cột 6/13, bộ chia phần VIP)
+- ✓ Phản ứng di động (kích thước 36/40/44px, cuộn ngang, thanh tóm tắt nổi)
+- ✓ WCAG 2.1 AA khả năng tiếp cận (vai trò lưới ARIA, điều hướng phím mũi tên, tabindex roving, focus-visible, tooltips)
+- ✓ WebSocket STOMP thời gian thực /ws/booking (SeatStatusMessage với hành động LOCK/RESERVE/CANCEL, độ trễ <100ms)
+- ✓ Đề xuất ghế lân cận (thuật toán phía client O(n*m): gần + hàng + tính đồng nhất loại)
+- ✓ Hỗ trợ WebSocket backend (WebSocketConfig, SeatStatusMessage, SeatWebSocketPublisher)
+- ✓ BookingServiceImpl & BookingExpiryScheduler sửa đổi (phát hành sự kiện WebSocket)
+- **Tệp Mới Frontend:** seat-grid-layout.utils.ts, seat-grid-keyboard-navigation.utils.ts, seat-selection-timer.utils.ts, seat-suggestion-panel.component.ts, seat-websocket.service.ts, seat-suggestion.service.ts
+- **Tệp Mới Backend:** WebSocketConfig.java, SeatStatusMessage.java, SeatWebSocketPublisher.java
+- **Dependencies:** @stomp/stompjs, sockjs-client (npm install)
+- **Công sức Thực tế:** 6 giai đoạn, ~8-10 ngày
+- **Trạng thái:** HOÀN THÀNH (22 tháng 3, 2026)
 
 **FR-3.2: Tích Hợp Thanh Toán Đặt Vé**
 - Luồng thanh toán Stripe hoàn chỉnh trong frontend
@@ -175,13 +183,17 @@ MS Cinema là nền tảng đặt vé xem phim toàn diện được xây dựng
 
 **Tính năng dự kiến:**
 
-**FR-4.1: Ghi Log Kiểm Toán**
-- Ghi log tất cả sự kiện xác thực (IP, user agent, timestamp)
-- Ghi log các thao tác nhạy cảm (xác nhận thanh toán, hoàn tiền)
-- Bảng audit log riêng (bất biến, lưu giữ 1 năm)
-- GET /api/admin/audit-logs (chỉ admin, phân trang)
-- **Ưu tiên:** CAO
-- **Công sức:** Trung bình (3-4 ngày)
+**FR-4.1: Ghi Log Kiểm Toán (HOÀN THÀNH ✓ 21 tháng 3, 2026)**
+- ✓ audit-service tập trung (:8086) — Kafka event consumer
+- ✓ Entity AuditLog (eventId UNIQUE, userId, userIp, action, entityType, entityId, beforeState, afterState, sourceService, traceId, requestPath, createdAt)
+- ✓ Annotation @Auditable AOP để tự động bắt trên các phương thức dịch vụ nghiệp vụ
+- ✓ Admin API: GET /api/audit/logs (phân trang, lọc theo userId/action/entityType/dateRange) + GET /api/audit/logs/{id}
+- ✓ Topic Kafka: audit-events với dedup consumer (eventId UNIQUE)
+- ✓ Lưu trữ PostgreSQL (auditdb) với chỉ mục cho hiệu suất truy vấn
+- ✓ Truy cập chỉ admin qua @PreAuthorize("hasRole('ADMIN')")
+- ✓ Xử lý lỗi: 3 lần thử lại, exponential backoff (1 giây→2 giây→4 giây giới hạn 10 giây), DLT cho thất bại
+- **Trạng thái:** HOÀN THÀNH (21 tháng 3, 2026)
+- **Triển khai:** Tự động cấu hình qua thư viện dùng chung kafka-events
 
 **FR-4.2: Xác Thực Hai Yếu Tố (2FA)**
 - Hỗ trợ TOTP qua ứng dụng authenticator

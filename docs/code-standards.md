@@ -817,6 +817,248 @@ public ResponseEntity<?> changePassword(
 }
 ```
 
+## Feign Client Standards
+
+**Feign Client Declaration (Service-to-Service Calls):**
+```java
+// ✓ Good: Typed Feign client with clear contracts
+@FeignClient(name = "movie-service", url = "http://localhost:8082")
+public interface MovieServiceClient {
+    @GetMapping("/api/showtimes/{showtimeId}")
+    ShowtimeDto getShowtime(@PathVariable Long showtimeId);
+
+    @GetMapping("/api/theaters/{theaterId}/seats")
+    List<SeatDto> getSeats(@PathVariable Long theaterId);
+}
+
+// Service usage with error handling
+@Service
+@RequiredArgsConstructor
+public class BookingServiceImpl {
+    private final MovieServiceClient movieClient;
+
+    @Transactional
+    public Booking reserve(ReserveRequest request) {
+        try {
+            ShowtimeDto showtime = movieClient.getShowtime(request.getShowtimeId());
+            List<SeatDto> seats = movieClient.getSeats(showtime.getTheaterId());
+            // Process booking...
+        } catch (FeignException.NotFound e) {
+            throw new EntityNotFoundException("Showtime not found");
+        } catch (FeignException e) {
+            throw new ServiceUnavailableException("Movie service unavailable");
+        }
+    }
+}
+
+// ✗ Bad: Raw RestTemplate or hardcoded URLs
+RestTemplate restTemplate = new RestTemplate();
+String url = "http://movie-service:8082/api/showtimes/" + showtimeId;
+ShowtimeDto showtime = restTemplate.getForObject(url, ShowtimeDto.class);
+```
+
+**Error Handling with Feign:**
+```java
+// ✓ Good: Decode errors and handle specific cases
+@FeignClient(name = "movie-service", decoder = ErrorDecoder.class)
+public interface MovieServiceClient { }
+
+@Component
+public class CustomErrorDecoder implements ErrorDecoder {
+    @Override
+    public Exception decode(String methodKey, Response response) {
+        if (response.status() == 404) {
+            return new EntityNotFoundException("Resource not found");
+        }
+        if (response.status() == 503) {
+            return new ServiceUnavailableException("Service temporarily unavailable");
+        }
+        return new FeignException.ServerErrorException(
+            response.status(),
+            response.reason(),
+            response.request(),
+            response.body().asInputStream().toString().getBytes()
+        );
+    }
+}
+```
+
+**Feign + Hystrix (Circuit Breaker Pattern - for resilience):**
+```yaml
+# application.yml
+feign:
+  client:
+    default-config: default
+    config:
+      movie-service:
+        connectTimeout: 5000
+        readTimeout: 10000
+        loggerLevel: FULL
+        errorDecoder: com.namnd.cinema.config.CustomErrorDecoder
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      movie-service:
+        registerHealthIndicator: true
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        permittedNumberOfCallsInHalfOpenState: 3
+        failureRateThreshold: 50.0
+```
+
+## WebSocket Patterns (STOMP Over SockJS - NEW March 22, 2026)
+
+**WebSocket Configuration (Backend):**
+```java
+// ✓ Good: Spring WebSocket with STOMP broker
+@Configuration
+@EnableWebSocket
+public class WebSocketConfig implements WebSocketConfigurer {
+
+    @Override
+    public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
+        registry.addHandler(new SockJsWebSocketHandler(), "/ws")
+            .setAllowedOrigins("*");  // Or specify allowed origins
+    }
+
+    @Configuration
+    @EnableWebSocketMessageBroker
+    public static class BrokerConfig extends AbstractWebSocketMessageBrokerConfigurer {
+        @Override
+        public void configureMessageBroker(MessageBrokerRegistry config) {
+            config.enableSimpleBroker("/topic/");
+            config.setApplicationDestinationPrefixes("/app");
+        }
+
+        @Override
+        public void registerStompEndpoints(StompEndpointRegistry registry) {
+            registry.addEndpoint("/ws")
+                .setAllowedOrigins("*")
+                .withSockJS();
+        }
+    }
+}
+
+// ✓ Good: Publish to specific topic per user/resource
+@Service
+@RequiredArgsConstructor
+public class SeatWebSocketPublisher {
+    private final SimpMessagingTemplate messagingTemplate;
+
+    public void publishSeatStatusChange(SeatStatusMessage message) {
+        messagingTemplate.convertAndSend(
+            "/topic/showtime/" + message.getShowtimeId() + "/seats",
+            message
+        );
+    }
+}
+
+// ✗ Bad: Broadcast to all users without filtering
+messagingTemplate.convertAndSendToUsers("*", "/queue/updates", message);
+```
+
+**Message DTO Pattern (Type-Safe):**
+```java
+// ✓ Good: Clear, type-safe message structure
+@Data
+@AllArgsConstructor
+public class SeatStatusMessage {
+    private Long showtimeId;
+    private String seatId;
+    private String status;  // AVAILABLE, LOCKED, RESERVED
+    private Long userId;
+    private String action;  // LOCK, RESERVE, CANCEL
+}
+
+// ✗ Bad: Generic Map, type-unsafe
+Map<String, Object> message = new HashMap<>();
+message.put("showtimeId", 123);
+message.put("action", "LOCK");
+```
+
+**Frontend WebSocket Consumer (TypeScript):**
+```typescript
+// ✓ Good: Structured STOMP client with reconnect logic
+import SockJS from 'sockjs-client';
+import Stomp, { Client } from '@stomp/stompjs';
+
+@Injectable()
+export class SeatWebSocketService {
+    private stompClient: Client | null = null;
+    private reconnectAttempt = 0;
+    private readonly MAX_RECONNECT_ATTEMPTS = 5;
+    private readonly RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 16000, 30000];
+
+    connect(token: string, onMessage: (msg: any) => void): void {
+        const socket = new SockJS('http://localhost/ws');
+        this.stompClient = Stomp.over(socket);
+
+        this.stompClient.connect(
+            { 'Authorization': `Bearer ${token}` },
+            () => {
+                this.reconnectAttempt = 0;
+                this.stompClient!.subscribe(`/topic/showtime/123/seats`, onMessage);
+            },
+            (error) => {
+                this.handleConnectionError(error, token, onMessage);
+            }
+        );
+    }
+
+    private handleConnectionError(
+        error: any,
+        token: string,
+        onMessage: (msg: any) => void
+    ): void {
+        if (this.reconnectAttempt < this.MAX_RECONNECT_ATTEMPTS) {
+            const delay = this.RECONNECT_DELAYS[this.reconnectAttempt];
+            setTimeout(() => this.connect(token, onMessage), delay);
+            this.reconnectAttempt++;
+        }
+    }
+}
+
+// ✗ Bad: No error handling or reconnect
+this.stompClient.connect({ headers }, () => {
+    this.stompClient.subscribe('/topic/seats', (msg) => { });
+});
+```
+
+**Nginx Proxy for WebSocket (NEW March 22, 2026):**
+```nginx
+# ✓ Good: Proper WebSocket proxy with upgrade headers
+location /ws/ {
+    proxy_pass http://booking-service:8083;
+    proxy_http_version 1.1;
+
+    # WebSocket upgrade headers
+    proxy_set_header Connection $http_connection;
+    proxy_set_header Upgrade $http_upgrade;
+
+    # Standard proxy headers
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+    # Prevent timeout
+    proxy_read_timeout 86400s;
+    proxy_send_timeout 86400s;
+}
+
+# ✗ Bad: Missing upgrade headers
+location /ws/ {
+    proxy_pass http://booking-service:8083;
+    # WebSocket handshake fails without upgrade headers
+}
+```
+
+**Security Considerations:**
+- Always validate JWT during WebSocket handshake (Spring Security integration recommended)
+- Use wss:// (WebSocket over TLS) in production
+- Implement topic-based authorization (users can only subscribe to their own data)
+- Set connection timeouts to prevent zombie connections
+
 ## Deprecated Patterns (Avoid)
 
 | Pattern | Reason | Alternative |

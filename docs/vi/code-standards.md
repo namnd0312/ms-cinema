@@ -898,6 +898,247 @@ public ResponseEntity<?> changePassword(
 }
 ```
 
+## Tiêu Chuẩn Feign Client
+
+**Khai Báo Feign Client (Lệnh Gọi Dịch Vụ-Dịch Vụ):**
+```java
+// ✓ Good: Typed Feign client với hợp đồng rõ ràng
+@FeignClient(name = "movie-service", url = "http://localhost:8082")
+public interface MovieServiceClient {
+    @GetMapping("/api/showtimes/{showtimeId}")
+    ShowtimeDto getShowtime(@PathVariable Long showtimeId);
+
+    @GetMapping("/api/theaters/{theaterId}/seats")
+    List<SeatDto> getSeats(@PathVariable Long theaterId);
+}
+
+// Sử dụng service với xử lý lỗi
+@Service
+@RequiredArgsConstructor
+public class BookingServiceImpl {
+    private final MovieServiceClient movieClient;
+
+    @Transactional
+    public Booking reserve(ReserveRequest request) {
+        try {
+            ShowtimeDto showtime = movieClient.getShowtime(request.getShowtimeId());
+            List<SeatDto> seats = movieClient.getSeats(showtime.getTheaterId());
+            // Xử lý đặt vé...
+        } catch (FeignException.NotFound e) {
+            throw new EntityNotFoundException("Suất chiếu không tìm thấy");
+        } catch (FeignException e) {
+            throw new ServiceUnavailableException("Dịch vụ phim không khả dụng");
+        }
+    }
+}
+
+// ✗ Bad: Raw RestTemplate hoặc URL cứng
+RestTemplate restTemplate = new RestTemplate();
+String url = "http://movie-service:8082/api/showtimes/" + showtimeId;
+ShowtimeDto showtime = restTemplate.getForObject(url, ShowtimeDto.class);
+```
+
+**Xử Lý Lỗi với Feign:**
+```java
+// ✓ Good: Giải mã lỗi và xử lý trường hợp cụ thể
+@FeignClient(name = "movie-service", decoder = ErrorDecoder.class)
+public interface MovieServiceClient { }
+
+@Component
+public class CustomErrorDecoder implements ErrorDecoder {
+    @Override
+    public Exception decode(String methodKey, Response response) {
+        if (response.status() == 404) {
+            return new EntityNotFoundException("Tài nguyên không tìm thấy");
+        }
+        if (response.status() == 503) {
+            return new ServiceUnavailableException("Dịch vụ tạm thời không khả dụng");
+        }
+        return new FeignException.ServerErrorException(
+            response.status(),
+            response.reason(),
+            response.request(),
+            response.body().asInputStream().toString().getBytes()
+        );
+    }
+}
+```
+
+**Feign + Hystrix (Mẫu Circuit Breaker - để khả năng phục hồi):**
+```yaml
+# application.yml
+feign:
+  client:
+    default-config: default
+    config:
+      movie-service:
+        connectTimeout: 5000
+        readTimeout: 10000
+        loggerLevel: FULL
+        errorDecoder: com.namnd.cinema.config.CustomErrorDecoder
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      movie-service:
+        registerHealthIndicator: true
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        permittedNumberOfCallsInHalfOpenState: 3
+        failureRateThreshold: 50.0
+```
+
+## Mẫu WebSocket (STOMP Qua SockJS - MỚI 22 tháng 3, 2026)
+
+**Cấu Hình WebSocket (Backend):**
+```java
+// ✓ Good: Spring WebSocket với STOMP broker
+@Configuration
+@EnableWebSocket
+public class WebSocketConfig implements WebSocketConfigurer {
+
+    @Override
+    public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
+        registry.addHandler(new SockJsWebSocketHandler(), "/ws")
+            .setAllowedOrigins("*");  // Hoặc chỉ định các origin được phép
+    }
+
+    @Configuration
+    @EnableWebSocketMessageBroker
+    public static class BrokerConfig extends AbstractWebSocketMessageBrokerConfigurer {
+        @Override
+        public void configureMessageBroker(MessageBrokerRegistry config) {
+            config.enableSimpleBroker("/topic/");
+            config.setApplicationDestinationPrefixes("/app");
+        }
+
+        @Override
+        public void registerStompEndpoints(StompEndpointRegistry registry) {
+            registry.addEndpoint("/ws")
+                .setAllowedOrigins("*")
+                .withSockJS();
+        }
+    }
+}
+
+// ✓ Good: Phát hành đến topic cụ thể mỗi người dùng/tài nguyên
+@Service
+@RequiredArgsConstructor
+public class SeatWebSocketPublisher {
+    private final SimpMessagingTemplate messagingTemplate;
+
+    public void publishSeatStatusChange(SeatStatusMessage message) {
+        messagingTemplate.convertAndSend(
+            "/topic/showtime/" + message.getShowtimeId() + "/seats",
+            message
+        );
+    }
+}
+
+// ✗ Bad: Phát hành đến tất cả người dùng mà không lọc
+messagingTemplate.convertAndSendToUsers("*", "/queue/updates", message);
+```
+
+**Mẫu DTO Thông Báo (Type-Safe):**
+```java
+// ✓ Good: Cấu trúc thông báo rõ ràng, type-safe
+@Data
+@AllArgsConstructor
+public class SeatStatusMessage {
+    private Long showtimeId;
+    private String seatId;
+    private String status;  // AVAILABLE, LOCKED, RESERVED
+    private Long userId;
+    private String action;  // LOCK, RESERVE, CANCEL
+}
+
+// ✗ Bad: Generic Map, không type-safe
+Map<String, Object> message = new HashMap<>();
+message.put("showtimeId", 123);
+message.put("action", "LOCK");
+```
+
+**Tiêu Thụ WebSocket Frontend (TypeScript):**
+```typescript
+// ✓ Good: STOMP client có cấu trúc với logic kết nối lại
+import SockJS from 'sockjs-client';
+import Stomp, { Client } from '@stomp/stompjs';
+
+@Injectable()
+export class SeatWebSocketService {
+    private stompClient: Client | null = null;
+    private reconnectAttempt = 0;
+    private readonly MAX_RECONNECT_ATTEMPTS = 5;
+    private readonly RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 16000, 30000];
+
+    connect(token: string, onMessage: (msg: any) => void): void {
+        const socket = new SockJS('http://localhost/ws');
+        this.stompClient = Stomp.over(socket);
+
+        this.stompClient.connect(
+            { 'Authorization': `Bearer ${token}` },
+            () => {
+                this.reconnectAttempt = 0;
+                this.stompClient!.subscribe(`/topic/showtime/123/seats`, onMessage);
+            },
+            (error) => {
+                this.handleConnectionError(error, token, onMessage);
+            }
+        );
+    }
+
+    private handleConnectionError(
+        error: any,
+        token: string,
+        onMessage: (msg: any) => void
+    ): void {
+        if (this.reconnectAttempt < this.MAX_RECONNECT_ATTEMPTS) {
+            const delay = this.RECONNECT_DELAYS[this.reconnectAttempt];
+            setTimeout(() => this.connect(token, onMessage), delay);
+            this.reconnectAttempt++;
+        }
+    }
+}
+
+// ✗ Bad: Không xử lý lỗi hoặc kết nối lại
+this.stompClient.connect({ headers }, () => {
+    this.stompClient.subscribe('/topic/seats', (msg) => { });
+});
+```
+
+**Proxy Nginx cho WebSocket (MỚI 22 tháng 3, 2026):**
+```nginx
+# ✓ Good: Proxy WebSocket thích hợp với header upgrade
+location /ws/ {
+    proxy_pass http://booking-service:8083;
+    proxy_http_version 1.1;
+
+    # Header upgrade WebSocket
+    proxy_set_header Connection $http_connection;
+    proxy_set_header Upgrade $http_upgrade;
+
+    # Header proxy tiêu chuẩn
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+    # Ngăn timeout
+    proxy_read_timeout 86400s;
+    proxy_send_timeout 86400s;
+}
+
+# ✗ Bad: Thiếu header upgrade
+location /ws/ {
+    proxy_pass http://booking-service:8083;
+    # WebSocket handshake thất bại mà không có header upgrade
+}
+```
+
+**Cân Nhắc Bảo Mật:**
+- Luôn xác thực JWT trong WebSocket handshake (khuyến cáo tích hợp Spring Security)
+- Sử dụng wss:// (WebSocket qua TLS) trong production
+- Triển khai ủy quyền dựa trên topic (người dùng chỉ có thể đăng ký dữ liệu của riêng họ)
+
 ## Mẫu Không Dùng Nữa (Tránh)
 
 | Mẫu | Lý do | Thay thế |

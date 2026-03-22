@@ -98,6 +98,7 @@ src/main/java/com/namnd/cinema/
 - Ràng buộc duy nhất ngăn liên kết trùng lặp cho mỗi provider và mỗi người dùng
 - Race condition đăng nhập đồng thời: Xử lý qua DataIntegrityViolationException catch khi tạo liên kết provider
 - Tự động tạo người dùng OAuth-only: password=NULL, active=true, gán ROLE_USER mặc định
+- **Sửa tháng 3:** LazyInitializationException trên user.getRoles() được giải quyết bằng cách force-initialize roles trong context @Transactional trong OAuth2UserLinkingService
 
 ## movie-service (Cổng 8082)
 
@@ -166,6 +167,17 @@ src/main/java/com/namnd/cinema/
 
 **Mẫu key khóa Redis:** `seat:lock:{showtimeId}:{seatId}`
 **TTL khóa:** 5 phút (có thể cấu hình)
+
+**Cấu hình WebSocket (MỚI - 22 tháng 3, 2026):**
+- WebSocketConfig.java: Cấu hình Spring WebSocket, endpoint STOMP /ws/booking, fallback SockJS, xác thực JWT trong handshake
+- Message broker: Trong bộ nhớ (app:/booking/seats/*)
+- Xác thực qua JWT trong WebSocket handshake (tích hợp SpringSecurity)
+- SeatStatusMessage.java: DTO (showtimeId, seatId, status, userId, action: LOCK/RESERVE/CANCEL)
+- SeatWebSocketPublisher.java: Service để broadcast thay đổi trạng thái ghế cho client kết nối qua STOMP (/topic/showtime/{id}/seats)
+- Các hành động sự kiện: LOCK (người dùng lấy ghế), RESERVE (thanh toán xác nhận), CANCEL (hết hạn đặt vé/thất bại)
+- BookingServiceImpl sửa đổi: Gọi SeatWebSocketPublisher.publishSeatStatusChange() khi lock/reserve/cancel
+- BookingExpiryScheduler sửa đổi: Phát hành hành động CANCEL khi hết hạn đặt vé
+- Frontend đăng ký /topic/showtime/{showtimeId}/seats để cập nhật thời gian thực (<100ms độ trễ)
 
 ## payment-service (Cổng 8084)
 
