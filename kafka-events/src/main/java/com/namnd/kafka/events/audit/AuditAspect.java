@@ -76,10 +76,21 @@ public class AuditAspect {
 
     private String extractUserId() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getPrincipal())) {
-            return auth.getName();
+        if (auth == null || !auth.isAuthenticated() || "anonymousUser".equals(auth.getPrincipal())) {
+            return "anonymous";
         }
-        return "anonymous";
+        Object principal = auth.getPrincipal();
+        // Extract email from JwtAuthenticatedUser record (via reflection to avoid hard dep)
+        try {
+            var emailMethod = principal.getClass().getMethod("email");
+            Object email = emailMethod.invoke(principal);
+            if (email != null) return email.toString();
+        } catch (Exception ignored) {}
+        // Fallback: Spring Security UserDetails or plain string
+        if (principal instanceof org.springframework.security.core.userdetails.UserDetails ud) {
+            return ud.getUsername();
+        }
+        return auth.getName();
     }
 
     /** Tries to extract entity ID from first arg (Long/String) or return value */

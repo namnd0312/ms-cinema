@@ -82,9 +82,18 @@ public class AuditEntityListener {
 
     private String extractUserId() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getPrincipal())) {
-            return auth.getName();
+        if (auth == null || !auth.isAuthenticated() || "anonymousUser".equals(auth.getPrincipal())) {
+            return "system";
         }
-        return "system";
+        Object principal = auth.getPrincipal();
+        try {
+            var emailMethod = principal.getClass().getMethod("email");
+            Object email = emailMethod.invoke(principal);
+            if (email != null) return email.toString();
+        } catch (Exception ignored) {}
+        if (principal instanceof org.springframework.security.core.userdetails.UserDetails ud) {
+            return ud.getUsername();
+        }
+        return auth.getName();
     }
 }
