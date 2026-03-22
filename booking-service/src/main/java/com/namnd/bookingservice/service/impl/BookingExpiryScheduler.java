@@ -5,6 +5,9 @@ import com.namnd.bookingservice.model.BookingSeat;
 import com.namnd.bookingservice.model.BookingStatus;
 import com.namnd.bookingservice.repository.BookingRepository;
 import com.namnd.bookingservice.service.SeatLockService;
+import com.namnd.bookingservice.websocket.SeatWebSocketPublisher;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,13 +22,17 @@ import java.util.List;
 @Component
 public class BookingExpiryScheduler {
 
+    private static final Logger log = LoggerFactory.getLogger(BookingExpiryScheduler.class);
     private final BookingRepository bookingRepository;
     private final SeatLockService seatLockService;
+    private final SeatWebSocketPublisher seatWebSocketPublisher;
 
     public BookingExpiryScheduler(BookingRepository bookingRepository,
-                                   SeatLockService seatLockService) {
+                                   SeatLockService seatLockService,
+                                   SeatWebSocketPublisher seatWebSocketPublisher) {
         this.bookingRepository = bookingRepository;
         this.seatLockService = seatLockService;
+        this.seatWebSocketPublisher = seatWebSocketPublisher;
     }
 
     @Scheduled(fixedRate = 60_000)
@@ -40,6 +47,11 @@ public class BookingExpiryScheduler {
                     .map(BookingSeat::getSeatId)
                     .toList();
             seatLockService.unlockSeats(booking.getShowtimeId(), seatIds);
+            try {
+                seatWebSocketPublisher.publishSeatUpdate(booking.getShowtimeId(), seatIds, "RELEASED");
+            } catch (Exception e) {
+                log.warn("Failed to publish WS seat update for booking {}: {}", booking.getId(), e.getMessage());
+            }
         }
     }
 }

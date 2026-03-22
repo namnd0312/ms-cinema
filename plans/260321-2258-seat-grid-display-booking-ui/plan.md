@@ -1,7 +1,7 @@
 ---
 title: "FR-3.1: Seat Grid Display & Booking UI Improvements"
 description: "Seat grid UI/UX overhaul: type colors, theater realism, responsive, a11y, real-time WebSocket updates, adjacent seat suggestions"
-status: pending
+status: reviewed
 priority: P2
 effort: 14h
 branch: master
@@ -27,12 +27,12 @@ Enhance the seat booking experience with visual seat type differentiation, reali
 
 | # | Phase | Status | Effort | File |
 |---|-------|--------|--------|------|
-| 1 | Seat Type Visual Differentiation & Row Labels | pending | 2h | [phase-01](phase-01-seat-type-differentiation-row-labels.md) |
-| 2 | Theater Layout Realism | pending | 2.5h | [phase-02](phase-02-theater-layout-realism.md) |
-| 3 | Responsive & Mobile Support | pending | 2h | [phase-03](phase-03-responsive-mobile-support.md) |
-| 4 | Accessibility & Tooltips | pending | 1.5h | [phase-04](phase-04-accessibility-tooltips.md) |
-| 5 | Real-time Seat Availability (WebSocket) | pending | 3.5h | [phase-05](phase-05-real-time-seat-availability-websocket.md) |
-| 6 | Adjacent Seat Suggestion for Groups | pending | 2.5h | [phase-06](phase-06-adjacent-seat-suggestion-groups.md) |
+| 1 | Seat Type Visual Differentiation & Row Labels | done | 2h | [phase-01](phase-01-seat-type-differentiation-row-labels.md) |
+| 2 | Theater Layout Realism | done | 2.5h | [phase-02](phase-02-theater-layout-realism.md) |
+| 3 | Responsive & Mobile Support | done | 2h | [phase-03](phase-03-responsive-mobile-support.md) |
+| 4 | Accessibility & Tooltips | done | 1.5h | [phase-04](phase-04-accessibility-tooltips.md) |
+| 5 | Real-time Seat Availability (WebSocket) | done | 3.5h | [phase-05](phase-05-real-time-seat-availability-websocket.md) |
+| 6 | Adjacent Seat Suggestion for Groups | done | 2.5h | [phase-06](phase-06-adjacent-seat-suggestion-groups.md) |
 
 ## Key Dependencies
 
@@ -41,6 +41,24 @@ Enhance the seat booking experience with visual seat type differentiation, reali
 - Angular Material 18 (MatTooltip, MatStepper, MatChips) already in project
 - Redis seat locking in `SeatLockServiceImpl` — Phase 5 publishes lock/unlock events
 - No WebSocket infra exists yet — Phase 5 adds `spring-boot-starter-websocket` + STOMP to booking-service
+
+## Code Review
+
+**Report:** `plans/reports/code-reviewer-260322-1333-seat-grid-booking-ui-final.md`
+**Date:** 2026-03-22
+**Result:** Passed — 0 critical, 3 high, 5 medium, 6 low findings.
+
+**Required fixes before close:**
+- [ ] Add `allowedCommonJsDependencies` to `angular.json` for `@stomp/stompjs` and `sockjs-client`
+- [ ] Extract `seat-grid.component.ts` inline styles to `.scss` (style budget exceeded)
+- [ ] Treat `LOCKED` status as occupied in `subscribeToSeatUpdates`
+- [ ] Replace `Math.max(...arr)` spreads with `reduce` (M1)
+- [ ] Fix `matTooltipShowDelay` to property binding (L3)
+- [ ] Verify `matStepperNext` works in mobile bar outside stepper tree (L5)
+
+**Open questions:**
+- Spring Cloud Gateway MVC WebSocket proxying needs end-to-end verification
+- No unit tests for new utils/services
 
 ## Constraints
 

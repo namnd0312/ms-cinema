@@ -39,6 +39,7 @@ jwt:
       - /v3/api-docs/**
       - /swagger-ui.html
       - /api/bookings/showtimes/*/booked-seats
+      - /ws/**
 
 springdoc:
   api-docs:

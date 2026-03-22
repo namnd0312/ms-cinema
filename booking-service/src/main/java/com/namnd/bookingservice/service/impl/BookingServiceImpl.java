@@ -10,6 +10,7 @@ import com.namnd.bookingservice.model.BookingStatus;
 import com.namnd.bookingservice.repository.BookingRepository;
 import com.namnd.bookingservice.service.BookingService;
 import com.namnd.bookingservice.service.SeatLockService;
+import com.namnd.bookingservice.websocket.SeatWebSocketPublisher;
 import com.namnd.kafka.events.audit.Auditable;
 import com.namnd.kafka.events.domain.AuditAction;
 import io.micrometer.core.instrument.Counter;
@@ -33,6 +34,7 @@ public class BookingServiceImpl implements BookingService {
     private final BookingRepository bookingRepository;
     private final SeatLockService seatLockService;
     private final MovieServiceClient movieServiceClient;
+    private final SeatWebSocketPublisher seatWebSocketPublisher;
     private final Counter bookingCreatedCounter;
     private final Counter bookingConfirmedCounter;
     private final Counter bookingCancelledCounter;
@@ -40,12 +42,14 @@ public class BookingServiceImpl implements BookingService {
     public BookingServiceImpl(BookingRepository bookingRepository,
                                SeatLockService seatLockService,
                                MovieServiceClient movieServiceClient,
+                               SeatWebSocketPublisher seatWebSocketPublisher,
                                Counter bookingCreatedCounter,
                                Counter bookingConfirmedCounter,
                                Counter bookingCancelledCounter) {
         this.bookingRepository = bookingRepository;
         this.seatLockService = seatLockService;
         this.movieServiceClient = movieServiceClient;
+        this.seatWebSocketPublisher = seatWebSocketPublisher;
         this.bookingCreatedCounter = bookingCreatedCounter;
         this.bookingConfirmedCounter = bookingConfirmedCounter;
         this.bookingCancelledCounter = bookingCancelledCounter;
@@ -96,6 +100,11 @@ public class BookingServiceImpl implements BookingService {
         booking.setTotalAmount(totalAmount);
         Booking saved = bookingRepository.save(booking);
         bookingCreatedCounter.increment();
+        try {
+            seatWebSocketPublisher.publishSeatUpdate(request.showtimeId(), request.seatIds(), "RESERVED");
+        } catch (Exception e) {
+            // Non-critical: WS notification failure should not break the booking
+        }
         return toResponseDto(saved);
     }
 
@@ -127,6 +136,11 @@ public class BookingServiceImpl implements BookingService {
         // Seats are now permanently booked; release Redis locks
         List<Long> seatIds = booking.getSeats().stream().map(BookingSeat::getSeatId).toList();
         seatLockService.unlockSeats(booking.getShowtimeId(), seatIds);
+        try {
+            seatWebSocketPublisher.publishSeatUpdate(booking.getShowtimeId(), seatIds, "CONFIRMED");
+        } catch (Exception e) {
+            // Non-critical: WS notification failure should not break confirmation
+        }
     }
 
     @Override
@@ -141,6 +155,11 @@ public class BookingServiceImpl implements BookingService {
         bookingCancelledCounter.increment();
         List<Long> seatIds = booking.getSeats().stream().map(BookingSeat::getSeatId).toList();
         seatLockService.unlockSeats(booking.getShowtimeId(), seatIds);
+        try {
+            seatWebSocketPublisher.publishSeatUpdate(booking.getShowtimeId(), seatIds, "RELEASED");
+        } catch (Exception e) {
+            // Non-critical: WS notification failure should not break cancellation
+        }
     }
 
     // --- helpers ---

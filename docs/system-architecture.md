@@ -76,6 +76,7 @@ Infrastructure:
   - `/api/notifications/**` → notification-service (SSE stream, REST CRUD, broadcast)
   - `/api/notifications/stream` → notification-service (SSE endpoint, **ContentCachingResponseWrapper skipped to prevent thread exhaustion**)
   - `/api/audit/**` → audit-service (admin-only audit log API, requires ADMIN role)
+  - `/ws/booking` → booking-service (WebSocket STOMP endpoint, **NEW March 22, 2026**)
 - Aggregates OpenAPI documentation: `/v3/api-docs`
 - Swagger UI: `/swagger-ui.html`
 - HttpLoggingFilter: Logs requests with X-Correlation-ID, skips response caching for SSE paths
@@ -119,6 +120,12 @@ Infrastructure:
 - Kafka Listeners: Consumes PaymentCompletedEvent (CONFIRMED), PaymentFailedEvent (CANCELLED)
 - Redis Locks: Seat:lock:{showtimeId}:{seatId} with 5-min TTL
 - Scheduler: BookingExpiryScheduler (60s check) transitions expired PENDING bookings
+- **WebSocket Configuration (NEW March 22, 2026):**
+  - WebSocketConfig.java: Spring WebSocket + STOMP, in-memory broker (app:/booking/seats/*)
+  - SeatStatusMessage.java: DTO (showtimeId, seatId, status, userId, action: LOCK/RESERVE/CANCEL)
+  - SeatWebSocketPublisher.java: Broadcasts SeatStatusMessage to /booking/seats/{showtimeId} endpoint
+  - Modified BookingServiceImpl: Calls publishSeatStatusChange() on lock/reserve/cancel
+  - Modified BookingExpiryScheduler: Publishes CANCEL when booking expires
 - Database: bookingdb (2 tables: bookings, booking_seats)
 
 **payment-service (:8084)** - Stripe payment processing
@@ -213,7 +220,16 @@ Infrastructure:
 **cinema-frontend (Angular 18)** - Web UI
 - Port: 4200 (dev) → 80 (prod via Nginx)
 - Stack: TypeScript 5.5, Material 18, Stripe.js 8.9, RxJS
+- **WebSocket Packages (NEW March 22, 2026):** @stomp/stompjs, sockjs-client
 - Lazy-loaded routes: /auth, /movies, /booking, /payment, /profile (includes /profile/change-password), /admin, /notifications
+- **Seat Grid Components (FR-3.1 NEW):**
+  - seat-grid.component.ts: Color-coded seats (STANDARD=green, PREMIUM=blue, VIP=amber), row A-Z labels, legend
+  - seat-selection.component.ts: Booking workflow + timer countdown
+  - seat-suggestion-panel.component.ts: Displays recommended adjacent seat groups
+  - seat-websocket.service.ts: STOMP/SockJS client with event listeners
+  - seat-suggestion.service.ts: O(n*m) client-side seat matching algorithm
+  - Utilities: seat-grid-layout.utils.ts, seat-grid-keyboard-navigation.utils.ts, seat-selection-timer.utils.ts
+- **Accessibility:** WCAG 2.1 AA (ARIA grid role, keyboard nav, color+icons, focus styles)
 - Components: ChangePasswordComponent (reactive form with current/new/confirm fields, visibility toggles, validation)
 - API proxy: Configured to route /api/* to http://api-gateway:8080
 - Nginx SPA fallback for client-side routing
@@ -316,6 +332,56 @@ FAIL CASE: Payment failed
             ├─ Transition Booking → CANCELLED
             ├─ Release Redis locks (failure → free seats)
             └─ Send failure notification
+```
+
+### Real-Time Seat Availability Flow (WebSocket STOMP - NEW March 22, 2026 - FR-3.1 COMPLETE)
+```
+cinema-frontend: Seat Selection Page Load (FR-3.1 Implementation)
+      ├─ seat-websocket.service.ts: Connect to /ws/booking via SockJS+STOMP
+      │  └─ JWT validation during WebSocket handshake
+      │
+      ├─ Subscribe to /booking/seats/{showtimeId}
+      │  └─ Listen for SeatStatusMessage events (showtimeId, seatId, status, userId, action)
+      │
+      └─ User selects seat → BookingController.reserve()
+         └─ booking-service BookingService.reserveSeats()
+            ├─ Acquire Redis lock (seat:lock:{showtimeId}:{seatId}, 5min TTL)
+            ├─ Create Booking (PENDING), BookingSeat (LOCKED)
+            ├─ SeatWebSocketPublisher.publishSeatStatusChange() → STOMP endpoint
+            │  └─ /booking/seats/{showtimeId} message (action: LOCK, userId, seatId, status)
+            └─ All connected clients receive LOCK update, seat UI marked unavailable
+
+USER: Payment completes → payment-service webhook
+      ├─ PaymentWebhookService.handlePaymentCompleted()
+      ├─ booking-service PaymentCompletedEvent listener
+      │  ├─ Transition Booking → CONFIRMED
+      │  ├─ SeatWebSocketPublisher.publishSeatStatusChange() → STOMP
+      │  │  └─ /booking/seats/{showtimeId} (action: RESERVE, userId, seatId, status)
+      │  └─ All clients: seat marked RESERVED (gray color, permanent)
+      │
+      └─ Timeout Case: Booking expires (PENDING past expiresAt)
+         ├─ BookingExpiryScheduler (60s check) detects expiry
+         ├─ Transition Booking → EXPIRED, release Redis lock
+         ├─ SeatWebSocketPublisher.publishSeatStatusChange() → STOMP
+         │  └─ /booking/seats/{showtimeId} (action: CANCEL, userId, seatId, status)
+         └─ All clients: seat color resets to AVAILABLE (green/blue/amber)
+
+FRONTEND: seat-websocket.service.ts event handlers
+      ├─ onSeatStatusChange(message) processes incoming SeatStatusMessage
+      │  ├─ LOCK: Update seat-grid component (user color, mark busy)
+      │  ├─ RESERVE: Dim seat, show permanent booked indicator
+      │  ├─ CANCEL: Reset to available color (green/blue/amber)
+      │  └─ Update internal state, re-render seat grid
+      │
+      ├─ Reconnect Logic: Auto-reconnect with exponential backoff
+      │  └─ Disconnect detected → retry 1s, 2s, 4s, 8s, 16s, 30s max
+      │
+      └─ Adjacent Seat Suggestion Panel (if incomplete selection)
+         └─ seat-suggestion.service.ts: findBestAdjacentGroup()
+            ├─ O(n*m) client-side algorithm on available seats
+            ├─ Metrics: proximity (Euclidean distance), row alignment, type uniformity
+            ├─ Score seats: same row preferred, PREMIUM/VIP type match, closest distance
+            └─ seat-suggestion-panel.component.ts shows top recommendation + accept/dismiss buttons
 ```
 
 ### Notification Flow (Email + Real-Time SSE)

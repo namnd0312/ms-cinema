@@ -149,7 +149,7 @@ src/main/java/com/namnd/cinema/
 
 ## booking-service (Port 8083)
 
-**Key Features:** Seat reservation with Redis locking (5-min TTL), booking lifecycle (PENDING→CONFIRMED/CANCELLED/EXPIRED), Feign client to movie-service, consumes PaymentCompletedEvent/PaymentFailedEvent, BookingExpiryScheduler (60s check), transactional event listener
+**Key Features:** Seat reservation with Redis locking (5-min TTL), booking lifecycle (PENDING→CONFIRMED/CANCELLED/EXPIRED), Feign client to movie-service, consumes PaymentCompletedEvent/PaymentFailedEvent, BookingExpiryScheduler (60s check), transactional event listener, real-time WebSocket seat availability broadcasts
 
 **Controllers:**
 - BookingController - reserve, getBooking, getUserBookings, confirmBooking, cancelBooking, getBookedSeats
@@ -157,10 +157,12 @@ src/main/java/com/namnd/cinema/
 **Models:**
 - Booking (id, showtimeRef, userRef, status ENUM, createdAt, expiresAt)
 - BookingSeat (id, bookingRef, seatRef, status ENUM)
+- SeatStatusMessage (showtimeId, seatId, status, userId, action: LOCK/RESERVE/CANCEL)
 
 **Services:**
 - BookingService - Manages lifecycle, Redis locking, event handling
 - SeatReservationService - Acquires locks (key pattern: seat:lock:{showtimeId}:{seatId})
+- SeatWebSocketPublisher - Broadcasts seat status changes to connected WebSocket clients (STOMP)
 
 **Feign Clients:**
 - MovieServiceClient - Fetch showtime & seat details
@@ -180,6 +182,17 @@ src/main/java/com/namnd/cinema/
 
 **Redis Lock Key Pattern:** `seat:lock:{showtimeId}:{seatId}`
 **Lock TTL:** 5 minutes (configurable)
+
+**WebSocket Configuration (NEW - March 22, 2026):**
+- WebSocketConfig.java: Spring WebSocket configuration, STOMP endpoint /ws/booking, SockJS fallback
+- Message broker: In-memory (app:/booking/seats/*)
+- Authenticated via JWT during WebSocket handshake
+- SeatStatusMessage.java: DTO (showtimeId, seatId, status, userId, action: LOCK/RESERVE/CANCEL)
+- SeatWebSocketPublisher.java: Service to broadcast seat status changes to connected clients via STOMP
+- Event actions: LOCK (user acquiring seat), RESERVE (payment confirmed), CANCEL (booking expired/failed)
+- Modified BookingServiceImpl: Calls SeatWebSocketPublisher.publishSeatStatusChange() on lock/reserve/cancel
+- Modified BookingExpiryScheduler: Publishes CANCEL action when booking expires
+- Frontend subscribes to /booking/seats/{showtimeId} for real-time updates
 
 ## payment-service (Port 8084)
 
@@ -458,10 +471,26 @@ jwt.auth.secret: ${JWT_SECRET}
 - **Toolbar integration:** notification-bell added to toolbar.component.ts for persistent access
 - **App integration:** /notifications route added to app.routes.ts
 
+**Seat Grid Display & Booking UI (NEW - March 22, 2026 - FR-3.1 COMPLETE):**
+- **Services:**
+  - seat-websocket.service.ts: STOMP/SockJS WebSocket client (connects /ws/booking, listens LOCK/RESERVE/CANCEL events)
+  - seat-suggestion.service.ts: Client-side O(n*m) algorithm (proximity distance, row preference, type uniformity)
+- **Components:**
+  - seat-suggestion-panel.component.ts: UI panel with recommended seat groups + accept/dismiss actions
+- **Utilities:**
+  - seat-grid-layout.utils.ts: Screen curves with glow, aisle gaps (cols 6,13), VIP dividers, responsive 36/40/44px
+  - seat-grid-keyboard-navigation.utils.ts: Arrow keys (up/down/left/right), roving tabindex, focus-visible
+  - seat-selection-timer.utils.ts: Booking countdown timer with expiration logic
+- **Modified Components:**
+  - seat-grid.component.ts: Color-coded seats (STANDARD=green, PREMIUM=blue, VIP=amber), row A-Z labels, legend (type+price)
+  - seat-selection.component.ts: WebSocket integration, suggestion panel UI, timer countdown
+- **Dependencies:** @stomp/stompjs, sockjs-client (added to package.json)
+- **Accessibility:** WCAG 2.1 AA (ARIA role=grid, keyboard nav, color+icons, MatTooltip, aria-live)
+
 **Lazy-Loaded Routes:**
 - /auth (login, register, password reset, OAuth2 callback)
 - /movies (browse, details)
-- /booking (seat selection, confirmation)
+- /booking (seat selection with grid, real-time updates, suggestions)
 - /payment (Stripe checkout)
 - /profile (user info, bookings, change password)
 - /admin (admin dashboard with tabs)
