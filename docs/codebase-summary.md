@@ -2,12 +2,12 @@
 
 **Project:** ms-cinema
 **Generated:** March 2026
-**Architecture:** 10-module Maven microservices (Spring Cloud)
+**Architecture:** 11-module Maven microservices (Spring Cloud)
 **Java Version:** 21 LTS
 **Spring Boot:** 3.4.3
 **Spring Cloud:** 2024.0.1
 
-## 10 Maven Modules Overview
+## 11 Maven Modules Overview
 
 ```
 ms-cinema/ (root pom: packaging=pom)
@@ -15,12 +15,13 @@ ms-cinema/ (root pom: packaging=pom)
 │   ├── eureka-server (:8761) - Service registry
 │   ├── config-server (:8888) - Centralized config
 │   └── api-gateway (:8080) - Single entry point
-├── Business Services (5 modules)
+├── Business Services (6 modules)
 │   ├── auth-service (:8081) - JWT auth, user management
 │   ├── movie-service (:8082) - Movies, theaters, showtimes
 │   ├── booking-service (:8083) - Seat reservation, Feign → movie-service
 │   ├── payment-service (:8084) - Stripe payments, webhooks
-│   └── notification-service (:8085) - Kafka consumer, email (SMTP)
+│   ├── notification-service (:8085) - Kafka consumer, email (SMTP)
+│   └── audit-service (:8086) - Audit event consumer, admin API
 ├── Shared Libraries (2 modules)
 │   ├── kafka-events - Event domain models
 │   └── jwt-auth-autoconfigure - Reusable JWT validator
@@ -576,6 +577,34 @@ docker build -t movie-service ./movie-service
 - booking-service: bookingdb (2 tables: bookings, booking_seats)
 - payment-service: paymentdb (1 table: payments)
 - notification-service: notificationdb (1 table: notifications with userId, eventId, notificationType, status, isRead fields)
+
+## audit-service (Port 8086)
+
+**Key Features:** Centralized audit logging via Kafka consumer, admin API with filtering, PostgreSQL persistence
+
+**Controllers:**
+- AdminAuditLogController - GET /api/audit/logs (paginated, filtered), GET /api/audit/logs/{id}
+
+**Models:**
+- AuditLog (eventId UNIQUE, userId, userIp, action [ENUM], entityType, entityId, beforeState, afterState, sourceService, traceId, requestPath, createdAt)
+
+**Services:**
+- AuditEventConsumer: Kafka listener for audit-events topic, persists to PostgreSQL
+- AuditLogRepository: Custom queries with Specification pattern for filtering (userId, action, entityType, dateRange)
+
+**Kafka Consumer:**
+- Topic: audit-events (AuditEvent records from @Auditable-annotated services)
+- Consumer group: audit-service
+- Error handling: 3 retries, exponential backoff (1s→2s→4s capped 10s), DLT for failures
+
+**REST API:**
+- GET /api/audit/logs?userId={id}&action={action}&entityType={type}&startDate={date}&endDate={date} (paginated, 20/page max 100)
+- GET /api/audit/logs/{id} (retrieve single audit log entry)
+- Requires ADMIN role (@PreAuthorize)
+
+**Database (auditdb):**
+- audit_logs table (id PK, eventId UNIQUE, userId, userIp, action, entityType, entityId, beforeState, afterState, sourceService, traceId, requestPath, createdAt)
+- Indexes: (user_id), (action), (entity_type), (created_at) for query performance
 
 **Shared Resources:**
 - PostgreSQL cluster (all databases on same instance)

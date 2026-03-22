@@ -6,6 +6,8 @@ import com.namnd.cinema.model.RefreshToken;
 import com.namnd.cinema.model.Role;
 import com.namnd.cinema.model.User;
 import com.namnd.cinema.service.*;
+import com.namnd.kafka.events.audit.Auditable;
+import com.namnd.kafka.events.domain.AuditAction;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -95,6 +97,7 @@ public class AuthController {
     @ApiResponse(responseCode = "200", description = "Login successful")
     @ApiResponse(responseCode = "401", description = "Invalid credentials")
     @ApiResponse(responseCode = "423", description = "Account locked")
+    @Auditable(action = AuditAction.LOGIN, entityType = "User")
     @PostMapping("/login")
     public ResponseEntity<?> authenticateUser(@Valid @RequestBody LoginRequestDto loginRequest) {
         try {
@@ -174,6 +177,7 @@ public class AuthController {
     @Operation(summary = "Register a new user account")
     @ApiResponse(responseCode = "200", description = "Registration successful, activation email sent")
     @ApiResponse(responseCode = "400", description = "Email already in use or invalid")
+    @Auditable(action = AuditAction.CREATE, entityType = "User")
     @PostMapping("/register")
     public ResponseEntity<String> registerUser(@RequestBody RegisterDto registerDto) {
         // Validate email: required and unique
@@ -301,6 +305,7 @@ public class AuthController {
     @ApiResponse(responseCode = "200", description = "Logged out successfully")
     @ApiResponse(responseCode = "400", description = "No valid token provided")
     @SecurityRequirement(name = "bearerAuth")
+    @Auditable(action = AuditAction.LOGOUT, entityType = "User")
     @PostMapping("/logout")
     public ResponseEntity<?> logout(HttpServletRequest request) {
         String jwt = getJwtFromRequest(request);
@@ -332,6 +337,7 @@ public class AuthController {
     @ApiResponse(responseCode = "200", description = "Password changed successfully")
     @ApiResponse(responseCode = "400", description = "Validation error")
     @SecurityRequirement(name = "bearerAuth")
+    @Auditable(action = AuditAction.UPDATE, entityType = "User")
     @Transactional
     @PostMapping("/change-password")
     public ResponseEntity<?> changePassword(@Valid @RequestBody ChangePasswordDto dto) {

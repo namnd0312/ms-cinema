@@ -12,6 +12,8 @@ import com.namnd.movieservice.repository.SeatRepository;
 import com.namnd.movieservice.repository.ShowtimeRepository;
 import com.namnd.movieservice.repository.TheaterRepository;
 import com.namnd.movieservice.service.ShowtimeService;
+import com.namnd.kafka.events.audit.Auditable;
+import com.namnd.kafka.events.domain.AuditAction;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -56,6 +58,7 @@ public class ShowtimeServiceImpl implements ShowtimeService {
 
     @Override
     @Transactional
+    @Auditable(action = AuditAction.CREATE, entityType = "Showtime")
     public ShowtimeDto create(CreateShowtimeRequest request) {
         Showtime showtime = new Showtime();
         applyRequest(showtime, request);
@@ -73,6 +76,7 @@ public class ShowtimeServiceImpl implements ShowtimeService {
 
     @Override
     @Transactional
+    @Auditable(action = AuditAction.UPDATE, entityType = "Showtime")
     public ShowtimeDto update(Long id, CreateShowtimeRequest request) {
         Showtime showtime = findOrThrow(id);
         applyRequest(showtime, request);

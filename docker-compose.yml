@@ -249,6 +249,31 @@ services:
       ZIPKIN_HOST: zipkin
     restart: unless-stopped
 
+  audit-service:
+    build:
+      context: ./audit-service
+      dockerfile: Dockerfile
+    ports:
+      - "8086:8086"
+    networks:
+      - my-net
+    depends_on:
+      - postgres-service
+      - eureka-server
+      - config-server
+      - kafka
+    environment:
+      <<: *java-tz
+      SERVER_PORT: 8086
+      EUREKA_HOST: eureka-server
+      CONFIG_SERVER_HOST: config-server
+      DB_HOST: postgres-service
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      KAFKA_HOST: kafka
+      ZIPKIN_HOST: zipkin
+    restart: unless-stopped
+
   cinema-frontend:
     build:
       context: ./cinema-frontend

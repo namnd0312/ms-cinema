@@ -1,6 +1,7 @@
 package com.namnd.cinema.model;
 
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Data;
 
 import jakarta.persistence.*;
@@ -18,6 +19,7 @@ public class User {
 
     private String username;
 
+    @JsonIgnore
     private String password;
 
     private String fullName;

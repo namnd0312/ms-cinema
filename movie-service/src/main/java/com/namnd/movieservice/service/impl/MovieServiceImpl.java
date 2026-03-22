@@ -10,6 +10,8 @@ import com.namnd.movieservice.repository.MovieCommentRepository;
 import com.namnd.movieservice.repository.MovieRatingRepository;
 import com.namnd.movieservice.repository.MovieRepository;
 import com.namnd.movieservice.service.MovieService;
+import com.namnd.kafka.events.audit.Auditable;
+import com.namnd.kafka.events.domain.AuditAction;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -43,6 +45,7 @@ public class MovieServiceImpl implements MovieService {
 
     @Override
     @Transactional
+    @Auditable(action = AuditAction.CREATE, entityType = "Movie")
     public MovieDto create(CreateMovieRequest request) {
         Movie movie = new Movie();
         applyRequest(movie, request);
@@ -53,6 +56,7 @@ public class MovieServiceImpl implements MovieService {
 
     @Override
     @Transactional
+    @Auditable(action = AuditAction.UPDATE, entityType = "Movie")
     public MovieDto update(Long id, CreateMovieRequest request) {
         Movie movie = findOrThrow(id);
         applyRequest(movie, request);
@@ -61,6 +65,7 @@ public class MovieServiceImpl implements MovieService {
 
     @Override
     @Transactional
+    @Auditable(action = AuditAction.DELETE, entityType = "Movie")
     public void delete(Long id) {
         Movie movie = findOrThrow(id);
         movie.setStatus(MovieStatus.INACTIVE);

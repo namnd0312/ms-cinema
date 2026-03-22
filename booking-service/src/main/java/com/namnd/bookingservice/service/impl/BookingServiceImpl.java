@@ -10,6 +10,8 @@ import com.namnd.bookingservice.model.BookingStatus;
 import com.namnd.bookingservice.repository.BookingRepository;
 import com.namnd.bookingservice.service.BookingService;
 import com.namnd.bookingservice.service.SeatLockService;
+import com.namnd.kafka.events.audit.Auditable;
+import com.namnd.kafka.events.domain.AuditAction;
 import io.micrometer.core.instrument.Counter;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -50,6 +52,7 @@ public class BookingServiceImpl implements BookingService {
     }
 
     @Override
+    @Auditable(action = AuditAction.CREATE, entityType = "Booking")
     public BookingResponseDto reserve(Long userId, BookingRequestDto request) {
         ShowtimeInfoDto showtime = movieServiceClient.getShowtime(request.showtimeId());
         List<SeatInfoDto> allSeats = movieServiceClient.getSeatsForShowtime(request.showtimeId());
@@ -127,6 +130,7 @@ public class BookingServiceImpl implements BookingService {
     }
 
     @Override
+    @Auditable(action = AuditAction.UPDATE, entityType = "Booking")
     public void cancelBooking(Long bookingId, Long userId) {
         Booking booking = findById(bookingId);
         // userId null = system-initiated cancel, skip ownership check

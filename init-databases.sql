@@ -4,3 +4,4 @@ CREATE DATABASE moviedb;
 CREATE DATABASE bookingdb;
 CREATE DATABASE paymentdb;
 CREATE DATABASE notificationdb;
+CREATE DATABASE auditdb;

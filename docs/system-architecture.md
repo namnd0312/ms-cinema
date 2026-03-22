@@ -6,7 +6,7 @@
 
 ## High-Level Overview
 
-MS Cinema is a 10-module Spring Cloud microservices platform for cinema ticket booking:
+MS Cinema is an 11-module Spring Cloud microservices platform for cinema ticket booking:
 
 ```
                         CLIENT (Web/Mobile)
@@ -38,9 +38,9 @@ MS Cinema is a 10-module Spring Cloud microservices platform for cinema ticket b
                                   └─────────────┘
 
 Infrastructure:
-- PostgreSQL (auth→testdb, movie→moviedb, booking→bookingdb, payment→paymentdb)
+- PostgreSQL (auth→testdb, movie→moviedb, booking→bookingdb, payment→paymentdb, audit→auditdb, notification→notificationdb)
 - Redis (:6379) - token blacklist, locks, dedup
-- Kafka (:9092) - event streaming (3 topics: movie-events, payment-events, notification-events)
+- Kafka (:9092) - event streaming (5 topics: movie-events, payment-events, notification-events, notification.in_app, audit-events)
 - Prometheus (:9090) + Grafana (:3000) + Loki (:3100) - monitoring
 - Zipkin (:9411) - distributed tracing
 - Kafdrop (:9000) - Kafka topic browser
@@ -164,6 +164,25 @@ Infrastructure:
   - Race condition fix: Atomic computeIfPresent in removeEmitter prevents concurrent mod issues
   - Broadcast optimization: findDistinctUserIds instead of findAll to avoid OOM on large datasets
 - **Fail-Open:** Redis unavailable doesn't block email send or SSE emit; dedup is optional
+
+**audit-service (:8086)** - Centralized audit logging
+- **Purpose:** Consumes audit events from business services, persists immutable audit log, exposes admin API
+- **Kafka Listener:**
+  - Topic: audit-events (AuditEvent records from @Auditable-annotated service methods)
+  - Consumer group: audit-service
+  - Dedup: eventId (Kafka retries won't create duplicate rows)
+- **REST API:**
+  - GET /api/audit/logs (paginated, sorted createdAt DESC, max 100 per page)
+    - Filter params: userId, action [ENUM], entityType, startDate, endDate
+  - GET /api/audit/logs/{id} (retrieve single audit log entry)
+  - Requires @PreAuthorize("hasRole('ADMIN')")
+- **Models:** AuditLog JPA entity (id, eventId UNIQUE, userId, userIp, action, entityType, entityId, beforeState, afterState, sourceService, traceId, requestPath, createdAt)
+- **Repositories:** AuditLogRepository with Specification pattern for dynamic filtering
+- **Database (auditdb):** audit_logs table
+  - Indexes: (user_id), (action), (entity_type), (created_at) for query performance
+- **Error Handling:**
+  - Kafka: 3 retries, exponential backoff (1s→2s→4s capped 10s), DLT for failures
+  - Dedup: eventId UNIQUE constraint prevents duplicates on retry
 
 ### Shared Libraries (2 modules)
 
@@ -364,14 +383,48 @@ cinema-frontend: Real-Time SSE Connection
          └─ Badge updates: GET /api/notifications/unread-count
 ```
 
+### Audit Logging Flow (@Auditable AOP)
+```
+SERVICE: @Auditable-annotated method (auth, movie, booking, payment)
+      ├─ Intercept before method execution (AOP aspect)
+      ├─ Capture context (userId from JWT, action type, entityType, entityId)
+      ├─ Execute business logic
+      ├─ Capture afterState (entity post-change)
+      ├─ AuditEventPublisher.publish(AuditEvent)
+      │  └─ KafkaTemplate.send("audit-events", AuditEvent)
+      └─ Return result
+
+audit-service: Kafka Consumer (audit-events topic)
+      ├─ KafkaListener.handleAuditEvent(event)
+      │  ├─ Build AuditLog entity from AuditEvent
+      │  ├─ eventId dedup check (UNIQUE constraint prevents duplicates)
+      │  ├─ Save to auditdb.audit_logs
+      │  └─ Commit Kafka offset
+      │
+      └─ Error Handling: If exception
+         └─ Kafka error handler
+            ├─ 1st retry: 1s delay
+            ├─ 2nd retry: 2s delay
+            ├─ 3rd retry: 4s delay
+            └─ Failure: Send to DLT (audit-events.DLT)
+
+ADMIN: Query audit logs
+      └─► GET /api/audit/logs?userId={id}&action={action}&entityType={type}
+          └─► audit-service AdminAuditLogController
+              ├─ Build Specification from filter params
+              ├─ Query auditdb with indexes (user_id, action, entity_type, created_at)
+              └─ Return Page<AuditLogResponse> (sorted createdAt DESC, max 100/page)
+```
+
 ## Data Persistence
 
 **Per-Service Databases (PostgreSQL 16):**
-- auth-service: testdb (8 tables: users, roles, user_roles, refresh_tokens, password_reset_tokens, activation_tokens, blacklisted_tokens)
+- auth-service: testdb (9 tables: users, roles, user_roles, refresh_tokens, password_reset_tokens, activation_tokens, blacklisted_tokens, password_history, user_oauth_providers)
 - movie-service: moviedb (7 tables: movies, theaters, seats, showtimes, movie_ratings, movie_comments, comment_reactions)
 - booking-service: bookingdb (2 tables: bookings, booking_seats)
 - payment-service: paymentdb (1 table: payments)
 - notification-service: notificationdb (1 table: notifications with columns userId, title, message, notificationType, isRead, createdAt; indexed (userId, createdAt DESC))
+- audit-service: auditdb (1 table: audit_logs with eventId UNIQUE, userId, action, entityType, entityId, beforeState, afterState, createdAt; indexed userId, action, entityType, createdAt)
 
 **Shared Resources:**
 - PostgreSQL cluster (same instance, different databases)

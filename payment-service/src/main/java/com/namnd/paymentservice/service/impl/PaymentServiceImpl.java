@@ -9,6 +9,8 @@ import com.namnd.paymentservice.model.Payment;
 import com.namnd.paymentservice.model.PaymentStatus;
 import com.namnd.paymentservice.repository.PaymentRepository;
 import com.namnd.paymentservice.service.PaymentService;
+import com.namnd.kafka.events.audit.Auditable;
+import com.namnd.kafka.events.domain.AuditAction;
 import com.stripe.exception.StripeException;
 import io.micrometer.core.instrument.Counter;
 import com.stripe.model.Event;
@@ -57,6 +59,7 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Override
     @Transactional
+    @Auditable(action = AuditAction.CREATE, entityType = "Payment")
     public PaymentIntentResponse createPaymentIntent(Long bookingId, Long amount, Long userId) {
         try {
             PaymentIntentCreateParams params = PaymentIntentCreateParams.builder()

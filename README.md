@@ -6,8 +6,8 @@ Enterprise-grade cinema ticket booking system built on Spring Boot 3.4.3 microse
 
 ## Architecture Overview
 
-**10 Maven modules:**
-- 5 Business Services (auth, movie, booking, payment, notification)
+**11 Maven modules:**
+- 6 Business Services (auth, movie, booking, payment, notification, audit)
 - 3 Infrastructure Services (eureka-server, config-server, api-gateway)
 - 2 Shared Libraries (jwt-auth-autoconfigure, kafka-events)
 - 1 Frontend (Angular 18)
@@ -39,6 +39,7 @@ mvn -pl movie-service spring-boot:run           # port 8082
 mvn -pl booking-service spring-boot:run         # port 8083
 mvn -pl payment-service spring-boot:run         # port 8084
 mvn -pl notification-service spring-boot:run    # port 8085
+mvn -pl audit-service spring-boot:run           # port 8086
 ```
 
 ## Services at a Glance
@@ -53,6 +54,7 @@ mvn -pl notification-service spring-boot:run    # port 8085
 | booking-service | 8083 | Seat reservation | Redis locking, lifecycle states, notification publishing |
 | payment-service | 8084 | Payment processing | Stripe, webhook verification, payment notifications |
 | notification-service | 8085 | Real-time notifications | SSE streaming, Kafka consumer, email (SMTP), PostgreSQL persistence |
+| audit-service | 8086 | Audit logging | Kafka consumer, PostgreSQL persistence, admin API with filtering |
 | zipkin | 9411 | Distributed tracing | Trace visualization, span analysis |
 | kafdrop | 9000 | Kafka topic browser | Topic inspection, message viewing |
 | cinema-frontend | 4200→80 | Web UI | Angular 18, Material, Stripe.js, real-time notification bell |
@@ -99,6 +101,8 @@ Each service has own database:
 
 **notification-service (notificationdb):** notifications (userId, eventId, notificationType, status, isRead, createdAt)
 
+**audit-service (auditdb):** audit_logs (eventId, userId, userIp, action, entityType, entityId, beforeState, afterState, sourceService, traceId, requestPath, createdAt)
+
 ## Kafka Event Flow
 
 | Topic | Producer | Consumer | Events |
@@ -107,6 +111,7 @@ Each service has own database:
 | payment-events | payment-service | booking-service | PaymentCompletedEvent, PaymentFailedEvent |
 | notification-events | auth-service | notification-service | NotificationRequestedEvent (email) |
 | notification.in_app | booking-service, payment-service | notification-service (SSE broadcast) | InAppNotificationEvent (payment/booking events) |
+| audit-events | @Auditable-annotated services | audit-service | AuditEvent (userId, action, entityType, entityId, before/afterState) |
 
 Error handling: 3 retries, exponential backoff, DLT for failures. Real-time in-app notifications delivered via SSE with 30s heartbeat.
 

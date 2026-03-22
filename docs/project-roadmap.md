@@ -166,21 +166,27 @@ MS Cinema is a comprehensive cinema ticket booking platform built on Spring Boot
 
 ---
 
-### Phase 4: Security & Operations (PLANNED)
+### Phase 4: Security & Operations (IN PROGRESS)
 
-**Status:** Planned
+**Status:** In Progress
 **Timeline:** May - July 2026
 **Focus:** Production hardening and compliance
 
-**Planned Features:**
+**Completed Features:**
 
-**FR-4.1: Audit Logging**
-- Log all authentication events (IP, user agent, timestamp)
-- Log sensitive operations (payment confirmation, refund)
-- Separate audit log table (immutable, 1-year retention)
-- GET /api/admin/audit-logs (admin only, paginated)
-- **Priority:** HIGH
-- **Effort:** Medium (3-4 days)
+**FR-4.1: Audit Logging (COMPLETE ✓ March 21, 2026)**
+- ✓ Centralized audit-service (:8086) — Kafka event consumer
+- ✓ AuditLog entity (eventId UNIQUE, userId, userIp, action, entityType, entityId, beforeState, afterState, sourceService, traceId, requestPath, createdAt)
+- ✓ @Auditable AOP annotation for auto-capture on business service methods
+- ✓ Admin API: GET /api/audit/logs (paginated, filtered by userId/action/entityType/dateRange) + GET /api/audit/logs/{id}
+- ✓ Kafka topic: audit-events with consumer dedup (eventId UNIQUE)
+- ✓ PostgreSQL persistence (auditdb) with indexes for query performance
+- ✓ admin-only access via @PreAuthorize("hasRole('ADMIN')")
+- ✓ Error handling: 3 retries, exponential backoff (1s→2s→4s capped 10s), DLT for failures
+- **Status:** COMPLETE (March 21, 2026)
+- **Implementation:** Auto-configuration via kafka-events shared library
+
+**Planned Features:**
 
 **FR-4.2: Two-Factor Authentication (2FA)**
 - TOTP support via authenticator apps

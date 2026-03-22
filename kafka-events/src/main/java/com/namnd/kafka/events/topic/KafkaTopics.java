@@ -16,4 +16,7 @@ public final class KafkaTopics {
 
     /** Topic for notification events (email, SMS, push — routed by notificationType). */
     public static final String NOTIFICATION_EVENTS = "notification-events";
+
+    /** Topic for audit trail events (business actions + data changes). */
+    public static final String AUDIT_EVENTS = "audit-events";
 }
