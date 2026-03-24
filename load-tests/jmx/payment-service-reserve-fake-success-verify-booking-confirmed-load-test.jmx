@@ -102,17 +102,17 @@
           <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
         </HTTPSamplerProxy>
         <hashTree>
-          <JSONPathExtractor guiclass="JSONPathExtractorGui" testclass="JSONPathExtractor" testname="Extract JWT_TOKEN" enabled="true">
-            <stringProp name="JSONPathExtractor.referenceName">JWT_TOKEN</stringProp>
-            <stringProp name="JSONPathExtractor.jsonPathExpr">$.token</stringProp>
-            <stringProp name="JSONPathExtractor.defaultValue">TOKEN_NOT_FOUND</stringProp>
-          </JSONPathExtractor>
+          <JSONPostProcessor guiclass="JSONPostProcessorGui" testclass="JSONPostProcessor" testname="Extract JWT_TOKEN" enabled="true">
+            <stringProp name="JSONPostProcessor.referenceNames">JWT_TOKEN</stringProp>
+            <stringProp name="JSONPostProcessor.jsonPathExprs">$.token</stringProp>
+            <stringProp name="JSONPostProcessor.defaultValues">TOKEN_NOT_FOUND</stringProp>
+          </JSONPostProcessor>
           <hashTree/>
-          <JSONPathExtractor guiclass="JSONPathExtractorGui" testclass="JSONPathExtractor" testname="Extract USER_ID" enabled="true">
-            <stringProp name="JSONPathExtractor.referenceName">USER_ID</stringProp>
-            <stringProp name="JSONPathExtractor.jsonPathExpr">$.userId</stringProp>
-            <stringProp name="JSONPathExtractor.defaultValue">1</stringProp>
-          </JSONPathExtractor>
+          <JSONPostProcessor guiclass="JSONPostProcessorGui" testclass="JSONPostProcessor" testname="Extract USER_ID" enabled="true">
+            <stringProp name="JSONPostProcessor.referenceNames">USER_ID</stringProp>
+            <stringProp name="JSONPostProcessor.jsonPathExprs">$.userId</stringProp>
+            <stringProp name="JSONPostProcessor.defaultValues">1</stringProp>
+          </JSONPostProcessor>
           <hashTree/>
           <ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="Assert 200 OK" enabled="true">
             <collectionProp name="Asserion.test_strings"><stringProp name="49586">200</stringProp></collectionProp>
@@ -164,11 +164,11 @@
             </collectionProp>
           </HeaderManager>
           <hashTree/>
-          <JSONPathExtractor guiclass="JSONPathExtractorGui" testclass="JSONPathExtractor" testname="Extract BOOKING_ID" enabled="true">
-            <stringProp name="JSONPathExtractor.referenceName">BOOKING_ID</stringProp>
-            <stringProp name="JSONPathExtractor.jsonPathExpr">$.id</stringProp>
-            <stringProp name="JSONPathExtractor.defaultValue">-1</stringProp>
-          </JSONPathExtractor>
+          <JSONPostProcessor guiclass="JSONPostProcessorGui" testclass="JSONPostProcessor" testname="Extract BOOKING_ID" enabled="true">
+            <stringProp name="JSONPostProcessor.referenceNames">BOOKING_ID</stringProp>
+            <stringProp name="JSONPostProcessor.jsonPathExprs">$.id</stringProp>
+            <stringProp name="JSONPostProcessor.defaultValues">-1</stringProp>
+          </JSONPostProcessor>
           <hashTree/>
         </hashTree>
 
@@ -198,11 +198,11 @@
             <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
           </HTTPSamplerProxy>
           <hashTree>
-            <JSONPathExtractor guiclass="JSONPathExtractorGui" testclass="JSONPathExtractor" testname="Extract PAYMENT_ID" enabled="true">
-              <stringProp name="JSONPathExtractor.referenceName">PAYMENT_ID</stringProp>
-              <stringProp name="JSONPathExtractor.jsonPathExpr">$.id</stringProp>
-              <stringProp name="JSONPathExtractor.defaultValue">-1</stringProp>
-            </JSONPathExtractor>
+            <JSONPostProcessor guiclass="JSONPostProcessorGui" testclass="JSONPostProcessor" testname="Extract PAYMENT_ID" enabled="true">
+              <stringProp name="JSONPostProcessor.referenceNames">PAYMENT_ID</stringProp>
+              <stringProp name="JSONPostProcessor.jsonPathExprs">$.id</stringProp>
+              <stringProp name="JSONPostProcessor.defaultValues">-1</stringProp>
+            </JSONPostProcessor>
             <hashTree/>
             <ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="Assert 2xx" enabled="true">
               <collectionProp name="Asserion.test_strings"><stringProp name="200">2</stringProp></collectionProp>
