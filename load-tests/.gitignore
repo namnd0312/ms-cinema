@@ -1,0 +1,4 @@
+# JMeter result files and logs — never commit these
+results/
+*.log
+*.jtl
