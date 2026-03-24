@@ -41,6 +41,12 @@ public class HttpLoggingFilter extends OncePerRequestFilter {
     /** SSE/streaming endpoints must not be wrapped — response caching blocks flush */
     private static final List<String> STREAMING_PATHS = List.of("/api/notifications/stream");
 
+    /** Skip logging for actuator endpoints (Prometheus scrapes every 15s) */
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        return request.getRequestURI().startsWith("/actuator");
+    }
+
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,

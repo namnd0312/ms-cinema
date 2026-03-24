@@ -35,6 +35,12 @@ public class HttpLoggingFilter extends OncePerRequestFilter {
     /** Cap logged body size to avoid enormous log entries */
     private static final int MAX_BODY_LENGTH = 2000;
 
+    /** Skip logging for actuator endpoints (Prometheus scrapes every 15s) */
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        return request.getRequestURI().startsWith("/actuator");
+    }
+
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
