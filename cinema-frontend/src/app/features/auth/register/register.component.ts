@@ -23,7 +23,7 @@ import { AuthService } from '../../../core/services/auth.service';
         <mat-card-content>
           @if (registered()) {
             <div class="success-message">
-              <p>Registration successful! Please check your email to activate your account.</p>
+              <p>Registration successful! Please check your email to set up your password and activate your account.</p>
               <a mat-button routerLink="/auth/login" color="primary">Go to Login</a>
             </div>
           } @else {
@@ -49,14 +49,6 @@ import { AuthService } from '../../../core/services/auth.service';
                 <input matInput formControlName="email" type="email">
                 @if (form.controls.email.hasError('email')) {
                   <mat-error>Invalid email format</mat-error>
-                }
-              </mat-form-field>
-
-              <mat-form-field appearance="outline" class="full-width">
-                <mat-label>Password</mat-label>
-                <input matInput formControlName="password" type="password">
-                @if (form.controls.password.hasError('minlength')) {
-                  <mat-error>Password must be at least 6 characters</mat-error>
                 }
               </mat-form-field>
 
@@ -98,8 +90,7 @@ export class RegisterComponent {
   form = this.fb.nonNullable.group({
     username: ['', [Validators.required]],
     fullName: ['', [Validators.required]],
-    email: ['', [Validators.required, Validators.email]],
-    password: ['', [Validators.required, Validators.minLength(6)]]
+    email: ['', [Validators.required, Validators.email]]
   });
 
   onSubmit(): void {

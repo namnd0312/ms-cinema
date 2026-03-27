@@ -216,7 +216,7 @@ public class AuthController {
 
         User user1 = registerDtoMapper.toEntity(registerDto);
         userService.save(user1);
-        passwordHistoryService.savePasswordToHistory(user1, user1.getPassword());
+        // Password history deferred to activation (password is null at registration)
         activationService.createActivationToken(user1);
         authRegisterCounter.increment();
 
@@ -230,6 +230,28 @@ public class AuthController {
     public ResponseEntity<?> activateAccount(@RequestParam("token") String token) {
         try {
             activationService.activateAccount(token);
+            return ResponseEntity.ok("Account activated successfully! You can now login.");
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @Operation(summary = "Activate account and set password")
+    @ApiResponse(responseCode = "200", description = "Account activated with password set")
+    @ApiResponse(responseCode = "400", description = "Invalid token or validation error")
+    @PostMapping("/activate-with-password")
+    public ResponseEntity<?> activateWithPassword(@RequestBody SetupPasswordDto dto) {
+        if (dto.getToken() == null || dto.getToken().isBlank()) {
+            return ResponseEntity.badRequest().body("Activation token is required.");
+        }
+        if (dto.getPassword() == null || dto.getPassword().length() < 6) {
+            return ResponseEntity.badRequest().body("Password must be at least 6 characters.");
+        }
+        if (!dto.getPassword().equals(dto.getConfirmPassword())) {
+            return ResponseEntity.badRequest().body("Passwords do not match.");
+        }
+        try {
+            activationService.activateWithPassword(dto.getToken(), dto.getPassword());
             return ResponseEntity.ok("Account activated successfully! You can now login.");
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(e.getMessage());

@@ -92,13 +92,20 @@ Infrastructure:
 - Token Blacklist: Redis with auto-TTL (fail-closed on outage)
 - Account Lockout: 5 failed attempts → 15-min auto-unlock
 - Password History: Maintains last 3 password hashes per user, prevents reuse in password reset & change-password flows
+- **Deferred Password Setup:** Users register without password (username, email, fullName only), set password via email activation link
+  - Registration: POST /api/auth/register creates user with password=NULL, active=false, sends activation email
+  - Activation Email: Links to frontend /auth/setup-password?token=uuid
+  - New Endpoint: POST /api/auth/activate-with-password {token, password, confirmPassword} - validates token, hashes password, seeds password_history, sets active=true, marks token used (@Transactional)
+  - Backward Compat: GET /api/auth/activate (old endpoint) still works for OAuth integration
+  - Config: activationBaseUrl updated to frontend URL (application.yml, config-repo/auth-service.yml)
 - OAuth2 Login: Google OAuth2 integration via Spring Security (email_verified auto-link)
   - UserOAuthProvider entity: Stores provider linkage (provider_name, provider_user_id, linkedAt)
   - OAuth2AuthenticationSuccessHandler: Generates JWT + refresh token, redirects to frontend with query params
   - OAuth2UserLinkingService: Find/create user, auto-link by email if verified, handle race conditions
+  - OAuth users: password=NULL until user initiates password reset
 - Email Events: Publishes NotificationRequestedEvent to Kafka (no direct SMTP)
-- Endpoints: /api/auth/login, /register, /refresh-token, /logout, /forgot-password, /reset-password, /change-password (auth required), /oauth2/authorization/**, /login/oauth2/code/**
-- Database: testdb (9 tables: users, roles, user_roles, refresh_tokens, password_reset_tokens, activation_tokens, blacklisted_tokens, password_history, user_oauth_providers)
+- Endpoints: /api/auth/login, /register, /activate, /activate-with-password (NEW), /refresh-token, /logout, /forgot-password, /reset-password, /change-password (auth required), /oauth2/authorization/**, /login/oauth2/code/**
+- Database: testdb (9 tables: users [password nullable], roles, user_roles, refresh_tokens, password_reset_tokens, activation_tokens, blacklisted_tokens, password_history, user_oauth_providers)
 
 **movie-service (:8082)** - Movie catalog, showtimes, ratings, comments, reactions
 - Controllers: MovieController, TheaterController, ShowtimeController, MovieRatingController, MovieCommentController, CommentReactionController
@@ -243,6 +250,40 @@ Infrastructure:
 ## Data Flow Patterns
 
 ### Authentication Flow
+
+#### User Registration (Deferred Password Setup - NEW March 27, 2026)
+```
+CLIENT: POST /api/auth/register
+        └─► api-gateway (routes to auth-service)
+            └─► auth-service AuthController.register()
+                ├─ Validate email unique, required
+                ├─ Create User: username, email, fullName, password=NULL, active=false, ROLE_USER
+                ├─ Create ActivationToken (24-hour expiration, UUID-based)
+                ├─ EmailService.sendActivationEmail()
+                │  └─ Publish NotificationRequestedEvent to Kafka notification-events topic
+                │     └─ Email body includes: {activationBaseUrl}/auth/setup-password?token={uuid}
+                └─ 200 OK "User registered successfully! Check your email to set up your password."
+
+FRONTEND: User clicks activation link in email
+          └─► http://localhost:4200/auth/setup-password?token=uuid
+              └─► SetupPasswordComponent extracts token, shows password form
+
+CLIENT: POST /api/auth/activate-with-password
+        └─► api-gateway (routes to auth-service)
+            └─► auth-service AuthController.activateWithPassword()
+                ├─ Validate token (exists, not expired, not used)
+                ├─ Validate password + confirmPassword match
+                ├─ @Transactional:
+                │  ├─ Hash password via BCrypt
+                │  ├─ Update User: password=hash, active=true
+                │  ├─ PasswordHistoryService.savePasswordToHistory() → seeds entry
+                │  ├─ ActivationToken.markAsUsed() → prevent reuse
+                │  └─ Commit
+                └─ 200 OK "Account activated successfully! You can now log in."
+
+BACKWARD COMPATIBILITY: Old GET /api/auth/activate?token=uuid still works
+                        └─ Auto-activates without password (for OAuth users)
+```
 
 #### Traditional Login (Email + Password)
 ```

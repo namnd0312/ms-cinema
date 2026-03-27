@@ -36,7 +36,7 @@ ms-cinema/ (root pom: packaging=pom)
 
 ## auth-service (Port 8081)
 
-**Key Features:** JWT auth, email activation, account lockout, token rotation, Kafka event publishing
+**Key Features:** JWT auth, deferred password setup on activation, email activation, account lockout, token rotation, Kafka event publishing
 
 ```
 src/main/java/com/namnd/cinema/
@@ -49,11 +49,11 @@ src/main/java/com/namnd/cinema/
 │   ├── RedisConfig.java - Token blacklist template
 │   └── RedisKeyPrefix.java - Constants (blacklist:, lock:)
 ├── controller/
-│   ├── AuthController.java (~230 lines) - login, register, activate, forgot-password, reset-password, refresh-token, logout
+│   ├── AuthController.java (~230 lines) - login, register, activate, activate-with-password, forgot-password, reset-password, refresh-token, logout
 │   ├── TokenValidationController.java - validate-token (for microservices), /api/users/me
 │   └── TestController.java - Health check
 ├── model/ - User, Role, RefreshToken, PasswordResetToken, ActivationToken
-├── dto/ - LoginRequestDto, JwtResponseDto, RegisterDto, ForgotPasswordDto, ResetPasswordDto, RefreshTokenRequestDto, TokenRefreshResponseDto, ValidateTokenRequestDto/ResponseDto, UserInfoResponseDto
+├── dto/ - LoginRequestDto, JwtResponseDto, RegisterDto, SetupPasswordDto, ForgotPasswordDto, ResetPasswordDto, RefreshTokenRequestDto, TokenRefreshResponseDto, ValidateTokenRequestDto/ResponseDto, UserInfoResponseDto
 ├── service/ - JwtService, UserService, RoleService, RefreshTokenService, PasswordResetService, EmailService, ActivationService, BlacklistedTokenService, AccountLockService, RedisService
 ├── repository/ - UserRepository, RoleRepository, RefreshTokenRepository, PasswordResetTokenRepository, ActivationTokenRepository
 └── resources/
@@ -64,7 +64,7 @@ src/main/java/com/namnd/cinema/
 **Key Services:**
 - **JwtService** (147 lines): HS512 signing, validates signature+expiration+blacklist, embeds roles+userId claims
 - **EmailServiceImpl** (35 lines): Publishes NotificationRequestedEvent to Kafka topic "notification-events" (no direct SMTP)
-- **ActivationServiceImpl** (~90 lines): 24-hour email activation tokens (UUID-based)
+- **ActivationServiceImpl** (~90 lines): 24-hour email activation tokens (UUID-based), new activateWithPassword() method for deferred password setup
 - **PasswordResetServiceImpl** (~80 lines): 24-hour password reset tokens
 - **BlacklistedTokenServiceImpl** (~50 lines): Redis JTI blacklist with auto-TTL (fail-closed)
 - **AccountLockServiceImpl** (~60 lines): 5-attempt lockout, auto-unlock after 15 minutes
@@ -78,7 +78,7 @@ src/main/java/com/namnd/cinema/
 **API Endpoints:** See README.md API Reference section
 
 **Database Schema:**
-- users (id, username, email UNIQUE, password [nullable for OAuth-only], fullName, active, failedAttempts, lockTime; @JsonIgnore added to password field for API security)
+- users (id, username, email UNIQUE, password [nullable - set during activation or for OAuth-only users], fullName, active, failedAttempts, lockTime; @JsonIgnore added to password field for API security)
 - roles (id, name)
 - user_roles (user_id FK, role_id FK)
 - refresh_tokens (id, token UNIQUE, expiryDate, user_id FK)
@@ -93,7 +93,8 @@ src/main/java/com/namnd/cinema/
 - PasswordHistoryService: Manages history CRUD, validates new password against recent entries
 - POST /api/auth/change-password: Endpoint for authenticated password changes (blocked for OAuth-only users)
 - Password reset (POST /api/auth/reset-password): Validates new password against 3 most recent hashes
-- Registration flow: Seeds initial password to history table on user creation
+- Activation flow (POST /api/auth/activate-with-password): Seeds initial password to history table when user sets password
+- Registration flow: No longer seeds password history (deferred until activation)
 
 **OAuth2 Integration:**
 - UserOAuthProvider entity: Stores provider linkage (provider_name, provider_user_id, providerEmail, linkedAt)
@@ -491,13 +492,23 @@ jwt.auth.secret: ${JWT_SECRET}
 - **API Data Mapping:** Fixed rowLabel/seatNumber (API) → rowNumber/columnNumber/price (frontend) in seat grid display
 
 **Lazy-Loaded Routes:**
-- /auth (login, register, password reset, OAuth2 callback)
+- /auth (login, register, setup-password, password reset, OAuth2 callback)
 - /movies (browse, details)
 - /booking (seat selection with grid, real-time updates, suggestions)
 - /payment (Stripe checkout)
 - /profile (user info, bookings, change password)
 - /admin (admin dashboard with tabs)
 - /notifications (notification history, mark-as-read)
+
+**Password Setup on Activation (Frontend - NEW):**
+- Route: /auth/setup-password?token=uuid (public, pre-activation)
+- Component: SetupPasswordComponent with reactive form
+- Fields: password, confirmPassword
+- Validation: Passwords match check, password strength validation
+- Token extraction: Query param ?token=uuid
+- Integration: Activation email links to this route
+- Error handling: Display validation errors, token expiration, server response messages
+- Success: Redirect to login after successful password setup
 
 **Password Change Feature (Frontend):**
 - Route: /profile/change-password (protected, requires authentication)

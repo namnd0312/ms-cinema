@@ -165,8 +165,9 @@ The API Gateway (:8080) aggregates OpenAPI docs from all downstream services:
 | Endpoint | Auth | Description |
 |----------|------|-------------|
 | POST /api/auth/login | none | Authenticate with email + password |
-| POST /api/auth/register | none | Create new user account |
-| GET /api/auth/activate | token param | Activate account via email link |
+| POST /api/auth/register | none | Create new user account (no password field, deferred to activation) |
+| GET /api/auth/activate | token param | Activate account via email link (legacy, backward compat for OAuth) |
+| POST /api/auth/activate-with-password | token | Activate account and set password (user clicks email link, posts password) |
 | POST /api/auth/resend-activation | none | Resend activation email |
 | POST /api/auth/forgot-password | none | Initiate password reset flow |
 | POST /api/auth/reset-password | token | Complete password reset (validates against 3 recent passwords) |

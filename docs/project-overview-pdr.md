@@ -12,7 +12,7 @@ MS Cinema is an **11-module Spring Cloud microservices platform** for cinema tic
 
 **Key Characteristics:**
 - Single external entry point: API Gateway (port 8080)
-- **Auth-service** (port 8081): JWT auth lifecycle, email activation, account lockout (5 attempts/15min), token rotation, @Auditable integration, OAuth2 Google login, password change with history validation
+- **Auth-service** (port 8081): JWT auth lifecycle, deferred password setup on activation, email activation, account lockout (5 attempts/15min), token rotation, @Auditable integration, OAuth2 Google login, password change with history validation
 - **Movie-service** (port 8082): Movies, theaters, showtimes; auto-generates seat grids (A-Z rows); star ratings (1-5), paginated comments with soft-delete, comment reactions (like/dislike), @Auditable on CRUD
 - **Booking-service** (port 8083): Seat reservation with Redis locking (5-min TTL), lifecycle states (PENDING→CONFIRMED/CANCELLED/EXPIRED), @Auditable on operations, real-time WebSocket seat availability (STOMP /ws/booking, <100ms latency)
 - **Payment-service** (port 8084): Stripe integration, idempotent payment intents, webhook verification, @Auditable on payments
@@ -36,12 +36,20 @@ MS Cinema is an **11-module Spring Cloud microservices platform** for cinema tic
   - Generate refresh token (7-day expiration)
   - Return both tokens + user metadata in JwtResponseDto
 
-- **User Registration:** Accept registration data, create user with roles
-  - Accept JSON with username, email (required), password, fullName, roles array
+- **User Registration:** Accept registration data, create user (password deferred to activation)
+  - Accept JSON with username, email (required), fullName, roles array (NO password field)
   - Validate email uniqueness and required (username uniqueness not enforced)
-  - Encode password via BCrypt
-  - Create roles if new, assign existing roles by ID
-  - Persist User entity with role associations
+  - Persist User entity with password=NULL, active=false, role associations
+  - Send activation email (user must click link to set password)
+
+- **Email Activation with Password Setup:** Allow user to set password after email verification
+  - User clicks email link: http://localhost:4200/auth/setup-password?token=uuid
+  - POST /api/auth/activate-with-password {token, password, confirmPassword}
+  - Validate token (exists, not expired, not used)
+  - Hash password via BCrypt, seed password_history table
+  - Set user.active=true, mark activation token as used
+  - Transactional operation (atomic password + activation)
+  - Return success message, user can now login
 
 - **Token Refresh:** Accept refresh token, return new token pair
   - Accept JSON with refreshToken
@@ -247,7 +255,6 @@ Request:
 {
   "username": "jane",
   "email": "jane@example.com",
-  "password": "secure123",
   "fullName": "Jane Doe",
   "roles": [
     {"name": "ROLE_USER"}
@@ -257,11 +264,36 @@ Request:
 
 Response (200 OK):
 ```
-"User registered successfully!"
+"User registered successfully! Check your email to set up your password."
 ```
 
 Error (400 Bad Request):
 - Email already in use, or email required
+
+### Activate with Password Endpoint (NEW)
+**POST /api/auth/activate-with-password**
+- Consumes: application/json
+- Produces: application/json
+- Auth: None (token-based)
+
+Request:
+```json
+{
+  "token": "activation-token-from-email",
+  "password": "newSecure123",
+  "confirmPassword": "newSecure123"
+}
+```
+
+Response (200 OK):
+```
+"Account activated successfully! You can now log in."
+```
+
+Error (400 Bad Request):
+- Invalid, expired, or already-used activation token
+- Password and confirmPassword do not match
+- Password validation failed
 
 ### Forgot Password Endpoint
 **POST /api/auth/forgot-password**

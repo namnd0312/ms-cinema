@@ -8,5 +8,7 @@ public interface ActivationService {
 
     void activateAccount(String token);
 
+    void activateWithPassword(String token, String password);
+
     void resendActivationToken(String email);
 }

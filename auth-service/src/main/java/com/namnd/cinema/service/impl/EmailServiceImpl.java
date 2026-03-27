@@ -39,8 +39,8 @@ public class EmailServiceImpl implements EmailService {
         var event = new NotificationRequestedEvent(
                 "EMAIL", "ACTIVATION", to,
                 "Activate Your Account",
-                "Welcome! Please activate your account.\n\n"
-                        + "Click the link below to activate:\n"
+                "Welcome! Please set up your password to activate your account.\n\n"
+                        + "Click the link below to set your password:\n"
                         + activationLink + "\n\n"
                         + "This link will expire in 24 hours.\n"
                         + "If you did not register, please ignore this email."

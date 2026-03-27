@@ -7,6 +7,19 @@
 
 ### [Unreleased]
 
+#### Deferred Password Setup to Activation (FR-3.2 COMPLETE ✓) — March 27, 2026
+- **Feature:** Users register without password; password set during email activation
+  - Registration flow: Accept username, email, fullName only (NO password field)
+  - Email activation: User clicks link to frontend /auth/setup-password?token=uuid
+  - New endpoint: POST /api/auth/activate-with-password {token, password, confirmPassword}
+  - Sets user.active=true, hashes password, seeds password_history, marks token used
+  - Backend: New SetupPasswordDto, ActivationServiceImpl.activateWithPassword() (@Transactional)
+  - Frontend: Register form removes password field, new SetupPasswordComponent at /auth/setup-password route
+  - Config: activationBaseUrl updated to frontend URL (both application.yml and config-repo/auth-service.yml)
+  - Backward compat: GET /api/auth/activate (old endpoint) still works
+- **Benefits:** Delayed password setup reduces signup friction, improves security via email verification before password creation
+- **Security:** Password always set after email verification; OAuth-only users have password=NULL until setup or password reset
+
 #### Bug Fixes (March 22, 2026)
 - **OAuth2 LazyInitializationException Fix:** Force-initialize user.getRoles() within @Transactional context in OAuth2UserLinkingService to prevent lazy loading issues
 - **WebSocket nginx Proxy Fix:** Add conditional Connection header (Connection: Upgrade on WebSocket requests, keep-alive otherwise) to support WebSocket upgrade while maintaining regular HTTP requests

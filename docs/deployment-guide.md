@@ -189,27 +189,37 @@ curl http://localhost:8080/api/auth/register
 ### 6. Test Authentication Flow
 
 ```bash
-# 1. Register user
+# 1. Register user (no password field - deferred to activation)
 curl -X POST http://localhost:8080/api/auth/register \
   -H "Content-Type: application/json" \
   -d '{
     "username": "testuser",
-    "password": "Test@1234",
+    "email": "testuser@example.com",
     "fullName": "Test User",
     "roles": [{"name": "ROLE_USER"}]
   }'
-# Expected: 200 OK "User registered successfully!"
+# Expected: 200 OK "User registered successfully! Check your email to set up your password."
 
-# 2. Login
+# 2. Activate with password (use token from email or check logs in dev)
+curl -X POST http://localhost:8080/api/auth/activate-with-password \
+  -H "Content-Type: application/json" \
+  -d '{
+    "token": "{activation_token_from_email}",
+    "password": "Test@1234",
+    "confirmPassword": "Test@1234"
+  }'
+# Expected: 200 OK "Account activated successfully! You can now log in."
+
+# 3. Login with activated credentials
 curl -X POST http://localhost:8080/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{
-    "username": "testuser",
+    "email": "testuser@example.com",
     "password": "Test@1234"
   }'
 # Expected: 200 OK with JWT token in response
 
-# 3. Access protected endpoint with token
+# 4. Access protected endpoint with token
 TOKEN="eyJhbGc..." # From login response
 curl -X GET http://localhost:8080/api/protected \
   -H "Authorization: Bearer $TOKEN"

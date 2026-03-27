@@ -257,29 +257,38 @@ Before deploying to production, verify:
 # 1. Health check
 curl https://auth.example.com/actuator/health
 
-# 2. Register test user
+# 2. Register test user (no password field - deferred to activation)
 curl -X POST https://auth.example.com/api/auth/register \
   -H "Content-Type: application/json" \
   -d '{
     "username": "test_deploy",
-    "password": "Test@12345",
+    "email": "test@example.com",
     "fullName": "Test User",
     "roles": [{"name": "ROLE_USER"}]
   }'
 
-# 3. Login
+# 3. Activate with password (use token from email)
+curl -X POST https://auth.example.com/api/auth/activate-with-password \
+  -H "Content-Type: application/json" \
+  -d '{
+    "token": "{activation_token_from_email}",
+    "password": "Test@12345",
+    "confirmPassword": "Test@12345"
+  }'
+
+# 4. Login with activated credentials
 TOKEN=$(curl -s -X POST https://auth.example.com/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"test_deploy","password":"Test@12345"}' \
+  -d '{"email":"test@example.com","password":"Test@12345"}' \
   | jq -r '.token')
 
-# 4. Test protected endpoint
+# 5. Test protected endpoint
 curl -H "Authorization: Bearer $TOKEN" \
   https://auth.example.com/api/protected
 
-# 5. Check logs for authentication events and errors
+# 6. Check logs for authentication events and errors
 
-# 6. Monitor metrics
+# 7. Monitor metrics
 curl https://auth.example.com/actuator/metrics | jq .
 ```
 

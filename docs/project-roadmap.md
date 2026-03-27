@@ -181,7 +181,21 @@ MS Cinema is a comprehensive cinema ticket booking platform built on Spring Boot
 - **Effort Actual:** 6 phases, ~8-10 days
 - **Status:** COMPLETE (March 22, 2026)
 
-**FR-3.2: Booking Payment Integration**
+**FR-3.2: Deferred Password Setup to Activation (COMPLETE ✓ March 27, 2026)**
+- ✓ Registration without password (username, email, fullName only)
+- ✓ Email activation token links to frontend /auth/setup-password?token=uuid
+- ✓ New endpoint: POST /api/auth/activate-with-password {token, password, confirmPassword}
+- ✓ SetupPasswordDto with validation (token, password, confirmPassword)
+- ✓ ActivationServiceImpl.activateWithPassword() with @Transactional
+- ✓ Password hashing, password_history seeding, user.active=true, token marked used
+- ✓ Frontend Register form: removed password field (username, email, fullName only)
+- ✓ New SetupPasswordComponent at /auth/setup-password route
+- ✓ Config: activationBaseUrl updated (application.yml, config-repo/auth-service.yml)
+- ✓ Backward compatibility: GET /api/auth/activate still works
+- **Status:** COMPLETE (March 27, 2026)
+- **Benefits:** Reduced signup friction, improved security (email verified before password), consistent with OAuth flow
+
+**FR-3.3: Booking Payment Integration**
 - Complete Stripe checkout flow in frontend
 - Client secret exchange for payment confirmation
 - Error handling for failed payments
@@ -189,7 +203,7 @@ MS Cinema is a comprehensive cinema ticket booking platform built on Spring Boot
 - **Priority:** HIGH
 - **Effort:** Medium (3-4 days)
 
-**FR-3.3: User Booking History**
+**FR-3.4: User Booking History**
 - GET /api/bookings/user (all user bookings with statuses)
 - GET /api/bookings/{bookingId} (booking details + payment status)
 - GET /api/payments/user (payment history)
@@ -197,7 +211,7 @@ MS Cinema is a comprehensive cinema ticket booking platform built on Spring Boot
 - **Priority:** MEDIUM
 - **Effort:** Small (2-3 days)
 
-**FR-3.4: Admin Dashboard (COMPLETE ✓)**
+**FR-3.5: Admin Dashboard (COMPLETE ✓)**
 - ✓ Movie management (CRUD, featured movies)
 - ✓ Theater management (capacity, location)
 - ✓ Showtime scheduling (CRUD operations)
@@ -206,7 +220,7 @@ MS Cinema is a comprehensive cinema ticket booking platform built on Spring Boot
 - **Status:** COMPLETE (March 13, 2026)
 - **Implementation:** MatTable lists with MatDialog forms, admin tab navigation
 
-**FR-3.5: Rate Limiting on Sensitive Endpoints**
+**FR-3.6: Rate Limiting on Sensitive Endpoints**
 - /api/auth/login: 5 attempts per IP per minute
 - /api/auth/register: 1 per IP per hour
 - /api/auth/forgot-password: 3 per IP per hour

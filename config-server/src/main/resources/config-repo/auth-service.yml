@@ -6,4 +6,4 @@ namnd:
     maxFailedAttempts: ${MAX_FAILED_ATTEMPTS:5}
     lockDurationMs: ${LOCK_DURATION_MS:900000}
     passwordResetBaseUrl: ${PASSWORD_RESET_BASE_URL:http://localhost:4200/auth/reset-password}
-    activationBaseUrl: ${ACTIVATION_BASE_URL:http://localhost:8080/api/auth/activate}
+    activationBaseUrl: ${ACTIVATION_BASE_URL:http://localhost:4200/auth/setup-password}
