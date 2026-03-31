@@ -619,6 +619,86 @@ docker run -e SPRING_PROFILES_ACTIVE=prod \
 | db.password | 123456 | ${DB_PASSWORD} | Use vault/secrets manager |
 | logging.level | debug | info | Reduce verbosity in prod |
 
+### Spring Batch Configuration (payment-service)
+
+Payment-service uses Spring Batch for daily payment reconciliation with Stripe. Configuration must be set before startup.
+
+**application.yml (payment-service)**
+```yaml
+spring:
+  batch:
+    jdbc:
+      initialize-schema: always  # Auto-creates Spring Batch metadata tables on startup
+    job:
+      enabled: false              # Disable auto-run on startup; use @Scheduled instead
+
+# Reconciliation configuration
+reconciliation:
+  cron: "0 2 * * *"              # Daily at 2 AM (Asia/Saigon timezone)
+  auto-run: true                 # Enable scheduled reconciliation
+  max-date-range-days: 31        # Max 31 days per reconciliation run
+
+# Stripe configuration
+stripe:
+  api:
+    key: ${STRIPE_API_KEY:}      # MUST be set via environment variable
+```
+
+**Environment Variables (Required for payment-service)**
+```bash
+# Stripe API key (test or live)
+export STRIPE_API_KEY=sk_test_xxxxx  # or sk_live_xxxxx in production
+
+# Database (paymentdb)
+export SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5432/paymentdb
+export SPRING_DATASOURCE_USERNAME=postgres
+export SPRING_DATASOURCE_PASSWORD=xxxxx
+
+# JVM timezone (ensures cron uses correct timezone)
+export TZ=Asia/Saigon  # or use JVM option: -Duser.timezone=Asia/Saigon
+```
+
+**Docker Compose Configuration**
+```yaml
+payment-service:
+  environment:
+    STRIPE_API_KEY: ${STRIPE_API_KEY}
+    SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/paymentdb
+    SPRING_DATASOURCE_USERNAME: postgres
+    SPRING_DATASOURCE_PASSWORD: postgres
+    TZ: Asia/Saigon  # Timezone for scheduled jobs
+```
+
+**Batch Database Initialization**
+
+Spring Batch auto-creates metadata tables on startup with `spring.batch.jdbc.initialize-schema=always`:
+- BATCH_JOB_INSTANCE
+- BATCH_JOB_EXECUTION
+- BATCH_JOB_EXECUTION_PARAMS
+- BATCH_JOB_EXECUTION_CONTEXT
+- BATCH_STEP_EXECUTION
+- BATCH_STEP_EXECUTION_CONTEXT
+- BATCH_JOB_SEQ, BATCH_JOB_INSTANCE_SEQ, BATCH_STEP_EXECUTION_SEQ
+
+No manual SQL setup required; tables auto-created on first run.
+
+**Monitoring Batch Jobs**
+
+Check batch execution status:
+```sql
+-- Connect to paymentdb
+\c paymentdb
+
+-- View job instances
+SELECT * FROM BATCH_JOB_INSTANCE ORDER BY JOB_INSTANCE_ID DESC LIMIT 10;
+
+-- View job executions (with status)
+SELECT * FROM BATCH_JOB_EXECUTION ORDER BY JOB_EXECUTION_ID DESC LIMIT 10;
+
+-- View reconciliation runs
+SELECT * FROM reconciliation_runs ORDER BY created_at DESC LIMIT 5;
+```
+
 ---
 
 ## Database Setup

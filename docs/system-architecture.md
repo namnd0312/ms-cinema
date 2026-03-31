@@ -137,16 +137,24 @@ Infrastructure:
   - **Frontend Connection:** /ws endpoint connects via nginx to booking-service (bypasses api-gateway for WebSocket latency optimization)
 - Database: bookingdb (2 tables: bookings, booking_seats)
 
-**payment-service (:8084)** - Stripe payment processing
-- Controllers: PaymentController
-- Models: Payment, PaymentIntent
+**payment-service (:8084)** - Stripe payment processing & daily reconciliation
+- Controllers: PaymentController, ReconciliationController (NEW, @PreAuthorize("hasRole('ADMIN')"))
+- Models: Payment, PaymentIntent, ReconciliationRun, ReconciliationItem, DiscrepancyType, ReconciliationStatus
 - Stripe Integration:
   - PaymentIntent creation with idempotency key (pay-{bookingId})
   - Webhook endpoint: POST /api/payments/webhook
   - Signature verification (stripeSig header)
   - stripeEventId dedup (prevent replay attacks)
+- **Spring Batch Reconciliation (NEW):**
+  - Job: Daily 2 AM Asia/Saigon (configurable)
+  - Reader: Query local payments by createdAt range (batch size 100)
+  - Processor: Call PaymentIntent.retrieve() per payment, classify discrepancy (MATCHED/STATUS_MISMATCH/AMOUNT_MISMATCH/MISSING_LOCAL/MISSING_STRIPE)
+  - Writer: Persist ReconciliationItem chunks
+  - Listener: afterJob calls Stripe list API for missing locals, finalizes counts
+  - Validation: Max 31-day date range per run, auto-schedule via @Scheduled
+  - API: POST /trigger (manual), GET /runs (paginated), GET /runs/{runId}, GET /runs/{runId}/items, GET /summary, PUT /items/{itemId}/resolve
 - Kafka Events: Publishes PaymentCompletedEvent/PaymentFailedEvent after DB commit (TransactionalEventListener)
-- Database: paymentdb (1 table: payments)
+- Database: paymentdb (3 tables: payments, reconciliation_runs, reconciliation_items with indexes on run_id+discrepancy_type)
 
 **notification-service (:8085)** - Email notifications + Real-time in-app SSE notifications
 - **Kafka Listeners:**

@@ -198,22 +198,59 @@ src/main/java/com/namnd/cinema/
 
 ## payment-service (Port 8084)
 
-**Key Features:** Stripe integration with idempotency key (pay-{bookingId}), webhook processing with signature verification, refund (ADMIN-only), publishes PaymentCompletedEvent/PaymentFailedEvent, TransactionalEventListener for after-commit Kafka publish
+**Key Features:** Stripe integration with idempotency key (pay-{bookingId}), webhook processing with signature verification, refund (ADMIN-only), publishes PaymentCompletedEvent/PaymentFailedEvent, TransactionalEventListener for after-commit Kafka publish, **Spring Batch reconciliation with scheduled daily jobs**
 
 **Controllers:**
 - PaymentController - create-intent, confirm, getPayment, getUserPayments, refund (ADMIN), webhook (POST)
+- ReconciliationController (NEW, @PreAuthorize("hasRole('ADMIN')"), base: /api/payments/reconciliation)
+  - POST /trigger - Trigger reconciliation for date range (validates max 31 days)
+  - GET /runs - Paginated list of reconciliation runs
+  - GET /runs/{runId} - Single run details with counts
+  - GET /runs/{runId}/items - Paginated items with optional discrepancyType filter
+  - GET /summary - Latest run stats (summary counts)
+  - PUT /items/{itemId}/resolve - Mark item resolved with notes
 
 **Models:**
 - Payment (id, bookingRef, amount, currency, status ENUM, stripePaymentIntentId, createdAt)
+- ReconciliationRun (startDate, endDate, status [RUNNING/COMPLETED/FAILED], counts for matched/mismatched/missing)
+- ReconciliationItem (runId FK, stripePaymentIntentId, localPaymentId, discrepancyType ENUM, amounts, statuses, resolved, notes)
+- DiscrepancyType enum: MATCHED, STATUS_MISMATCH, AMOUNT_MISMATCH, MISSING_LOCAL, MISSING_STRIPE
+- ReconciliationStatus enum: RUNNING, COMPLETED, FAILED
+
+**Batch Job (Spring Batch):**
+- JobConfig: Job + Step beans (chunk size 100)
+- LocalPaymentReader: ItemReader querying paymentdb by createdAt range
+- ReconciliationProcessor: ItemProcessor calling PaymentIntent.retrieve() per payment, classifies discrepancy
+- ReconciliationItemWriter: ItemWriter persisting ReconciliationItem chunks to paymentdb
+- ReconciliationJobListener: afterJob calls Stripe list API for MISSING_LOCAL, finalizes run counts
 
 **Services:**
 - PaymentService - Stripe PaymentIntent creation (idempotency key: pay-{bookingId}), webhook handling
 - StripeWebhookService - Signature verification (stripeSig header), stripeEventId dedup (prevent replay)
+- ReconciliationService (interface) & ReconciliationServiceImpl
+  - triggerReconciliation(startDate, endDate) - Validates date range ≤31 days, creates ReconciliationRun, launches batch job
+  - getRuns(pageable) - Returns paginated runs sorted by createdAt DESC
+  - getRunDetails(runId) - Returns single run with summary counts
+  - getRunItems(runId, discrepancyType, pageable) - Paginated items with optional filter
+  - getSummary() - Latest run stats
+  - resolveItem(itemId, notes) - Mark item resolved with admin notes
+
+**Scheduled Batch Processing:**
+- Cron: Daily at 2 AM Asia/Saigon (configurable via reconciliation.cron property)
+- EnableScheduling: Auto-triggered via @Scheduled on ReconciliationScheduler bean
+- ConditionalOnProperty: reconciliation.auto-run=true enables auto-trigger
+- Max date range: 31 days (configurable via reconciliation.max-date-range-days)
+
+**Repositories:**
+- ReconciliationRunRepository - paginated, ordered by createdAt DESC
+- ReconciliationItemRepository - filtered by runId + discrepancyType, count queries
+- PaymentRepository.findByDateRangeWithStripeId(startDate, endDate) - NEW method for batch reader
 
 **Stripe Integration:**
 - Environment: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
 - PaymentIntent creation with idempotency key (pay-{bookingId})
 - Webhook: POST /api/payments/webhook (signature verification, event dedup)
+- Batch reconciliation: PaymentIntent.retrieve() per payment, StripeClient.listPaymentIntents() for missing locals
 - Publishes PaymentCompletedEvent/PaymentFailedEvent after DB commit (TransactionalEventListener)
 
 **Kafka Events Published:** PaymentCompletedEvent, PaymentFailedEvent → topic: payment-events
@@ -221,6 +258,20 @@ src/main/java/com/namnd/cinema/
 **Audit Integration:**
 - PaymentController: @Auditable on createPaymentIntent method
 - Audit actions: CREATE_PAYMENT
+
+**Database (paymentdb):**
+- payments table: id, bookingRef, amount, currency, status, stripePaymentIntentId, createdAt
+- reconciliation_runs table: id, startDate, endDate, status, matchedCount, mismatchedCount, missingLocalCount, missingStripeCount, totalChecked, createdAt
+- reconciliation_items table: id, runId FK, stripePaymentIntentId, localPaymentId, discrepancyType ENUM, stripeAmount, localAmount, stripeStatus, localStatus, resolved, notes, createdAt
+  - Indexes: (run_id), (discrepancy_type) for filtering
+
+**Configuration (application.yml / config-repo/payment-service.yml):**
+- spring.batch.jdbc.initialize-schema=always (auto-create Spring Batch metadata tables)
+- spring.batch.job.enabled=false (disable auto-run on startup)
+- reconciliation.cron: 0 2 * * * (2 AM daily, Asia/Saigon timezone)
+- reconciliation.auto-run: true (enable scheduled reconciliation)
+- reconciliation.max-date-range-days: 31 (max 31 days per reconciliation)
+- stripe.api.key: ${STRIPE_API_KEY:} (env var, no hardcoded test key)
 
 ## notification-service (Port 8085)
 

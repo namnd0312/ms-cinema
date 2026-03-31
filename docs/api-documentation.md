@@ -421,6 +421,74 @@ openapi-generator-cli generate \
   -o ./java-client
 ```
 
+### payment-service (/api/payments/reconciliation)
+
+**Payment Reconciliation (Admin-Only):**
+
+| Endpoint | Auth | Method | Description |
+|----------|------|--------|-------------|
+| /api/payments/reconciliation/trigger | ADMIN | POST | Trigger manual reconciliation for date range |
+| /api/payments/reconciliation/runs | ADMIN | GET | List all reconciliation runs (paginated) |
+| /api/payments/reconciliation/runs/{runId} | ADMIN | GET | Get single reconciliation run details |
+| /api/payments/reconciliation/runs/{runId}/items | ADMIN | GET | List items from a run (paginated, filterable) |
+| /api/payments/reconciliation/summary | ADMIN | GET | Get latest reconciliation run summary |
+| /api/payments/reconciliation/items/{itemId}/resolve | ADMIN | PUT | Mark reconciliation item as resolved |
+
+**POST /api/payments/reconciliation/trigger - Request:**
+```json
+{
+  "startDate": "2026-03-01",
+  "endDate": "2026-03-31"
+}
+```
+- Validates date range ≤ 31 days
+- Creates ReconciliationRun with status=RUNNING
+- Launches Spring Batch job asynchronously
+- Returns: run ID, status, estimated completion time
+
+**GET /api/payments/reconciliation/runs - Query Parameters:**
+- `page` (default: 0) - Pagination page number
+- `size` (default: 20) - Results per page
+- Response: ReconciliationRun list with matchedCount, mismatchedCount, missingLocalCount, missingStripeCount, totalChecked
+
+**GET /api/payments/reconciliation/runs/{runId}/items - Query Parameters:**
+- `page` (default: 0) - Pagination page number
+- `size` (default: 20) - Results per page
+- `discrepancyType` (optional) - Filter [MATCHED, STATUS_MISMATCH, AMOUNT_MISMATCH, MISSING_LOCAL, MISSING_STRIPE]
+- Response: ReconciliationItem list with stripePaymentIntentId, localPaymentId, discrepancyType, amounts, statuses, resolved flag
+
+**Response Format (ReconciliationSummary):**
+```json
+{
+  "runId": "550e8400-e29b-41d4-a716-446655440000",
+  "startDate": "2026-03-01",
+  "endDate": "2026-03-31",
+  "status": "COMPLETED",
+  "matchedCount": 98,
+  "mismatchedCount": 2,
+  "missingLocalCount": 0,
+  "missingStripeCount": 1,
+  "totalChecked": 101,
+  "createdAt": "2026-03-31T02:00:00Z",
+  "completedAt": "2026-03-31T02:15:32Z"
+}
+```
+
+**Response Codes:**
+- 200 OK: Reconciliation data retrieved or triggered successfully
+- 400 Bad Request: Invalid date range (>31 days), invalid date format, or malformed request
+- 401 Unauthorized: Missing or invalid Bearer token
+- 403 Forbidden: User lacks ADMIN role
+- 404 Not Found: Run ID or item ID not found
+- 500 Internal Error: Batch job failure or server exception
+
+**Notes:**
+- All endpoints require `@PreAuthorize("hasRole('ADMIN')")`
+- Scheduled reconciliation runs daily at 2 AM Asia/Saigon (configurable)
+- Manual trigger via POST /trigger accepts custom date ranges (max 31 days)
+- DiscrepancyType enum: MATCHED (amounts+statuses equal), STATUS_MISMATCH, AMOUNT_MISMATCH, MISSING_LOCAL (in Stripe, not local DB), MISSING_STRIPE (in local DB, not Stripe)
+- ReconciliationItem.resolved flag can be set to true via PUT /items/{itemId}/resolve for audit trail
+
 ### audit-service (/api/audit)
 
 **Audit Log Management (Admin-Only):**

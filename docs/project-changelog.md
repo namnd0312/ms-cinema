@@ -1,11 +1,40 @@
 # Project Changelog
 
 **Project:** ms-cinema
-**Updated:** March 22, 2026
+**Updated:** March 31, 2026
 
 ## Version 0.0.1-SNAPSHOT
 
 ### [Unreleased]
+
+#### Stripe Payment Reconciliation with Spring Batch (FR-3.3 COMPLETE ✓) — March 31, 2026
+- **Feature:** Daily automated reconciliation between local payments and Stripe PaymentIntent states
+  - Spring Batch job: Runs daily at 2 AM Asia/Saigon (configurable via reconciliation.cron)
+  - Batch architecture: LocalPaymentReader → ReconciliationProcessor → ReconciliationItemWriter
+  - Reader: Queries local payments by createdAt range from paymentdb
+  - Processor: Calls Stripe PaymentIntent.retrieve() per payment, classifies discrepancy type
+  - Writer: Persists ReconciliationItem chunks (batch size 100)
+  - Listener: afterJob invokes Stripe list API to detect MISSING_LOCAL items, finalizes run counts
+  - Backend files (14 new): batch/ (4), config/ (3), model/ (4), repository/ (2), service/ (2), controller/ (1 ReconciliationController with @PreAuthorize("hasRole('ADMIN')"))
+  - ReconciliationRun entity: Tracks startDate, endDate, status (RUNNING/COMPLETED/FAILED), counts (matchedCount, mismatchedCount, missingLocalCount, missingStripeCount, totalChecked)
+  - ReconciliationItem entity: Stores stripePaymentIntentId, localPaymentId, discrepancyType (MATCHED/STATUS_MISMATCH/AMOUNT_MISMATCH/MISSING_LOCAL/MISSING_STRIPE), amounts, statuses, resolved flag, admin notes
+  - Admin API endpoints: POST /trigger (manual run with date range), GET /runs (paginated), GET /runs/{runId}, GET /runs/{runId}/items (filtered by discrepancyType), GET /summary (latest run stats), PUT /items/{itemId}/resolve (admin resolution notes)
+  - Validation: Enforces max 31-day date range per run, validates date range before job launch
+  - Scheduling: @Scheduled cron via ReconciliationScheduler, @ConditionalOnProperty reconciliation.auto-run=true
+  - Configuration: spring.batch.jdbc.initialize-schema=always (auto-create Spring Batch metadata tables), spring.batch.job.enabled=false (no auto-run on startup), reconciliation.* properties (cron, auto-run, max-date-range-days)
+  - Environment: STRIPE_API_KEY env var (no hardcoded test key in application.yml)
+  - Database: reconciliation_runs, reconciliation_items tables auto-created by Hibernate ddl-auto: update, indexes on (run_id), (discrepancy_type)
+  - Tests: 3 test files (15 tests): ReconciliationProcessorTest (5 unit tests with MockedStatic<PaymentIntent>), ReconciliationServiceImplTest (6 unit tests), ReconciliationControllerTest (4 @WebMvcTest tests with role-based auth)
+  - Dependencies: Added spring-boot-starter-batch, h2 (test), spring-batch-test (test), spring-security-test (test) to pom.xml
+- **Frontend (4 new files - cinema-frontend):**
+  - core/models/reconciliation.model.ts: Interfaces for ReconciliationRun, ReconciliationItem, DiscrepancyType, ReconciliationSummary, PageResponse
+  - core/services/reconciliation.service.ts: HTTP client for all reconciliation endpoints
+  - features/admin/reconciliation/reconciliation-dashboard.component.ts: Summary cards, date range trigger, run history table with pagination
+  - features/admin/reconciliation/reconciliation-detail.component.ts: Items table with discrepancy type filter, resolve action, CSV export
+  - Modified admin.routes.ts: Added reconciliation + reconciliation/:runId routes
+  - Modified admin-nav.component.ts: Added "Reconciliation" tab
+- **Benefits:** Early detection of payment discrepancies, immutable audit trail, manual + scheduled processing, admin visibility into payment inconsistencies
+- **Security:** @PreAuthorize("hasRole('ADMIN')") on all reconciliation endpoints, no sensitive data in response logs
 
 #### Deferred Password Setup to Activation (FR-3.2 COMPLETE ✓) — March 27, 2026
 - **Feature:** Users register without password; password set during email activation

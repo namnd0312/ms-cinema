@@ -126,6 +126,25 @@ MS Cinema is an **11-module Spring Cloud microservices platform** for cinema tic
 - **Event Types:** PAYMENT_SUCCESS, PAYMENT_FAILED, ADMIN_BROADCAST, SYSTEM
 - **Frontend Integration:** Notification bell component with badge, snackbar alerts, notification list page
 
+### Stripe Payment Reconciliation (FR-007) NEW
+- **Daily Batch Reconciliation:** Spring Batch job compares local vs Stripe PaymentIntent states daily at 2 AM
+  - ReconciliationRun entity: Tracks startDate, endDate, status (RUNNING/COMPLETED/FAILED), counts
+  - ReconciliationItem entity: Per-payment comparison (stripePaymentIntentId, localPaymentId, discrepancyType, amounts, statuses)
+  - DiscrepancyType: MATCHED, STATUS_MISMATCH, AMOUNT_MISMATCH, MISSING_LOCAL, MISSING_STRIPE
+  - Batch Job: LocalPaymentReader → ReconciliationProcessor (PaymentIntent.retrieve) → ReconciliationItemWriter
+  - afterJob Listener: Stripe list API for MISSING_LOCAL, finalizes run counts
+  - Max 31-day date range validation per run, configurable cron schedule
+- **Admin Reconciliation API:** @PreAuthorize("hasRole('ADMIN')"), base /api/payments/reconciliation
+  - POST /trigger {startDate, endDate} - Manual trigger for custom date range
+  - GET /runs (paginated, ordered createdAt DESC)
+  - GET /runs/{runId} (single run with summary counts)
+  - GET /runs/{runId}/items?discrepancyType= (paginated items, optional filter)
+  - GET /summary (latest run stats)
+  - PUT /items/{itemId}/resolve {notes} (mark item resolved with admin notes)
+- **Scheduled Batch:** Via @Scheduled cron, @ConditionalOnProperty reconciliation.auto-run
+- **Database:** reconciliation_runs, reconciliation_items tables with indexes
+- **Configuration:** Cron schedule, max date range, enable/disable flag via application.yml
+
 ### Movie Ratings & Comments (FR-005)
 - **Star Ratings:** 1-5 point scale per movie, upsert per user
   - POST /api/movies/{movieId}/ratings (authenticated, upsert)
@@ -160,6 +179,7 @@ MS Cinema is an **11-module Spring Cloud microservices platform** for cinema tic
 - **JWT Processing:** In-memory token validation (no database lookup on validate)
 - **Eager Loading:** User roles fetched eagerly to minimize queries
 - **Connection Pooling:** Standard Spring Boot datasource (HikariCP)
+- **Batch Processing:** Spring Batch reconciliation uses chunking (size 100) to manage memory during large dataset processing
 
 ### Scalability (NFR-003)
 - **Stateless Architecture:** No session affinity required

@@ -1059,6 +1059,46 @@ location /ws/ {
 - Implement topic-based authorization (users can only subscribe to their own data)
 - Set connection timeouts to prevent zombie connections
 
+## Spring Batch Patterns (NEW March 31, 2026)
+
+**Batch Job Configuration:**
+- Use @Configuration class with @EnableBatchProcessing
+- Define Job and Step as @Bean methods in config class
+- Register Step in Job using StepBuilderFactory
+- Set chunk size (e.g., 100) to balance memory vs. database round-trips
+
+**Implementing Batch Components:**
+```java
+// Reader: Implement ItemReader<T> or extend JdbcCursorItemReader/RepositoryItemReader
+public class LocalPaymentReader implements ItemReader<Payment> {
+  @Override public Payment read() throws Exception { ... }
+}
+
+// Processor: Implement ItemProcessor<I, O> for transformation/filtering
+public class ReconciliationProcessor implements ItemProcessor<Payment, ReconciliationItem> {
+  @Override public ReconciliationItem process(Payment payment) throws Exception { ... }
+}
+
+// Writer: Implement ItemWriter<T> for batch persistence
+public class ReconciliationItemWriter implements ItemWriter<ReconciliationItem> {
+  @Override public void write(List<ReconciliationItem> items) throws Exception { ... }
+}
+
+// Listener: Implement StepExecutionListener or JobExecutionListener
+public class ReconciliationJobListener implements JobExecutionListener {
+  @Override public void afterJob(JobExecution execution) { ... }
+}
+```
+
+**Best Practices:**
+- Chunking: Break large datasets into chunks (100-1000 records) to manage memory
+- Idempotency: Design processors to be re-enterable (safe if job restarts)
+- Error Handling: Implement SkipListener/RetryListener for transient failures
+- Logging: Use JobRepository to track execution; log start/end/status
+- Scheduling: Use @Scheduled cron for daily/hourly jobs; disable auto-run with spring.batch.job.enabled=false
+- Database Init: Use spring.batch.jdbc.initialize-schema=always to auto-create metadata tables
+- Transaction Management: Chunked writing auto-wraps in @Transactional; custom listeners may need explicit tx
+
 ## Deprecated Patterns (Avoid)
 
 | Pattern | Reason | Alternative |
