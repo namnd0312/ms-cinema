@@ -6,6 +6,11 @@ spring:
     name: payment-service
   config:
     import: "optional:configserver:http://${CONFIG_SERVER_HOST:localhost}:8888"
+  batch:
+    jdbc:
+      initialize-schema: always
+    job:
+      enabled: false
   jpa:
     hibernate:
       ddl-auto: update
@@ -41,8 +46,14 @@ springdoc:
     path: /swagger-ui.html
 
 stripe:
-  api-key: ${STRIPE_API_KEY:sk_test_51O4nq6JasULoPDKqIHl2vL6vmmYhcNxXTVLpgQOkj7nZluIRtO36qbylQeHtAqV09CeHgZeacGTw20y6M5tdlIyx00hfdmO8Ry}
-  webhook-secret: ${STRIPE_WEBHOOK_SECRET:acct_1O4nq6JasULoPDKq}
+  api-key: ${STRIPE_API_KEY:}
+  webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
+
+reconciliation:
+  cron: "0 0 2 * * *"
+  auto-run:
+    enabled: true
+  max-date-range-days: 31
 
 eureka:
   client:
