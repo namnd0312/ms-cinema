@@ -26,6 +26,7 @@ export class AdminNavComponent {
     { path: 'movies', label: 'Movies' },
     { path: 'theaters', label: 'Theaters' },
     { path: 'showtimes', label: 'Showtimes' },
-    { path: 'payments', label: 'Payments' }
+    { path: 'payments', label: 'Payments' },
+    { path: 'reconciliation', label: 'Reconciliation' }
   ];
 }

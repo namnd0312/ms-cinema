@@ -27,6 +27,16 @@ export const ADMIN_ROUTES: Routes = [
         path: 'payments',
         loadComponent: () => import('./payment-management/payment-management.component')
           .then(m => m.PaymentManagementComponent)
+      },
+      {
+        path: 'reconciliation',
+        loadComponent: () => import('./reconciliation/reconciliation-dashboard.component')
+          .then(m => m.ReconciliationDashboardComponent)
+      },
+      {
+        path: 'reconciliation/:runId',
+        loadComponent: () => import('./reconciliation/reconciliation-detail.component')
+          .then(m => m.ReconciliationDetailComponent)
       }
     ]
   }
