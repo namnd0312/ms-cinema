@@ -140,7 +140,24 @@ MS Cinema là nền tảng đặt vé xem phim toàn diện được xây dựng
 - **Công sức Thực tế:** 6 giai đoạn, ~8-10 ngày
 - **Trạng thái:** HOÀN THÀNH (22 tháng 3, 2026)
 
-**FR-3.2: Tích Hợp Thanh Toán Đặt Vé**
+**FR-3.2: Tiện Ích Ngày/Giờ Frontend (HOÀN THÀNH ✓ 1 tháng 4, 2026)**
+- ✓ date-format.util.ts: Formatdate, combineDatetime, parseTime an toàn múi giờ
+- ✓ Tích hợp: showtime-form-dialog, movie-form-dialog dùng tiện ích cho xử lý datetime
+- ✓ Giải quyết: Vấn đề offset múi giờ khi gửi biểu mẫu datetime
+- **Trạng thái:** HOÀN THÀNH (1 tháng 4, 2026)
+- **Tác động:** Ngăn giá trị datetime không chính xác trong gửi biểu mẫu
+
+**FR-3.3: Bảng Điều Khiển Đối Soát Stripe (HOÀN THÀNH ✓ 31 tháng 3, 2026)**
+- ✓ reconciliation-dashboard.component.ts: Thành phần chính cho tab đối soát
+- ✓ reconciliation-detail.component.ts: Chế độ xem chi tiết cho lần chạy đơn với lọc
+- ✓ Hiển thị: Lịch sử chạy đối soát, chi tiết mục, xuất CSV
+- ✓ Hành động: Nút kích hoạt thủ công (date range picker), giải quyết mục với ghi chú
+- ✓ Bộ lọc: Theo discrepancyType (MATCHED, STATUS_MISMATCH, AMOUNT_MISMATCH, MISSING_LOCAL, MISSING_STRIPE)
+- ✓ Dịch vụ API admin: triggerReconciliation, getRuns, getRunDetails, getRunItems, getSummary, resolveItem
+- **Trạng thái:** HOÀN THÀNH (31 tháng 3, 2026)
+- **Lợi ích:** Khả năng hiển thị thực tế discrepancy thanh toán, audit trail cho giải quyết
+
+**FR-3.4: Tích Hợp Thanh Toán Đặt Vé**
 - Luồng thanh toán Stripe hoàn chỉnh trong frontend
 - Trao đổi client secret cho xác nhận thanh toán
 - Xử lý lỗi cho thanh toán thất bại
@@ -148,7 +165,7 @@ MS Cinema là nền tảng đặt vé xem phim toàn diện được xây dựng
 - **Ưu tiên:** CAO
 - **Công sức:** Trung bình (3-4 ngày)
 
-**FR-3.3: Lịch Sử Đặt Vé Người Dùng**
+**FR-3.5: Lịch Sử Đặt Vé Người Dùng**
 - GET /api/bookings/user (tất cả đặt vé của người dùng với trạng thái)
 - GET /api/bookings/{bookingId} (chi tiết đặt vé + trạng thái thanh toán)
 - GET /api/payments/user (lịch sử thanh toán)
@@ -156,7 +173,7 @@ MS Cinema là nền tảng đặt vé xem phim toàn diện được xây dựng
 - **Ưu tiên:** TRUNG BÌNH
 - **Công sức:** Nhỏ (2-3 ngày)
 
-**FR-3.4: Bảng Điều Khiển Admin (HOÀN THÀNH ✓)**
+**FR-3.6: Bảng Điều Khiển Admin (HOÀN THÀNH ✓)**
 - ✓ Quản lý phim (CRUD, phim nổi bật)
 - ✓ Quản lý rạp (sức chứa, vị trí)
 - ✓ Lịch chiếu (thao tác CRUD)
@@ -165,7 +182,7 @@ MS Cinema là nền tảng đặt vé xem phim toàn diện được xây dựng
 - **Trạng thái:** HOÀN THÀNH (13 tháng 3, 2026)
 - **Triển khai:** Danh sách MatTable với form MatDialog, điều hướng tab admin
 
-**FR-3.5: Giới Hạn Tốc Độ Trên Endpoint Nhạy Cảm**
+**FR-3.7: Giới Hạn Tốc Độ Trên Endpoint Nhạy Cảm**
 - /api/auth/login: 5 lần thử mỗi IP mỗi phút
 - /api/auth/register: 1 lần mỗi IP mỗi giờ
 - /api/auth/forgot-password: 3 lần mỗi IP mỗi giờ

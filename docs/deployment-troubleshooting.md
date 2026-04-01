@@ -1,7 +1,7 @@
 # Deployment Troubleshooting & Operations
 
 **Project:** ms-cinema
-**Updated:** February 2026
+**Updated:** April 2026
 **Related:** [Deployment Guide](./deployment-guide.md)
 
 ## Table of Contents
@@ -225,6 +225,34 @@ psql -U postgres -d authdb -c "\dt"
 ```
 
 **Note:** Currently using manual schema (no migrations). When Flyway is added (Phase 3), versioned migrations will support automated rollback.
+
+### Issue: Stripe Reconciliation Job Fails
+
+**Cause:** Stripe API key invalid, network timeout, or database connection error
+
+**Solution:**
+```bash
+# Verify Stripe API key is set
+echo $STRIPE_API_KEY
+
+# Check reconciliation job logs
+docker-compose logs payment-service | grep -i reconcil
+
+# Check database connection (paymentdb)
+psql -U postgres -d paymentdb -c "SELECT COUNT(*) FROM reconciliation_runs;"
+
+# Manually trigger reconciliation with small date range
+curl -X POST http://localhost:8084/api/payments/reconciliation/trigger \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"startDate":"2026-03-01","endDate":"2026-03-05"}'
+```
+
+**Check Batch Job Status:**
+```bash
+# Query Spring Batch metadata tables
+psql -U postgres -d paymentdb -c "SELECT * FROM batch_job_execution ORDER BY CREATE_TIME DESC LIMIT 5;"
+```
 
 ---
 

@@ -2,7 +2,7 @@
 
 **Project:** ms-cinema
 **Version:** 0.0.1-SNAPSHOT
-**Updated:** March 2026
+**Updated:** April 2026
 **Status:** Active Development
 
 ## Vision
@@ -211,7 +211,24 @@ MS Cinema is a comprehensive cinema ticket booking platform built on Spring Boot
 - **Effort Actual:** ~6 days backend + 4 files new, 1 modified pom.xml
 - **Benefits:** Detects payment discrepancies early, audit trail for reconciliation items, manual + scheduled processing
 
-**FR-3.4: Booking Payment Integration** (was FR-3.3)
+**FR-3.4: Frontend Date/Time Utilities (COMPLETE ✓ April 1, 2026)**
+- ✓ date-format.util.ts: Timezone-safe formatDate, combineDatetime, parseTime
+- ✓ Integration: showtime-form-dialog, movie-form-dialog use utilities for datetime handling
+- ✓ Solves: Timezone offset issues when submitting datetime forms
+- **Status:** COMPLETE (April 1, 2026)
+- **Impact:** Prevents incorrect datetime values in form submissions
+
+**FR-3.5: Stripe Reconciliation Dashboard (COMPLETE ✓ March 31, 2026)**
+- ✓ reconciliation-dashboard.component.ts: Main component for reconciliation tab
+- ✓ reconciliation-detail.component.ts: Detail view for single run with filtering
+- ✓ Displays: Reconciliation run history, item details, CSV export
+- ✓ Actions: Manual trigger button (date range picker), resolve items with notes
+- ✓ Filters: By discrepancyType (MATCHED, STATUS_MISMATCH, AMOUNT_MISMATCH, MISSING_LOCAL, MISSING_STRIPE)
+- ✓ Admin API service: triggerReconciliation, getRuns, getRunDetails, getRunItems, getSummary, resolveItem
+- **Status:** COMPLETE (March 31, 2026)
+- **Benefits:** Real-time visibility into payment discrepancies, audit trail for resolution
+
+**FR-3.6: Booking Payment Integration** (was FR-3.3)
 - Complete Stripe checkout flow in frontend
 - Client secret exchange for payment confirmation
 - Error handling for failed payments
@@ -219,7 +236,7 @@ MS Cinema is a comprehensive cinema ticket booking platform built on Spring Boot
 - **Priority:** HIGH
 - **Effort:** Medium (3-4 days)
 
-**FR-3.5: User Booking History** (was FR-3.4)
+**FR-3.7: User Booking History** (was FR-3.4)
 - GET /api/bookings/user (all user bookings with statuses)
 - GET /api/bookings/{bookingId} (booking details + payment status)
 - GET /api/payments/user (payment history)
@@ -227,7 +244,7 @@ MS Cinema is a comprehensive cinema ticket booking platform built on Spring Boot
 - **Priority:** MEDIUM
 - **Effort:** Small (2-3 days)
 
-**FR-3.6: Admin Dashboard (COMPLETE ✓)** (was FR-3.5)
+**FR-3.8: Admin Dashboard (COMPLETE ✓)** (was FR-3.5)
 - ✓ Movie management (CRUD, featured movies)
 - ✓ Theater management (capacity, location)
 - ✓ Showtime scheduling (CRUD operations)
@@ -236,7 +253,7 @@ MS Cinema is a comprehensive cinema ticket booking platform built on Spring Boot
 - **Status:** COMPLETE (March 13, 2026)
 - **Implementation:** MatTable lists with MatDialog forms, admin tab navigation
 
-**FR-3.7: Rate Limiting on Sensitive Endpoints** (was FR-3.6)
+**FR-3.9: Rate Limiting on Sensitive Endpoints** (was FR-3.6)
 - /api/auth/login: 5 attempts per IP per minute
 - /api/auth/register: 1 per IP per hour
 - /api/auth/forgot-password: 3 per IP per hour

@@ -2,7 +2,7 @@
 
 **Dự án:** ms-cinema
 **Phiên bản:** 0.0.1-SNAPSHOT
-**Cập nhật:** Tháng 2 năm 2026
+**Cập nhật:** Tháng 4 năm 2026
 
 ## Mục Lục
 
@@ -125,30 +125,13 @@ createdb -U postgres testdb
 
 ```bash
 # Phương pháp 1: Dùng Docker Compose (tự động)
-# docker-compose.yml chạy init-databases.sql tự động khi khởi động PostgreSQL
 docker-compose up -d postgres
 
-# Đợi postgres khởi động (30-60 giây)
-docker-compose logs postgres | grep "database system is ready"
-
-# Xác minh tất cả 6 databases được tạo
+# Xác minh tất cả databases được tạo
 docker exec postgres psql -U postgres -c "\l"
-# Output: testdb, moviedb, bookingdb, paymentdb, notificationdb, auditdb
-```
 
-**Xác minh Schema Chi Tiết:**
-```bash
-# Xác minh auth-service (testdb)
+# Xác minh schema
 docker exec postgres psql -U postgres -d testdb -c "\dt"
-# Output: users, roles, user_roles, refresh_tokens, password_reset_tokens, activation_tokens, blacklisted_tokens, password_history, user_oauth_providers
-
-# Xác minh movie-service (moviedb)
-docker exec postgres psql -U postgres -d moviedb -c "\dt"
-# Output: movies, theaters, seats, showtimes, movie_ratings, movie_comments, comment_reactions
-
-# Xác minh audit-service (auditdb)
-docker exec postgres psql -U postgres -d auditdb -c "\dt"
-# Output: audit_logs
 ```
 
 ### 4. Build Ứng Dụng
@@ -189,35 +172,11 @@ curl http://localhost:8080/api/auth/register
 # Điều này có nghĩa ứng dụng đang chạy và endpoint có thể truy cập
 ```
 
-### 6. Kiểm Tra Luồng Xác Thực
+### 6. Test Authentication Flow
 
-```bash
-# 1. Đăng ký người dùng
-curl -X POST http://localhost:8080/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "testuser",
-    "password": "Test@1234",
-    "fullName": "Test User",
-    "roles": [{"name": "ROLE_USER"}]
-  }'
-# Mong đợi: 200 OK "User registered successfully!"
-
-# 2. Đăng nhập
-curl -X POST http://localhost:8080/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "testuser",
-    "password": "Test@1234"
-  }'
-# Mong đợi: 200 OK với JWT token trong phản hồi
-
-# 3. Truy cập endpoint được bảo vệ với token
-TOKEN="eyJhbGc..." # Từ phản hồi đăng nhập
-curl -X GET http://localhost:8080/api/protected \
-  -H "Authorization: Bearer $TOKEN"
-# Mong đợi: 200 OK hoặc phản hồi theo endpoint cụ thể
-```
+1. Register user: POST /api/auth/register
+2. Login: POST /api/auth/login (returns JWT token)
+3. Access protected endpoints: Include Authorization: Bearer {token} header
 
 ---
 
@@ -226,76 +185,41 @@ curl -X GET http://localhost:8080/api/protected \
 ### 1. Build Docker Image
 
 ```bash
-# Build cục bộ
 docker build -t auth-service:latest .
-
-# Hoặc với tag phiên bản
-docker build -t auth-service:0.0.1-SNAPSHOT .
-
-# Xác minh image
-docker images | grep auth-service
+docker images | grep auth-service  # verify
 ```
 
 ### 2. Chạy với Docker Compose (Khuyến nghị)
 
 ```bash
-# Khởi động tất cả dịch vụ (postgres, redis, kafka, eureka, config-server, zipkin, kafdrop, tất cả 9 dịch vụ + hạ tầng)
-docker-compose up -d
-
-# Xác minh các dịch vụ đang chạy
-docker-compose ps
-# Output: Tất cả dịch vụ (auth-service, movie-service, booking-service, payment-service, notification-service, audit-service, postgres, redis, kafka, zipkin, kafdrop, v.v.) hiển thị UP
-
-# Xem log
-docker-compose logs -f auth-service
-docker-compose logs -f notification-service
-
-# Truy cập giao diện giám sát
-# Zipkin (distributed tracing): http://localhost:9411/zipkin
-# Kafdrop (Kafka topics): http://localhost:9000
-
-# Kiểm tra ứng dụng
-curl http://localhost:8080/api/auth/register
+docker-compose up -d  # Start all services
+docker-compose ps     # Verify running
+docker-compose logs -f auth-service  # View logs
 ```
 
-**Phụ thuộc dịch vụ:**
-- auth-service: postgres, redis (token blacklist), kafka, eureka, config-server
-- notification-service: postgres (notificationdb), kafka, redis (event dedup), eureka, config-server
-- audit-service: postgres (auditdb), kafka, eureka, config-server
-- grafana: depends_on prometheus, zipkin (cho việc cung cấp tracing datasource)
-- Thứ tự khởi động: postgres → redis → kafka → eureka → config-server → tất cả 9 dịch vụ
+**Service Dependencies:** auth-service (postgres, redis, kafka, eureka, config-server), notification-service (kafka, redis, eureka, config-server)
 
-### 3. Biến Môi Trường cho Docker
+### 3. Environment Variables for Docker
 
-Tạo file `.env` ở thư mục gốc dự án:
+Create `.env` file in project root:
 ```env
-# Cơ sở dữ liệu (chung cho tất cả instance PostgreSQL)
+# Database
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=secure_password_here
 POSTGRES_DB=testdb
 
-# Databases (sẽ được tạo bởi init-databases.sql)
-# testdb, moviedb, bookingdb, paymentdb, notificationdb, auditdb
-
-# Cấu hình JWT
+# JWT Configuration
 JWT_SECRET=your-secret-key-here
 JWT_EXPIRATION=86400000
 
 # Server
 SERVER_PORT=8080
 
-# Ghi log
+# Logging
 LOG_LEVEL=DEBUG
-
-# Kafka
-KAFKA_BROKERS=kafka:9092
-
-# Zipkin (tracing)
-ZIPKIN_ENDPOINT=http://zipkin:9411/api/v2/spans
-TRACING_SAMPLING_PROBABILITY=1.0
 ```
 
-**Cập nhật docker-compose.yml** để dùng env file:
+**Update docker-compose.yml** to use env file:
 ```yaml
 services:
   auth-service:
@@ -308,29 +232,12 @@ services:
       - SPRING_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD}
 ```
 
-### 4. Dừng & Dọn Dẹp
+### 4. Stop & Clean Up
 
 ```bash
-# Dừng tất cả dịch vụ
-docker-compose down
-
-# Xóa volumes (CẢNH BÁO: xóa dữ liệu)
-docker-compose down -v
-
-# Xóa images
-docker rmi auth-service:latest
-```
-
-### 5. Docker Networking
-
-```bash
-# Xác minh mạng
-docker network ls | grep my-net
-
-# Kiểm tra mạng
-docker network inspect ms-cinema_my-net
-
-# Các dịch vụ có thể giao tiếp: postgres-service:5432 từ auth-service
+docker-compose down     # Stop services
+docker-compose down -v  # Stop + remove volumes (WARNING: deletes data)
+docker rmi auth-service:latest  # Remove images
 ```
 
 ---
@@ -349,70 +256,20 @@ docker network inspect ms-cinema_my-net
 - [ ] Chứng chỉ HTTPS hợp lệ
 - [ ] Kế hoạch khôi phục đã được kiểm tra
 
-### 2. Quản Lý Secrets
+### 2. Secrets Management
 
-**KHÔNG commit secrets vào git:**
-```bash
-# SAI - Không bao giờ làm điều này
-# application.yml
-namnd:
-  app:
-    jwtSecret: "my-production-secret"
+- **Never commit secrets to git** — use environment variables: `jwtSecret: ${JWT_SECRET}`
+- **Set at runtime:** `export JWT_SECRET="..."; java -jar app.jar`
+- **Docker Secrets:** `docker secret create jwt_secret -` + `secrets:` section in compose
+- **Kubernetes Secrets:** `kubectl create secret generic jwt-auth-secret --from-literal=jwt-secret="..."`
 
-# ĐÚNG - Sử dụng biến môi trường
-namnd:
-  app:
-    jwtSecret: ${JWT_SECRET}  # Được inject tại thời điểm chạy
-```
-
-**Secrets qua Biến Môi Trường:**
-```bash
-# Đặt trước khi chạy
-export JWT_SECRET="production-secret-key-min-32-chars"
-export SPRING_DATASOURCE_PASSWORD="db-password"
-export SPRING_DATASOURCE_URL="jdbc:postgresql://prod-db.internal:5432/authdb"
-
-java -jar auth-service.jar
-```
-
-**Secrets qua Docker Secrets (Swarm):**
-```bash
-# Tạo secret
-echo "production-secret-key" | docker secret create jwt_secret -
-
-# Sử dụng trong compose
-secrets:
-  jwt_secret:
-    external: true
-
-services:
-  app:
-    environment:
-      - JWT_SECRET=/run/secrets/jwt_secret
-```
-
-**Secrets qua Kubernetes Secrets:**
-```bash
-# Tạo secret
-kubectl create secret generic jwt-auth-secret \
-  --from-literal=jwt-secret="production-secret-key"
-
-# Tham chiếu trong deployment
-env:
-  - name: JWT_SECRET
-    valueFrom:
-      secretKeyRef:
-        name: jwt-auth-secret
-        key: jwt-secret
-```
-
-### 3. Triển Khai Lên VM/Server
+### 3. Deploying to VM/Server
 
 ```bash
-# 1. Sao chép JAR lên server
+# 1. Copy JAR to server
 scp target/auth-service.jar user@prod-server:/opt/app/
 
-# 2. Tạo systemd service (để tự khởi động)
+# 2. Create systemd service (for auto-start)
 # /etc/systemd/system/jwt-auth.service
 [Unit]
 Description=JWT Authentication Service
@@ -424,56 +281,53 @@ WorkingDirectory=/opt/app
 ExecStart=/usr/bin/java -jar auth-service.jar
 Restart=on-failure
 RestartSec=10
-StandardOutput=journal
-StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
 
-# 3. Khởi động dịch vụ
+# 3. Start service
 sudo systemctl start jwt-auth
-sudo systemctl enable jwt-auth  # Tự khởi động khi reboot
+sudo systemctl enable jwt-auth  # Auto-start on reboot
 
-# 4. Kiểm tra trạng thái
+# 4. Check status
 sudo systemctl status jwt-auth
 ```
 
-### 4. Triển Khai Lên AWS
+### 4. Deploying to AWS
 
-**Phương án A: EC2 Instance**
+**Option A: EC2 Instance**
 ```bash
-# Khởi tạo EC2 instance (Ubuntu 20.04 LTS)
-# Security group: cho phép 443 (HTTPS), 8080 (nội bộ)
+# Launch EC2 instance (Ubuntu 20.04 LTS)
+# Security group: allow 443 (HTTPS), 8080 (internal)
 
-# SSH vào instance
+# SSH into instance
 ssh -i key.pem ec2-user@instance-ip
 
-# Cài đặt Java & Docker
+# Install Java & Docker
 sudo yum update -y
 sudo yum install java-11-amazon-corretto -y
 sudo yum install docker -y
 sudo systemctl start docker
 
-# Sao chép ứng dụng
+# Copy application
 scp -i key.pem auth-service.jar ec2-user@instance-ip:/opt/app/
 
-# Chạy với biến môi trường
+# Run with environment variables
 java -jar /opt/app/auth-service.jar \
   -DJWT_SECRET=$JWT_SECRET \
   -Dspring.datasource.url=$DB_URL
 ```
 
-**Phương án B: ECS Fargate**
+**Option B: ECS Fargate**
 ```bash
-# Tạo CloudFormation template hoặc dùng AWS Console
-# Container image: đã push lên ECR
+# Create CloudFormation template or use AWS Console
+# Container image: pushed to ECR
 
 # Task Definition:
 # - Image: 123456789.dkr.ecr.us-east-1.amazonaws.com/jwt-auth:latest
 # - Port: 8080
 # - Environment Variables: JWT_SECRET, DB_URL
-# - Memory: 512 MB
-# - CPU: 256
+# - Memory: 512 MB, CPU: 256
 
 # Service:
 # - Cluster: production
@@ -482,20 +336,20 @@ java -jar /opt/app/auth-service.jar \
 # - Load Balancer: ALB on port 443 → 8080
 ```
 
-**Phương án C: RDS cho Cơ Sở Dữ Liệu**
+**Option C: RDS for Database**
 ```bash
-# Tạo RDS PostgreSQL instance
+# Create RDS PostgreSQL instance
 # - Engine: PostgreSQL 13.1
-# - Dung lượng lưu trữ: 100GB
-# - Multi-AZ: Có
-# - Thời gian giữ backup: 30 ngày
-# - VPC security group: Cho phép EC2 security group trên cổng 5432
+# - Allocated storage: 100GB
+# - Multi-AZ: Yes
+# - Backup retention: 30 days
+# - VPC security group: Allow EC2 security group on 5432
 
-# Chuỗi kết nối:
+# Connection string:
 # jdbc:postgresql://prod-db.c123.us-east-1.rds.amazonaws.com:5432/authdb
 ```
 
-### 5. Cấu Hình Load Balancer
+### 5. Load Balancer Configuration
 
 **Nginx Reverse Proxy**
 ```nginx
@@ -517,20 +371,20 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
 
-        # Thời gian chờ
+        # Timeouts
         proxy_connect_timeout 60s;
         proxy_send_timeout 60s;
         proxy_read_timeout 60s;
     }
 
-    # Endpoint kiểm tra sức khỏe
+    # Health check endpoint
     location /actuator/health {
         proxy_pass http://jwt_auth;
     }
 }
 ```
 
-**Cấu hình AWS ALB**
+**AWS ALB Configuration**
 ```
 Protocol: HTTPS (port 443)
 Certificate: ACM certificate
@@ -547,17 +401,17 @@ Target Group:
 
 ## Quản Lý Cấu Hình
 
-### Cấu Hình Theo Môi Trường
+### Environment-Specific Configs
 
 ```
 src/main/resources/
-├── application.yml              (cấu hình chung)
-├── application-dev.yml          (phát triển)
+├── application.yml              (shared config)
+├── application-dev.yml          (development)
 ├── application-staging.yml      (staging)
 └── application-prod.yml         (production)
 ```
 
-**application.yml (mặc định, phát triển)**
+**application.yml (default, development)**
 ```yaml
 server:
   port: 8080
@@ -566,11 +420,11 @@ spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/testdb
     username: postgres
-    password: 123456  # Chỉ OK cho dev
+    password: 123456  # OK for dev only
 
 namnd:
   app:
-    jwtSecret: bezKoderSecretKey  # Chỉ OK cho dev
+    jwtSecret: bezKoderSecretKey  # OK for dev only
     jwtExpiration: 86400000
 ```
 
@@ -593,36 +447,116 @@ spring:
 
 namnd:
   app:
-    jwtSecret: ${JWT_SECRET}  # Phải được đặt qua biến môi trường
+    jwtSecret: ${JWT_SECRET}  # Must be set via env var
     jwtExpiration: ${JWT_EXPIRATION:86400000}
 ```
 
-**Kích hoạt Profile**
+**Activate Profile**
 ```bash
-# Qua dòng lệnh
+# Via command line
 java -jar auth-service.jar --spring.profiles.active=prod
 
-# Qua biến môi trường
+# Via environment variable
 export SPRING_PROFILES_ACTIVE=prod
 java -jar auth-service.jar
 
-# Qua Docker
+# Via Docker
 docker run -e SPRING_PROFILES_ACTIVE=prod \
   -e JWT_SECRET=xxxx \
   auth-service:latest
 ```
 
-### Tham Số Cấu Hình
+### Configuration Parameters
 
-| Tham số | Mặc định | Ghi đè Production | Ghi chú |
-|---------|----------|-------------------|---------|
-| server.port | 8080 | 8080 | Đằng sau load balancer, chỉ nội bộ |
-| jwt.secret | bezKoderSecretKey | ${JWT_SECRET} | Khuyến nghị tối thiểu 32 ký tự |
-| jwt.expiration | 86400000 (24h) | 86400000 | Tính bằng mili giây |
+| Parameter | Default | Prod Override | Notes |
+|-----------|---------|---------------|-------|
+| server.port | 8080 | 8080 | Behind load balancer, internal only |
+| jwt.secret | bezKoderSecretKey | ${JWT_SECRET} | Min 32 chars recommended |
+| jwt.expiration | 86400000 (24h) | 86400000 | In milliseconds |
 | db.url | localhost:5432/testdb | ${DB_URL} | Production: RDS/managed DB |
-| db.username | postgres | ${DB_USER} | Dùng biến môi trường |
-| db.password | 123456 | ${DB_PASSWORD} | Dùng vault/secrets manager |
-| logging.level | debug | info | Giảm mức chi tiết log trong production |
+| db.username | postgres | ${DB_USER} | Use env var |
+| db.password | 123456 | ${DB_PASSWORD} | Use vault/secrets manager |
+| logging.level | debug | info | Reduce verbosity in prod |
+
+### Cấu Hình Spring Batch (payment-service)
+
+Payment-service sử dụng Spring Batch cho đối soát thanh toán hàng ngày với Stripe. Cấu hình phải được đặt trước khi khởi động.
+
+**application.yml (payment-service)**
+```yaml
+spring:
+  batch:
+    jdbc:
+      initialize-schema: always  # Tự động tạo bảng metadata Spring Batch khi khởi động
+    job:
+      enabled: false              # Vô hiệu hóa auto-run khi khởi động; dùng @Scheduled thay thế
+
+# Cấu hình đối soát
+reconciliation:
+  cron: "0 2 * * *"              # Hàng ngày lúc 2 AM (múi giờ Asia/Saigon)
+  auto-run: true                 # Bật đối soát theo lịch trình
+  max-date-range-days: 31        # Tối đa 31 ngày cho mỗi lần đối soát
+
+# Cấu hình Stripe
+stripe:
+  api:
+    key: ${STRIPE_API_KEY:}      # PHẢI được đặt qua biến môi trường
+```
+
+**Biến Môi Trường (Bắt buộc cho payment-service)**
+```bash
+# Stripe API key (test hoặc live)
+export STRIPE_API_KEY=sk_test_xxxxx  # hoặc sk_live_xxxxx trong production
+
+# Cơ sở dữ liệu (paymentdb)
+export SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5432/paymentdb
+export SPRING_DATASOURCE_USERNAME=postgres
+export SPRING_DATASOURCE_PASSWORD=xxxxx
+
+# Múi giờ JVM (đảm bảo cron dùng múi giờ đúng)
+export TZ=Asia/Saigon  # hoặc dùng tùy chọn JVM: -Duser.timezone=Asia/Saigon
+```
+
+**Cấu Hình Docker Compose**
+```yaml
+payment-service:
+  environment:
+    STRIPE_API_KEY: ${STRIPE_API_KEY}
+    SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/paymentdb
+    SPRING_DATASOURCE_USERNAME: postgres
+    SPRING_DATASOURCE_PASSWORD: postgres
+    TZ: Asia/Saigon  # Múi giờ cho tác vụ theo lịch trình
+```
+
+**Khởi Tạo Cơ Sở Dữ Liệu Batch**
+
+Spring Batch tự động tạo bảng metadata khi khởi động với `spring.batch.jdbc.initialize-schema=always`:
+- BATCH_JOB_INSTANCE
+- BATCH_JOB_EXECUTION
+- BATCH_JOB_EXECUTION_PARAMS
+- BATCH_JOB_EXECUTION_CONTEXT
+- BATCH_STEP_EXECUTION
+- BATCH_STEP_EXECUTION_CONTEXT
+- BATCH_JOB_SEQ, BATCH_JOB_INSTANCE_SEQ, BATCH_STEP_EXECUTION_SEQ
+
+Không cần thiết lập SQL thủ công; bảng tự động tạo khi chạy lần đầu.
+
+**Giám Sát Tác Vụ Batch**
+
+Kiểm tra trạng thái thực thi batch:
+```sql
+-- Kết nối đến paymentdb
+\c paymentdb
+
+-- Xem job instances
+SELECT * FROM BATCH_JOB_INSTANCE ORDER BY JOB_INSTANCE_ID DESC LIMIT 10;
+
+-- Xem job executions (với trạng thái)
+SELECT * FROM BATCH_JOB_EXECUTION ORDER BY JOB_EXECUTION_ID DESC LIMIT 10;
+
+-- Xem các lần đối soát
+SELECT * FROM reconciliation_runs ORDER BY created_at DESC LIMIT 5;
+```
 
 ---
 

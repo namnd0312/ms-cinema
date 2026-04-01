@@ -1,11 +1,68 @@
 # Nhật Ký Thay Đổi Dự Án
 
 **Dự án:** ms-cinema
-**Cập nhật:** 15 tháng 3, 2026
+**Cập nhật:** 1 tháng 4, 2026
 
 ## Phiên bản 0.0.1-SNAPSHOT
 
 ### [Chưa phát hành]
+
+#### Tiện Ích Ngày/Giờ Frontend (FR-3.4 HOÀN THÀNH ✓) — 1 tháng 4, 2026
+- **Tính năng:** Tiện ích định dạng ngày/giờ an toàn múi giờ cho gửi biểu mẫu
+  - Tệp tiện ích: date-format.util.ts (src/app/shared/utils/)
+  - Hàm: formatDate(date, format?), combineDatetime(dateStr, timeStr), parseTime(timeStr)
+  - formatDate: Định dạng Date thành chuỗi múi giờ cục bộ (định dạng YYYY-MM-DD HH:mm:ss)
+  - combineDatetime: Gộp chuỗi ngày + giờ thành đối tượng Date với chuyển đổi múi giờ
+  - parseTime: Phân tích chuỗi HH:mm thành phút cho logic time picker
+  - Tích hợp: Được sử dụng trong showtime-form-dialog và movie-form-dialog
+  - Vấn đề được giải quyết: Ngăn vấn đề offset múi giờ trình duyệt khi gửi giá trị datetime
+  - Kiểm thử: Xác nhận thủ công gửi biểu mẫu trên các múi giờ khác nhau
+- **Lợi ích:** Xử lý datetime nhất quán trên các biểu mẫu frontend, loại bỏ tham nhũng dữ liệu liên quan đến múi giờ
+
+#### Bảng Điều Khiển Đối Soát Thanh Toán Stripe (FR-3.5 HOÀN THÀNH ✓) — 31 tháng 3, 2026
+- **Tính năng:** Giao diện quản trị viên để xem và quản lý kết quả đối soát thanh toán
+  - Thành phần dashboard: reconciliation-dashboard.component.ts
+    - Thẻ tóm tắt: Tổng lần chạy, đếm matched/mismatched/missing
+    - Bộ chọn khoảng ngày: Kích hoạt thủ công cho khoảng ngày tùy chỉnh (tối đa 31 ngày)
+    - Bảng lịch sử chạy: MatTable với startDate, endDate, status, counts, phân trang
+  - Thành phần chi tiết: reconciliation-detail.component.ts
+    - Bảng mục: stripePaymentIntentId, localPaymentId, discrepancyType, amounts, statuses
+    - Dropdown bộ lọc: Theo discrepancyType (MATCHED, STATUS_MISMATCH, AMOUNT_MISMATCH, MISSING_LOCAL, MISSING_STRIPE)
+    - Xuất CSV: Tải các mục đối soát dưới dạng tệp CSV
+    - Hành động giải quyết: Đánh dấu mục đã giải quyết với ghi chú quản trị viên
+  - Dịch vụ API: Bao bọc các endpoint đối soát backend (trigger, getRuns, getRunDetails, getRunItems, getSummary, resolveItem)
+  - Route: Thêm /admin/reconciliation, /admin/reconciliation/:runId
+  - Điều hướng: Thêm tab "Đối soát" vào admin-nav.component.ts
+- **Lợi ích:** Khả năng hiển thị thực tế vào discrepancy thanh toán, quy trình giải quyết hợp lý, audit trail cho hành động quản trị viên
+
+#### Đối Soát Thanh Toán Stripe với Spring Batch (FR-3.3 HOÀN THÀNH ✓) — 31 tháng 3, 2026
+- **Tính năng:** Đối soát tự động hàng ngày giữa thanh toán cục bộ và trạng thái Stripe PaymentIntent
+  - Tác vụ Spring Batch: Chạy hàng ngày lúc 2 AM múi giờ Asia/Saigon (có thể cấu hình qua reconciliation.cron)
+  - Kiến trúc batch: LocalPaymentReader → ReconciliationProcessor → ReconciliationItemWriter
+  - Reader: Truy vấn thanh toán cục bộ theo khoảng createdAt từ paymentdb
+  - Processor: Gọi Stripe PaymentIntent.retrieve() cho mỗi thanh toán, phân loại loại chênh lệch
+  - Writer: Lưu trữ chunk ReconciliationItem (kích thước batch 100)
+  - Listener: afterJob gọi Stripe list API để phát hiện mục MISSING_LOCAL, hoàn thiện đếm lần chạy
+  - Tệp backend (14 tệp mới): batch/ (4), config/ (3), model/ (4), repository/ (2), service/ (2), controller/ (1 ReconciliationController với @PreAuthorize("hasRole('ADMIN')"))
+  - Entity ReconciliationRun: Theo dõi startDate, endDate, status (RUNNING/COMPLETED/FAILED), đếm (matchedCount, mismatchedCount, missingLocalCount, missingStripeCount, totalChecked)
+  - Entity ReconciliationItem: Lưu trữ stripePaymentIntentId, localPaymentId, discrepancyType (MATCHED/STATUS_MISMATCH/AMOUNT_MISMATCH/MISSING_LOCAL/MISSING_STRIPE), amounts, statuses, resolved flag, ghi chú quản trị viên
+  - Endpoint API quản trị viên: POST /trigger (chạy thủ công với khoảng ngày), GET /runs (phân trang), GET /runs/{runId}, GET /runs/{runId}/items (lọc theo discrepancyType), GET /summary (thống kê lần chạy mới nhất), PUT /items/{itemId}/resolve (ghi chú giải quyết quản trị viên)
+  - Xác thực: Bắt buộc khoảng ngày tối đa 31 ngày cho mỗi lần chạy, xác thực khoảng ngày trước khi khởi chạy tác vụ
+  - Lập lịch: @Scheduled cron qua ReconciliationScheduler, @ConditionalOnProperty reconciliation.auto-run=true
+  - Cấu hình: spring.batch.jdbc.initialize-schema=always (tự động tạo bảng metadata Spring Batch), spring.batch.job.enabled=false (không auto-run khi khởi động), thuộc tính reconciliation.* (cron, auto-run, max-date-range-days)
+  - Biến môi trường: Biến môi trường STRIPE_API_KEY (không hardcode khóa test trong application.yml)
+  - Cơ sở dữ liệu: Các bảng reconciliation_runs, reconciliation_items tự động tạo bởi Hibernate ddl-auto: update, chỉ mục trên (run_id), (discrepancy_type)
+  - Kiểm thử: 3 tệp kiểm thử (15 kiểm thử): ReconciliationProcessorTest (5 kiểm thử đơn vị với MockedStatic<PaymentIntent>), ReconciliationServiceImplTest (6 kiểm thử đơn vị), ReconciliationControllerTest (4 kiểm thử @WebMvcTest với auth dựa trên role)
+  - Phụ thuộc: Thêm spring-boot-starter-batch, h2 (test), spring-batch-test (test), spring-security-test (test) vào pom.xml
+- **Frontend (4 tệp mới - cinema-frontend):**
+  - core/models/reconciliation.model.ts: Interface cho ReconciliationRun, ReconciliationItem, DiscrepancyType, ReconciliationSummary, PageResponse
+  - core/services/reconciliation.service.ts: HTTP client cho tất cả endpoint đối soát
+  - features/admin/reconciliation/reconciliation-dashboard.component.ts: Thẻ tóm tắt, kích hoạt khoảng ngày, bảng lịch sử chạy với phân trang
+  - features/admin/reconciliation/reconciliation-detail.component.ts: Bảng mục với bộ lọc loại chênh lệch, hành động giải quyết, xuất CSV
+  - Sửa đổi admin.routes.ts: Thêm route reconciliation + reconciliation/:runId
+  - Sửa đổi admin-nav.component.ts: Thêm tab "Đối soát"
+- **Lợi ích:** Phát hiện sớm discrepancy thanh toán, audit trail bất biến, xử lý thủ công + lập lịch, khả năng hiển thị quản trị viên vào inconsistencies thanh toán
+- **Bảo mật:** @PreAuthorize("hasRole('ADMIN')") trên tất cả endpoint đối soát, không có dữ liệu nhạy cảm trong log phản hồi
 
 #### Sửa Lỗi (22 tháng 3, 2026)
 - **Sửa OAuth2 LazyInitializationException:** Force-initialize user.getRoles() trong context @Transactional trong OAuth2UserLinkingService để ngăn vấn đề lazy loading

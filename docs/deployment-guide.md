@@ -2,7 +2,7 @@
 
 **Project:** ms-cinema
 **Version:** 0.0.1-SNAPSHOT
-**Updated:** February 2026
+**Updated:** April 2026
 
 ## Table of Contents
 
@@ -188,43 +188,10 @@ curl http://localhost:8080/api/auth/register
 
 ### 6. Test Authentication Flow
 
-```bash
-# 1. Register user (no password field - deferred to activation)
-curl -X POST http://localhost:8080/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "testuser",
-    "email": "testuser@example.com",
-    "fullName": "Test User",
-    "roles": [{"name": "ROLE_USER"}]
-  }'
-# Expected: 200 OK "User registered successfully! Check your email to set up your password."
-
-# 2. Activate with password (use token from email or check logs in dev)
-curl -X POST http://localhost:8080/api/auth/activate-with-password \
-  -H "Content-Type: application/json" \
-  -d '{
-    "token": "{activation_token_from_email}",
-    "password": "Test@1234",
-    "confirmPassword": "Test@1234"
-  }'
-# Expected: 200 OK "Account activated successfully! You can now log in."
-
-# 3. Login with activated credentials
-curl -X POST http://localhost:8080/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "testuser@example.com",
-    "password": "Test@1234"
-  }'
-# Expected: 200 OK with JWT token in response
-
-# 4. Access protected endpoint with token
-TOKEN="eyJhbGc..." # From login response
-curl -X GET http://localhost:8080/api/protected \
-  -H "Authorization: Bearer $TOKEN"
-# Expected: 200 OK or endpoint-specific response
-```
+1. Register user: POST /api/auth/register (no password field)
+2. Activate with password: POST /api/auth/activate-with-password (token + password from email)
+3. Login: POST /api/auth/login (returns JWT token)
+4. Access protected endpoints: Include Authorization: Bearer {token} header
 
 ---
 
@@ -233,42 +200,19 @@ curl -X GET http://localhost:8080/api/protected \
 ### 1. Build Docker Image
 
 ```bash
-# Build locally
 docker build -t auth-service:latest .
-
-# Or with version tag
-docker build -t auth-service:0.0.1-SNAPSHOT .
-
-# Verify image
-docker images | grep auth-service
+docker images | grep auth-service  # verify
 ```
 
 ### 2. Run with Docker Compose (Recommended)
 
 ```bash
-# Start all services (postgres, redis, kafka, eureka, config-server, zipkin, kafdrop, all 8 services)
-docker-compose up -d
-
-# Verify services running
-docker-compose ps
-# Output: All services (auth-service, notification-service, postgres, redis, kafka, zipkin, kafdrop, etc.) should show UP
-
-# View logs
-docker-compose logs -f auth-service
-docker-compose logs -f notification-service
-
-# Access monitoring UIs
-# Zipkin (distributed tracing): http://localhost:9411/zipkin
-# Kafdrop (Kafka topics): http://localhost:9000
-
-# Test app
-curl http://localhost:8080/api/auth/register
+docker-compose up -d  # Start all services
+docker-compose ps     # Verify running
+docker-compose logs -f auth-service  # View logs
 ```
 
-**Service Dependencies:**
-- auth-service: postgres, redis (token blacklist), kafka, eureka, config-server
-- notification-service: kafka, redis (event dedup), eureka, config-server
-- grafana: depends_on zipkin (for tracing datasource provisioning)
+**Service Dependencies:** auth-service (postgres, redis, kafka, eureka, config-server), notification-service (kafka, redis, eureka, config-server)
 
 ### 3. Environment Variables for Docker
 
@@ -306,26 +250,9 @@ services:
 ### 4. Stop & Clean Up
 
 ```bash
-# Stop all services
-docker-compose down
-
-# Remove volumes (WARNING: deletes data)
-docker-compose down -v
-
-# Remove images
-docker rmi auth-service:latest
-```
-
-### 5. Docker Networking
-
-```bash
-# Verify network
-docker network ls | grep my-net
-
-# Inspect network
-docker network inspect ms-cinema_my-net
-
-# Services can communicate: postgres-service:5432 from auth-service
+docker-compose down     # Stop services
+docker-compose down -v  # Stop + remove volumes (WARNING: deletes data)
+docker rmi auth-service:latest  # Remove images
 ```
 
 ---
@@ -346,60 +273,10 @@ docker network inspect ms-cinema_my-net
 
 ### 2. Secrets Management
 
-**DO NOT commit secrets to git:**
-```bash
-# WRONG - Never do this
-# application.yml
-namnd:
-  app:
-    jwtSecret: "my-production-secret"
-
-# RIGHT - Use environment variables
-namnd:
-  app:
-    jwtSecret: ${JWT_SECRET}  # Injected at runtime
-```
-
-**Secrets via Environment Variables:**
-```bash
-# Set before running
-export JWT_SECRET="production-secret-key-min-32-chars"
-export SPRING_DATASOURCE_PASSWORD="db-password"
-export SPRING_DATASOURCE_URL="jdbc:postgresql://prod-db.internal:5432/authdb"
-
-java -jar auth-service.jar
-```
-
-**Secrets via Docker Secrets (Swarm):**
-```bash
-# Create secret
-echo "production-secret-key" | docker secret create jwt_secret -
-
-# Use in compose
-secrets:
-  jwt_secret:
-    external: true
-
-services:
-  app:
-    environment:
-      - JWT_SECRET=/run/secrets/jwt_secret
-```
-
-**Secrets via Kubernetes Secrets:**
-```bash
-# Create secret
-kubectl create secret generic jwt-auth-secret \
-  --from-literal=jwt-secret="production-secret-key"
-
-# Reference in deployment
-env:
-  - name: JWT_SECRET
-    valueFrom:
-      secretKeyRef:
-        name: jwt-auth-secret
-        key: jwt-secret
-```
+- **Never commit secrets to git** — use environment variables: `jwtSecret: ${JWT_SECRET}`
+- **Set at runtime:** `export JWT_SECRET="..."; java -jar app.jar`
+- **Docker Secrets:** `docker secret create jwt_secret -` + `secrets:` section in compose
+- **Kubernetes Secrets:** `kubectl create secret generic jwt-auth-secret --from-literal=jwt-secret="..."`
 
 ### 3. Deploying to VM/Server
 

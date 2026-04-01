@@ -1,7 +1,7 @@
 # Codebase Summary
 
 **Project:** ms-cinema
-**Generated:** March 2026
+**Generated:** April 2026
 **Architecture:** 11-module Maven microservices (Spring Cloud)
 **Java Version:** 21 LTS
 **Spring Boot:** 3.4.3
@@ -505,7 +505,7 @@ jwt.auth.secret: ${JWT_SECRET}
 - **MovieDetailComponent:** Integrated with star rating + comment list
 
 **Admin Dashboard (New):**
-- **AdminNavComponent:** Tab-based navigation (Movies, Theaters, Showtimes, Payments)
+- **AdminNavComponent:** Tab-based navigation (Movies, Theaters, Showtimes, Payments, Reconciliation)
 - **MovieManagementComponent:** List movies in MatTable with edit/delete actions
 - **MovieFormDialogComponent:** Modal form for create/edit movie
 - **TheaterManagementComponent:** List theaters in MatTable with edit/delete actions
@@ -513,6 +513,24 @@ jwt.auth.secret: ${JWT_SECRET}
 - **ShowtimeManagementComponent:** List showtimes in MatTable with edit/delete actions
 - **ShowtimeFormDialogComponent:** Modal form for create/edit showtime
 - **PaymentManagementComponent:** List all payments in MatTable (admin-only view)
+
+**Stripe Reconciliation Dashboard (NEW - March 31, 2026):**
+- **reconciliation-dashboard.component.ts:** Main component for reconciliation tab
+  - Displays: Reconciliation run history in MatTable (startDate, endDate, status, matched/mismatched/missing counts)
+  - Actions: Manual trigger button (opens date range picker dialog)
+  - Filters: Click on row to view details (discrepancy breakdown)
+  - CSV export: Download reconciliation items as CSV (discrepancyType, amounts, statuses, resolved)
+- **reconciliation-detail.component.ts:** Detail view for single run
+  - Shows ReconciliationItem table: stripePaymentIntentId, localPaymentId, discrepancyType, amounts, statuses, resolved flag
+  - Optional filter: dropdown by discrepancyType (MATCHED, STATUS_MISMATCH, AMOUNT_MISMATCH, MISSING_LOCAL, MISSING_STRIPE)
+  - Resolve action: Click "Resolve" button to mark item resolved with admin notes
+- **Reconciliation API Service:**
+  - triggerReconciliation(startDate, endDate) - POST /api/payments/reconciliation/trigger
+  - getRuns(page) - GET /api/payments/reconciliation/runs
+  - getRunDetails(runId) - GET /api/payments/reconciliation/runs/{runId}
+  - getRunItems(runId, discrepancyType?, page?) - GET /api/payments/reconciliation/runs/{runId}/items
+  - getSummary() - GET /api/payments/reconciliation/summary
+  - resolveItem(itemId, notes) - PUT /api/payments/reconciliation/items/{itemId}/resolve
 
 **Real-Time Notifications (New - March 14, 2026):**
 - **notification.model.ts:** Interfaces (Notification, NotificationPage, UnreadCountResponse)
@@ -542,13 +560,21 @@ jwt.auth.secret: ${JWT_SECRET}
 - **Accessibility:** WCAG 2.1 AA (ARIA role=grid, keyboard nav, color+icons, MatTooltip, aria-live)
 - **API Data Mapping:** Fixed rowLabel/seatNumber (API) → rowNumber/columnNumber/price (frontend) in seat grid display
 
+**Date/Time Utilities (NEW - April 1, 2026):**
+- **date-format.util.ts:** Timezone-safe date/time formatting
+  - `formatDate(date: Date, format?: string)` - Formats date in local timezone (YYYY-MM-DD HH:mm:ss)
+  - `combineDatetime(dateStr: string, timeStr: string)` - Combines date + time strings into Date object (handles timezone conversion)
+  - `parseTime(timeStr: string)` - Parses HH:mm time string into minutes for time picker logic
+- **Integration:** Used in showtime-form-dialog and movie-form-dialog for timezone-safe date/time input
+- **Problem Solved:** Prevents timezone offset issues in browser when submitting datetime forms
+
 **Lazy-Loaded Routes:**
 - /auth (login, register, setup-password, password reset, OAuth2 callback)
 - /movies (browse, details)
 - /booking (seat selection with grid, real-time updates, suggestions)
 - /payment (Stripe checkout)
 - /profile (user info, bookings, change password)
-- /admin (admin dashboard with tabs)
+- /admin (admin dashboard with tabs, reconciliation tab NEW)
 - /notifications (notification history, mark-as-read)
 
 **Password Setup on Activation (Frontend - NEW):**

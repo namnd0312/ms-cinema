@@ -226,6 +226,34 @@ psql -U postgres -d authdb -c "\dt"
 
 **Lưu ý:** Hiện tại đang dùng schema thủ công (chưa có migration). Khi Flyway được thêm vào (Giai đoạn 3), migration có phiên bản sẽ hỗ trợ rollback tự động.
 
+### Vấn Đề: Tác Vụ Đối Soát Stripe Thất Bại
+
+**Nguyên Nhân:** Khóa API Stripe không hợp lệ, hết thời gian timeout mạng, hoặc lỗi kết nối cơ sở dữ liệu
+
+**Giải Pháp:**
+```bash
+# Xác nhận khóa API Stripe được đặt
+echo $STRIPE_API_KEY
+
+# Kiểm tra nhật ký tác vụ đối soát
+docker-compose logs payment-service | grep -i reconcil
+
+# Kiểm tra kết nối cơ sở dữ liệu (paymentdb)
+psql -U postgres -d paymentdb -c "SELECT COUNT(*) FROM reconciliation_runs;"
+
+# Kích hoạt thủ công đối soát với khoảng ngày nhỏ
+curl -X POST http://localhost:8084/api/payments/reconciliation/trigger \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"startDate":"2026-03-01","endDate":"2026-03-05"}'
+```
+
+**Kiểm Tra Trạng Thái Tác Vụ Batch:**
+```bash
+# Truy vấn bảng metadata Spring Batch
+psql -U postgres -d paymentdb -c "SELECT * FROM batch_job_execution ORDER BY CREATE_TIME DESC LIMIT 5;"
+```
+
 ---
 
 ## Danh Sách Kiểm Tra Triển Khai

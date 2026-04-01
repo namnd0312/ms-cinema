@@ -1,7 +1,7 @@
 # Tóm Tắt Codebase
 
 **Dự án:** ms-cinema
-**Ngày tạo:** Tháng 3 năm 2026
+**Ngày tạo:** Tháng 4 năm 2026
 **Kiến trúc:** 11 module Maven microservices (Spring Cloud)
 **Java Version:** 21 LTS
 **Spring Boot:** 3.4.3
@@ -181,25 +181,80 @@ src/main/java/com/namnd/cinema/
 
 ## payment-service (Cổng 8084)
 
-**Tính năng chính:** Tích hợp Stripe với idempotency key (pay-{bookingId}), xử lý webhook với xác minh chữ ký, hoàn tiền (chỉ ADMIN), phát PaymentCompletedEvent/PaymentFailedEvent, TransactionalEventListener cho Kafka publish sau commit
+**Tính năng chính:** Tích hợp Stripe với idempotency key (pay-{bookingId}), xử lý webhook với xác minh chữ ký, hoàn tiền (chỉ ADMIN), phát PaymentCompletedEvent/PaymentFailedEvent, TransactionalEventListener cho Kafka publish sau commit, **đối soát Spring Batch với tác vụ hàng ngày theo lịch trình**
 
 **Controller:**
 - PaymentController - create-intent, confirm, getPayment, getUserPayments, refund (ADMIN), webhook (POST)
+- ReconciliationController (MỚI, @PreAuthorize("hasRole('ADMIN')"), base: /api/payments/reconciliation)
+  - POST /trigger - Kích hoạt đối soát cho khoảng ngày (xác thực tối đa 31 ngày)
+  - GET /runs - Danh sách phân trang của các lần chạy đối soát
+  - GET /runs/{runId} - Chi tiết lần chạy đơn với đếm
+  - GET /runs/{runId}/items - Mục phân trang với bộ lọc loại chênh lệch tùy chọn
+  - GET /summary - Thống kê lần chạy mới nhất (đếm tóm tắt)
+  - PUT /items/{itemId}/resolve - Đánh dấu mục đã giải quyết với ghi chú
 
 **Model:**
 - Payment (id, bookingRef, amount, currency, status ENUM, stripePaymentIntentId, createdAt)
+- ReconciliationRun (startDate, endDate, status [RUNNING/COMPLETED/FAILED], đếm cho matched/mismatched/missing)
+- ReconciliationItem (runId FK, stripePaymentIntentId, localPaymentId, discrepancyType ENUM, amounts, statuses, resolved, notes)
+- DiscrepancyType enum: MATCHED, STATUS_MISMATCH, AMOUNT_MISMATCH, MISSING_LOCAL, MISSING_STRIPE
+- ReconciliationStatus enum: RUNNING, COMPLETED, FAILED
+
+**Tác vụ Batch (Spring Batch):**
+- JobConfig: Job + Step bean (chunk size 100)
+- LocalPaymentReader: ItemReader truy vấn paymentdb theo khoảng createdAt
+- ReconciliationProcessor: ItemProcessor gọi PaymentIntent.retrieve() cho mỗi thanh toán, phân loại chênh lệch
+- ReconciliationItemWriter: ItemWriter lưu trữ chunk ReconciliationItem vào paymentdb
+- ReconciliationJobListener: afterJob gọi Stripe list API cho MISSING_LOCAL, hoàn thiện đếm lần chạy
 
 **Service:**
 - PaymentService - Tạo Stripe PaymentIntent (idempotency key: pay-{bookingId}), xử lý webhook
 - StripeWebhookService - Xác minh chữ ký (header stripeSig), dedup stripeEventId (ngăn phát lại)
+- ReconciliationService (interface) & ReconciliationServiceImpl
+  - triggerReconciliation(startDate, endDate) - Xác thực khoảng ngày ≤31 ngày, tạo ReconciliationRun, khởi chạy tác vụ batch
+  - getRuns(pageable) - Trả về các lần chạy phân trang sắp xếp theo createdAt giảm dần
+  - getRunDetails(runId) - Trả về lần chạy đơn với đếm tóm tắt
+  - getRunItems(runId, discrepancyType, pageable) - Mục phân trang với bộ lọc tùy chọn
+  - getSummary() - Thống kê lần chạy mới nhất
+  - resolveItem(itemId, notes) - Đánh dấu mục đã giải quyết với ghi chú admin
+
+**Xử lý Batch Theo Lịch Trình:**
+- Cron: Hàng ngày lúc 2 AM múi giờ Asia/Saigon (có thể cấu hình qua thuộc tính reconciliation.cron)
+- EnableScheduling: Tự động kích hoạt qua @Scheduled trên bean ReconciliationScheduler
+- ConditionalOnProperty: reconciliation.auto-run=true bật tự động kích hoạt
+- Khoảng ngày tối đa: 31 ngày (có thể cấu hình qua reconciliation.max-date-range-days)
+
+**Repository:**
+- ReconciliationRunRepository - phân trang, sắp xếp theo createdAt giảm dần
+- ReconciliationItemRepository - lọc theo runId + discrepancyType, truy vấn đếm
+- PaymentRepository.findByDateRangeWithStripeId(startDate, endDate) - PHƯƠNG THỨC MỚI cho batch reader
 
 **Tích hợp Stripe:**
 - Biến môi trường: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
 - Tạo PaymentIntent với idempotency key (pay-{bookingId})
 - Webhook: POST /api/payments/webhook (xác minh chữ ký, dedup sự kiện)
+- Đối soát batch: PaymentIntent.retrieve() cho mỗi thanh toán, StripeClient.listPaymentIntents() cho missing local
 - Phát PaymentCompletedEvent/PaymentFailedEvent sau DB commit (TransactionalEventListener)
 
 **Sự kiện Kafka phát:** PaymentCompletedEvent, PaymentFailedEvent → topic: payment-events
+
+**Tích hợp Audit:**
+- PaymentController: @Auditable trên phương thức createPaymentIntent
+- Audit actions: CREATE_PAYMENT
+
+**Cơ sở dữ liệu (paymentdb):**
+- Bảng payments: id, bookingRef, amount, currency, status, stripePaymentIntentId, createdAt
+- Bảng reconciliation_runs: id, startDate, endDate, status, matchedCount, mismatchedCount, missingLocalCount, missingStripeCount, totalChecked, createdAt
+- Bảng reconciliation_items: id, runId FK, stripePaymentIntentId, localPaymentId, discrepancyType ENUM, stripeAmount, localAmount, stripeStatus, localStatus, resolved, notes, createdAt
+  - Index: (run_id), (discrepancy_type) để lọc
+
+**Cấu hình (application.yml / config-repo/payment-service.yml):**
+- spring.batch.jdbc.initialize-schema=always (tự động tạo bảng metadata Spring Batch)
+- spring.batch.job.enabled=false (vô hiệu hóa auto-run khi khởi động)
+- reconciliation.cron: 0 2 * * * (2 AM hàng ngày, múi giờ Asia/Saigon)
+- reconciliation.auto-run: true (bật đối soát theo lịch trình)
+- reconciliation.max-date-range-days: 31 (tối đa 31 ngày cho mỗi đối soát)
+- stripe.api.key: ${STRIPE_API_KEY:} (biến môi trường, không hardcode khóa test)
 
 ## notification-service (Cổng 8085)
 
@@ -447,8 +502,8 @@ jwt.auth.secret: ${JWT_SECRET}
 - **Auth interceptor:** Sửa để luôn gắn token khi có; PUBLIC_URLS chỉ kiểm soát refresh 401
 - **MovieDetailComponent:** Tích hợp đánh giá sao + danh sách bình luận
 
-**Dashboard Admin (Mới):**
-- **AdminNavComponent:** Điều hướng dựa trên tab (Phim, Rạp, Suất chiếu, Thanh toán)
+**Admin Dashboard (Mới):**
+- **AdminNavComponent:** Điều hướng dựa trên tab (Phim, Rạp, Suất chiếu, Thanh toán, Đối soát)
 - **MovieManagementComponent:** Danh sách phim trong MatTable với hành động sửa/xóa
 - **MovieFormDialogComponent:** Form modal cho tạo/sửa phim
 - **TheaterManagementComponent:** Danh sách rạp trong MatTable với hành động sửa/xóa
@@ -456,6 +511,24 @@ jwt.auth.secret: ${JWT_SECRET}
 - **ShowtimeManagementComponent:** Danh sách suất chiếu trong MatTable với hành động sửa/xóa
 - **ShowtimeFormDialogComponent:** Form modal cho tạo/sửa suất chiếu
 - **PaymentManagementComponent:** Danh sách tất cả thanh toán trong MatTable (chỉ admin xem)
+
+**Bảng Điều Khiển Đối Soát Stripe (MỚI - 31 tháng 3, 2026):**
+- **reconciliation-dashboard.component.ts:** Thành phần chính cho tab đối soát
+  - Hiển thị: Lịch sử chạy đối soát trong MatTable (startDate, endDate, status, đếm matched/mismatched/missing)
+  - Hành động: Nút kích hoạt thủ công (mở dialog chọn khoảng ngày)
+  - Bộ lọc: Bấm vào hàng để xem chi tiết (phân tích chênh lệch)
+  - Xuất CSV: Tải các mục đối soát dưới dạng CSV (discrepancyType, amounts, statuses, resolved)
+- **reconciliation-detail.component.ts:** Chế độ xem chi tiết cho lần chạy đơn
+  - Hiển thị bảng ReconciliationItem: stripePaymentIntentId, localPaymentId, discrepancyType, amounts, statuses, resolved flag
+  - Bộ lọc tùy chọn: dropdown theo discrepancyType (MATCHED, STATUS_MISMATCH, AMOUNT_MISMATCH, MISSING_LOCAL, MISSING_STRIPE)
+  - Hành động giải quyết: Bấm nút "Resolve" để đánh dấu mục đã giải quyết với ghi chú admin
+- **Dịch vụ API Đối Soát:**
+  - triggerReconciliation(startDate, endDate) - POST /api/payments/reconciliation/trigger
+  - getRuns(page) - GET /api/payments/reconciliation/runs
+  - getRunDetails(runId) - GET /api/payments/reconciliation/runs/{runId}
+  - getRunItems(runId, discrepancyType?, page?) - GET /api/payments/reconciliation/runs/{runId}/items
+  - getSummary() - GET /api/payments/reconciliation/summary
+  - resolveItem(itemId, notes) - PUT /api/payments/reconciliation/items/{itemId}/resolve
 
 **Thông Báo Thời Gian Thực (Mới - 14 tháng 3, 2026):**
 - **notification.model.ts:** Interface (Notification, NotificationPage, UnreadCountResponse)

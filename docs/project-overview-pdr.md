@@ -4,18 +4,18 @@
 **Version:** 0.0.1-SNAPSHOT
 **Group:** com.namnd
 **Status:** Active Development — Microservice Integration Phase
-**Last Updated:** March 2026
+**Last Updated:** April 2026
 
 ## Executive Summary
 
-MS Cinema is an **11-module Spring Cloud microservices platform** for cinema ticket booking with event-driven architecture, JWT authentication, Stripe payments, comprehensive audit logging, and observability. The system consists of infrastructure services (Eureka, Config Server, API Gateway), 6 business services, 2 shared libraries, and Angular frontend.
+MS Cinema is an **11-module Spring Cloud microservices platform** for cinema ticket booking with event-driven architecture, JWT authentication, Stripe payments with daily reconciliation, comprehensive audit logging, and observability. The system consists of infrastructure services (Eureka, Config Server, API Gateway), 6 business services, 2 shared libraries, and Angular frontend.
 
 **Key Characteristics:**
 - Single external entry point: API Gateway (port 8080)
 - **Auth-service** (port 8081): JWT auth lifecycle, deferred password setup on activation, email activation, account lockout (5 attempts/15min), token rotation, @Auditable integration, OAuth2 Google login, password change with history validation
 - **Movie-service** (port 8082): Movies, theaters, showtimes; auto-generates seat grids (A-Z rows); star ratings (1-5), paginated comments with soft-delete, comment reactions (like/dislike), @Auditable on CRUD
 - **Booking-service** (port 8083): Seat reservation with Redis locking (5-min TTL), lifecycle states (PENDING→CONFIRMED/CANCELLED/EXPIRED), @Auditable on operations, real-time WebSocket seat availability (STOMP /ws/booking, <100ms latency)
-- **Payment-service** (port 8084): Stripe integration, idempotent payment intents, webhook verification, @Auditable on payments
+- **Payment-service** (port 8084): Stripe integration, idempotent payment intents, webhook verification, Spring Batch daily reconciliation (2 AM cron), admin REST API, @Auditable on payments
 - **Notification-service** (port 8085): Kafka consumer, SMTP email delivery, Redis dedup (24h TTL), real-time SSE notifications
 - **Audit-service** (port 8086): Centralized audit logging, Kafka consumer for audit-events, admin API with filtering, PostgreSQL immutable audit logs, 90-day retention
 - **kafka-events module:** Shared domain events (PaymentCompletedEvent, BookingCreatedEvent, AuditEvent), @Auditable annotation, AOP aspect, JPA listeners
@@ -126,7 +126,7 @@ MS Cinema is an **11-module Spring Cloud microservices platform** for cinema tic
 - **Event Types:** PAYMENT_SUCCESS, PAYMENT_FAILED, ADMIN_BROADCAST, SYSTEM
 - **Frontend Integration:** Notification bell component with badge, snackbar alerts, notification list page
 
-### Stripe Payment Reconciliation (FR-007) NEW
+### Stripe Payment Reconciliation (FR-007)
 - **Daily Batch Reconciliation:** Spring Batch job compares local vs Stripe PaymentIntent states daily at 2 AM
   - ReconciliationRun entity: Tracks startDate, endDate, status (RUNNING/COMPLETED/FAILED), counts
   - ReconciliationItem entity: Per-payment comparison (stripePaymentIntentId, localPaymentId, discrepancyType, amounts, statuses)
@@ -540,7 +540,7 @@ Response (403 Forbidden):
 - ✓ Account lockout after N failed attempts (auto-unlock)
 
 ### Phase 3: Microservice Integration (COMPLETE)
-- ✓ 10-module Maven project: 5 business services, 3 infrastructure, 2 shared libs, 1 frontend
+- ✓ 11-module Maven project: 6 business services, 3 infrastructure, 2 shared libs, 1 frontend
 - ✓ Spring Cloud Eureka (service registry, :8761)
 - ✓ Spring Cloud Config Server (shared JWT secret, :8888, classpath:/config-repo/)
 - ✓ Spring Cloud Gateway MVC (single entry :8080, routes, OpenAPI aggregation, HttpLoggingFilter)
@@ -556,7 +556,10 @@ Response (403 Forbidden):
 - ✓ Movie-service auto-generates seat grids (A-Z rows) on theater creation
 - ✓ Booking-service Redis locking (5-min TTL, key pattern: seat:lock:{showtimeId}:{seatId})
 - ✓ Payment-service Stripe integration (idempotency key, webhook signature verification)
+- ✓ Payment-service Spring Batch reconciliation (daily 2 AM, item tracking, admin API)
+- ✓ Frontend reconciliation dashboard (run history, item filtering, CSV export)
 - ✓ Movie ratings & comments (FR-005): Star ratings, flat comments, soft-delete, reactions
+- ✓ Frontend date utilities (timezone-safe formatDate, combineDatetime, parseTime)
 - [ ] Rate limiting on login/forgot-password endpoints
 
 ### Phase 4: Security Hardening (Planned)

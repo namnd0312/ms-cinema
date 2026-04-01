@@ -77,7 +77,7 @@ Hạ tầng:
   - `/api/notifications/**` → notification-service (SSE stream, REST CRUD, broadcast)
   - `/api/notifications/stream` → notification-service (endpoint SSE, **ContentCachingResponseWrapper bỏ qua để ngăn cạn kiệt thread**)
   - `/api/audit/**` → audit-service (truy vấn nhật ký kiểm toán, yêu cầu ADMIN)
-  - `/ws/**` → Proxy Nginx trực tiếp đến booking-service (endpoint STOMP WebSocket, **MỚI 22 tháng 3, 2026**, vượt gateway)
+  - `/ws/**` → Proxy Nginx trực tiếp đến booking-service (endpoint STOMP WebSocket, vượt gateway)
 - Tổng hợp tài liệu OpenAPI: `/v3/api-docs`
 - Swagger UI: `/swagger-ui.html`
 - HttpLoggingFilter: Ghi log yêu cầu với X-Correlation-ID, bỏ qua cache phản hồi cho đường dẫn SSE

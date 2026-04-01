@@ -4,27 +4,27 @@
 **Phiên bản:** 0.0.1-SNAPSHOT
 **Nhóm:** com.namnd
 **Trạng thái:** Đang phát triển — Giai đoạn Tích hợp Microservice
-**Cập nhật lần cuối:** Tháng 3 năm 2026
+**Cập nhật lần cuối:** Tháng 4 năm 2026
 
 ## Tóm Tắt
 
-MS Cinema là một **nền tảng microservices Spring Cloud gồm 11 module** dành cho đặt vé xem phim với kiến trúc hướng sự kiện, xác thực JWT, thanh toán Stripe và giám sát toàn diện. Hệ thống bao gồm các dịch vụ hạ tầng (Eureka, Config Server, API Gateway), 5 dịch vụ nghiệp vụ, 2 thư viện dùng chung và giao diện Angular.
+MS Cinema là một **nền tảng microservices Spring Cloud gồm 11 module** dành cho đặt vé xem phim với kiến trúc hướng sự kiện, xác thực JWT, thanh toán Stripe với đối soát hàng ngày, ghi nhật ký kiểm toán toàn diện, và khả năng quan sát. Hệ thống bao gồm các dịch vụ hạ tầng (Eureka, Config Server, API Gateway), 6 dịch vụ nghiệp vụ, 2 thư viện dùng chung và giao diện Angular.
 
 **Đặc điểm chính:**
 - Điểm truy cập bên ngoài duy nhất: API Gateway (cổng 8080)
 - **Auth-service** (cổng 8081): Vòng đời xác thực JWT, kích hoạt email, khóa tài khoản (5 lần thử/15 phút), xoay vòng token, @Auditable integration, Google OAuth2 login, thay đổi mật khẩu với xác thực lịch sử
 - **Movie-service** (cổng 8082): Phim, rạp, suất chiếu; tự động tạo lưới ghế (hàng A-Z); đánh giá sao (1-5), bình luận phân trang với xóa mềm, phản hồi bình luận (thích/không thích)
 - **Booking-service** (cổng 8083): Đặt chỗ ghế với khóa Redis (TTL 5 phút), các trạng thái vòng đời (PENDING→CONFIRMED/CANCELLED/EXPIRED), @Auditable on operations, khả năng sẵn có ghế thời gian thực WebSocket (STOMP /ws/booking, độ trễ <100ms)
-- **Payment-service** (cổng 8084): Tích hợp Stripe, payment intent idempotent, xác minh webhook
+- **Payment-service** (cổng 8084): Tích hợp Stripe, payment intent idempotent, xác minh webhook, Spring Batch đối soát hàng ngày (2 AM cron), REST API admin, @Auditable on payments
 - **Notification-service** (cổng 8085): Kafka consumer, gửi email SMTP, SSE thời gian thực, Redis dedup (TTL 24 giờ)
 - **Audit-service** (cổng 8086): Kafka consumer, ghi nhật ký kiểm toán đầy đủ (login, register, logout, các thao tác CRUD), Admin API truy vấn
 - **Module kafka-events:** Các sự kiện domain dùng chung (PaymentCompletedEvent, BookingCreatedEvent, v.v.)
 - **jwt-auth-autoconfigure:** Bộ xác thực JWT tái sử dụng cho tất cả dịch vụ (JJWT 0.12.6, HS512)
 - Spring Cloud Eureka cho khám phá dịch vụ, Config Server cho cấu hình tập trung
-- **Kafka topics:** payment-events, movie-events, notification-events (3 lần thử lại, exponential backoff, DLT)
+- **Kafka topics:** payment-events, movie-events, notification-events, notification.in_app, audit-events (3 lần thử lại, exponential backoff, DLT, giữ lạc nhật ký kiểm toán 90 ngày)
 - Redis cho danh sách đen token, khóa đặt chỗ, dedup thông báo
 - PostgreSQL riêng cho từng dịch vụ (auth→testdb, movie→moviedb, booking→bookingdb, payment→paymentdb, notification→notificationdb, audit→auditdb)
-- Bộ giám sát Prometheus (9090) + Grafana (3000) + Loki 3.0 (3100)
+- Bộ giám sát Prometheus (9090) + Grafana (3000) + Loki 3.0 (3100) + Zipkin (9411)
 
 ## Yêu Cầu Chức Năng
 

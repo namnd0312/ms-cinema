@@ -2,7 +2,7 @@
 
 **Project:** ms-cinema
 **Version:** 1.0
-**Last Updated:** February 2026
+**Last Updated:** April 2026
 
 ## Purpose
 
@@ -306,15 +306,6 @@ public boolean validateJwtToken(String authToken) {
     return false;
 }
 
-// ✗ Bad: Generic catch, loses information
-public boolean validateJwtToken(String authToken) {
-    try {
-        Jwts.parser().setSigningKey(SECRET_KEY).parseClaimsJws(authToken);
-        return true;
-    } catch (Exception e) {
-        return false;  // Silent failure
-    }
-}
 ```
 
 ## Database & ORM Standards
@@ -336,16 +327,6 @@ public class User {
     private String fullName;
 }
 
-// ✗ Bad
-@Entity
-@Table(name = "User")  // Wrong case
-public class User {
-    @Column(name = "user_id")
-    private Long id;
-
-    @Column(name = "fullname")  // No snake_case
-    private String fullName;
-}
 ```
 
 **Relationships**
@@ -373,11 +354,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByUsername(String username);
 }
 
-// ✗ Bad: Unclear what gets returned
-public interface UserRepository extends JpaRepository<User, Long> {
-    User getByUsername(String username);  // get vs find, optional?
-    boolean userExists(String username);  // awkward
-}
 ```
 
 ## REST API Standards
@@ -414,160 +390,22 @@ public class MovieComment {
 }
 ```
 
-**Pagination Pattern**
-```java
-// ✓ Good: Use Spring Data Page interface
-@GetMapping("/movies/{movieId}/comments")
-public ResponseEntity<Page<MovieCommentDto>> listComments(
-    @PathVariable Long movieId,
-    @RequestParam(defaultValue = "0") int page,
-    @RequestParam(defaultValue = "20") int size) {
-    Page<MovieComment> comments = commentService.findByMovieId(movieId, PageRequest.of(page, size));
-    return ResponseEntity.ok(comments.map(this::toDto));
-}
-
-// Response includes metadata: totalElements, totalPages, currentPage, size
-{
-    "content": [ { comment1 }, { comment2 } ],
-    "pageable": { "pageNumber": 0, "pageSize": 20, "totalElements": 150 },
-    "totalPages": 8
-}
-```
-
-**Upsert Pattern (Rating)**
-```java
-// ✓ Good: Update if exists, create if not
-@PostMapping("/movies/{movieId}/ratings")
-@PreAuthorize("isAuthenticated()")
-public ResponseEntity<?> createOrUpdateRating(
-    @PathVariable Long movieId,
-    @RequestBody CreateRatingRequest request,
-    @AuthenticationPrincipal UserPrincipal user) {
-    MovieRating rating = ratingService.createOrUpdateRating(
-        movieId, user.getId(), request.getRating());
-    return ResponseEntity.ok(ratingToDto(rating));
-}
-
-// Service implementation
-public MovieRating createOrUpdateRating(Long movieId, Long userId, Integer rating) {
-    return ratingRepository.findByMovieIdAndUserId(movieId, userId)
-        .map(existing -> {
-            existing.setRating(rating);
-            existing.setUpdatedAt(LocalDateTime.now());
-            return ratingRepository.save(existing);
-        })
-        .orElseGet(() -> {
-            MovieRating newRating = new MovieRating(movieId, userId, rating);
-            return ratingRepository.save(newRating);
-        });
-}
-```
-
-**Reaction Toggle Pattern**
-```java
-// ✓ Good: Toggle based on reaction type
-@PostMapping("/comments/{commentId}/reactions")
-@PreAuthorize("isAuthenticated()")
-public ResponseEntity<?> toggleReaction(
-    @PathVariable Long commentId,
-    @RequestBody CommentReactionRequest request,
-    @AuthenticationPrincipal UserPrincipal user) {
-    CommentReaction reaction = reactionService.toggleReaction(
-        commentId, user.getId(), request.getReactionType());
-    return ResponseEntity.ok(reactionToDto(reaction));
-}
-
-// Service: toggle removes if same type, replaces if different type
-public CommentReaction toggleReaction(Long commentId, Long userId, ReactionType type) {
-    Optional<CommentReaction> existing = repository.findByCommentIdAndUserId(commentId, userId);
-    if (existing.isPresent() && existing.get().getType() == type) {
-        repository.delete(existing.get());
-        return null;  // or return success DTO
-    }
-    if (existing.isPresent()) {
-        existing.get().setType(type);
-        return repository.save(existing.get());
-    }
-    return repository.save(new CommentReaction(commentId, userId, type));
-}
-```
+**Common Patterns:**
+- Pagination: Use Spring Data Page<T>, return with metadata (content, totalElements, totalPages)
+- Upsert: Use findById().map().orElseGet() pattern
+- Toggle: Remove if same, update if different, create if absent
 
 **Request/Response Structure**
-```java
-// ✓ Good: Clear DTO structure
-@PostMapping("/login")
-public ResponseEntity<?> authenticateUser(@RequestBody LoginRequest request) {
-    // Returns JwtResponseDto with consistent fields
-}
-
-// Request
-{
-    "username": "john",
-    "password": "pass123"
-}
-
-// Response (200 OK)
-{
-    "id": 1,
-    "token": "eyJhbGc...",
-    "type": "Bearer",
-    "username": "john",
-    "name": "John Doe",
-    "roles": ["ROLE_USER"]
-}
-```
-
-**Error Response Format**
-```java
-// Standardize error responses
-{
-    "timestamp": "2026-02-10T15:30:00Z",
-    "status": 400,
-    "error": "Bad Request",
-    "message": "Username is already taken",
-    "path": "/api/auth/register"
-}
-```
+- Use DTOs for API contracts; include metadata in responses
+- Standardize error responses: timestamp, status, error, message, path
+- Include pagination metadata: totalElements, totalPages, currentPage, size
 
 ## Configuration Standards
 
-**application.yml Structure**
-```yaml
-# ✓ Good: Organized by concern
-server:
-  port: 8080
-
-spring:
-  jpa:
-    hibernate:
-      ddl-auto: none
-    show-sql: true
-  datasource:
-    url: jdbc:postgresql://localhost:5432/testdb
-    username: postgres
-    password: 123456
-
-namnd:
-  app:
-    jwtSecret: ${JWT_SECRET:bezKoderSecretKey}
-    jwtExpiration: ${JWT_EXPIRATION:86400000}
-
-logging:
-  level:
-    com.namnd.cinema: debug
-```
-
-**Environment Variables**
-- Use env vars for secrets (jwtSecret, dbPassword)
-- Never hardcode sensitive values
-- Document all env var requirements
-
-```bash
-# .env (local development, not committed)
-JWT_SECRET=your-secret-key
-DATABASE_PASSWORD=postgres_password
-DATABASE_URL=jdbc:postgresql://localhost:5432/testdb
-```
+**application.yml Structure:**
+- Organize by concern (server, spring, logging, custom namespaces)
+- Use environment variables for secrets: ${JWT_SECRET}, ${DATABASE_PASSWORD}
+- Never hardcode sensitive values; document all env var requirements
 
 ## Testing Standards
 
@@ -599,26 +437,12 @@ public User registerUser(RegisterDto dto) {
     return userRepository.save(user);
 }
 
-// ✗ Bad
-public User registerUser(RegisterDto dto) {
-    user.setPassword(dto.getPassword());  // Plain password!
-    return userRepository.save(user);
-}
 ```
 
-**Token Handling**
-- Validate token signature before trusting claims
-- Check expiration on every access
-- Never log full tokens (truncate in logs)
-
-```java
-// ✓ Good: Log truncated token for debugging
-String truncatedToken = token.substring(0, 10) + "...";
-logger.debug("Validating token: {}", truncatedToken);
-
-// Never store tokens in cookie without HttpOnly flag
-response.addHeader("Set-Cookie", "token=" + token + "; HttpOnly; Secure");
-```
+**Token Handling:**
+- Validate token signature and expiration on every access
+- Never log full tokens; truncate in logs (first 10 chars + "...")
+- Store tokens in cookies with HttpOnly + Secure flags
 
 **Sensitive Configuration**
 - Store secrets in environment variables or secure vaults
@@ -633,28 +457,7 @@ response.addHeader("Set-Cookie", "token=" + token + "; HttpOnly; Secure");
 - @RequiredArgsConstructor for dependency injection
 - @Getter/@Setter for selective fields
 
-```java
-// ✓ Good: Use Lombok to reduce boilerplate
-@Data
-@Entity
-public class User {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-
-    private String username;
-    private String password;
-}
-
-// ✓ Good: Constructor injection with Lombok
-@RequiredArgsConstructor
-@Service
-public class UserServiceImpl implements UserService {
-    private final UserRepository userRepository;
-    private final PasswordEncoder passwordEncoder;
-    // Constructor auto-generated by Lombok
-}
-```
+- Use @Data for POJOs, @RequiredArgsConstructor for services, @Slf4j for logging
 
 **When NOT to Use Lombok**
 - Avoid @Getter on entities with lazy-loaded collections
@@ -668,17 +471,9 @@ Keep pom.xml organized with dependency management for version consistency.
 
 ## Documentation Standards
 
-**Markdown Files:**
-- Use clear headings (#, ##, ###)
-- Include table of contents for files > 100 lines
-- Provide code examples
-- Link to related docs
-
-**Code Documentation:**
-- Document public methods with Javadoc
-- Document non-obvious logic with inline comments
-- Include examples for complex APIs
-- Document assumptions and preconditions
+- Use clear headings, TOC for files > 100 lines, code examples, links
+- Document public methods with Javadoc, non-obvious logic with inline comments
+- Include assumptions and preconditions in complex APIs
 
 ## Code Review Checklist
 
@@ -690,18 +485,9 @@ Keep pom.xml organized with dependency management for version consistency.
 
 ## Refactoring Guidelines
 
-**When to Refactor:**
-- Class/method exceeds size limits (200 LOC, 30 line methods)
-- Duplicate code appears in 3+ places
-- Naming is unclear after adding comments
-- Cyclomatic complexity > 10
+**When:** Class/method exceeds size limits (200 LOC, 30 lines), duplicate code in 3+ places, unclear naming, cyclomatic complexity > 10
 
-**How to Refactor Safely:**
-1. Ensure tests exist and pass
-2. Make small, incremental changes
-3. Run tests after each change
-4. Commit frequently
-5. Document rationale in commit message
+**How:** Ensure tests pass → small incremental changes → test after each change → frequent commits → document rationale
 
 ## Tools & Automation
 
@@ -711,22 +497,10 @@ Keep pom.xml organized with dependency management for version consistency.
 
 ## Redis Standards
 
-**Key Patterns:**
-- Use descriptive prefixes separated by colons: `namespace:entity:identifier`
-- Examples: `blacklist:jti:abc123`, `notification:processed:event-uuid`
-- Document TTL expectations in comments (auto-expiration strategy)
-
-**Error Handling (Fail-Open vs Fail-Closed):**
-```java
-// Fail-Closed: reject on Redis unavailable (conservative, security-first)
-// Example: token blacklist check — rather send 401 than skip blacklist
-return redisTemplate.opsForValue().get(key) != null;  // false on error = blocked
-
-// Fail-Open: proceed on Redis unavailable (availability-first)
-// Example: event deduplication — rather send duplicate than lose notification
-try {
-    Boolean result = redisTemplate.opsForValue().setIfAbsent(key, "1", ttl);
-    return Boolean.TRUE.equals(result);
+**Key Patterns:** `namespace:entity:identifier` (e.g., `blacklist:jti:abc123`, `notification:processed:event-uuid`)
+- Document TTL expectations in comments
+- Fail-Closed (security-first): Reject on Redis unavailable (token blacklist)
+- Fail-Open (availability-first): Proceed on Redis unavailable (event deduplication)
 } catch (Exception e) {
     log.warn("Redis unavailable, proceeding: {}", e.getMessage());
     return true;  // fail-open: allow processing
@@ -756,95 +530,23 @@ public class PaymentService {
     }
 }
 
-// ✗ Bad: Publish before transaction commits
-public Payment completePayment(Long paymentId) {
-    PaymentCompletedEvent event = new PaymentCompletedEvent(/* ... */);
-    kafkaTemplate.send("topic", event);  // Sends before save commits
-    paymentRepository.save(/* ... */);
-}
 ```
 
-**Consuming Events:**
-```java
-// ✓ Good: Specific topic, error handler, retries
-@KafkaListener(topics = "payment-events", groupId = "booking-service")
-public void handlePaymentCompleted(PaymentCompletedEvent event) {
-    bookingService.confirmBooking(event.getBookingId());
-}
-
-// Error handler with retries (configured in application.yml)
-// spring.kafka.listener.error-handler: DefaultErrorHandler
-// spring.kafka.listener.ack-mode: manual_immediate
-```
+**Consuming Events:** Use @KafkaListener with specific topics, error handlers, and retries via application.yml configuration
 
 ## Password History Pattern
 
 **Preventing Reused Passwords:**
-```java
-// Entity: tracks last 3 passwords
-@Entity
-@Table(name = "password_history")
-public class PasswordHistory {
-    @Id @GeneratedValue
-    private Long id;
-
-    @Column(nullable = false)
-    private Long userId;
-
-    @Column(nullable = false)
-    private String passwordHash;
-
-    @Column(nullable = false)
-    private LocalDateTime createdAt;
-}
-
-// Service: validate new password against last 3 hashes
-public boolean isPasswordReused(Long userId, String newPassword) {
-    List<PasswordHistory> recent = repository
-        .findTop3ByUserIdOrderByCreatedAtDesc(userId);
-    return recent.stream()
-        .anyMatch(ph -> passwordEncoder.matches(newPassword, ph.getPasswordHash()));
-}
-
-// Endpoint: change password (requires authentication)
-@PostMapping("/api/auth/change-password")
-@PreAuthorize("isAuthenticated()")
-@Transactional
-public ResponseEntity<?> changePassword(
-    @RequestBody ChangePasswordDto request,
-    @AuthenticationPrincipal UserDetails user) {
-    // Validate current password, check reuse, update, save to history
-}
-```
+- Entity tracks last 3 passwords per user (PasswordHistory table)
+- Service validates new password against last 3 hashes using PasswordEncoder.matches()
+- Endpoint (POST /api/auth/change-password) requires authentication, validates current password, checks reuse, updates and saves to history
 
 ## Feign Client Standards
 
-**Feign Client Declaration (Service-to-Service Calls):**
-```java
-// ✓ Good: Typed Feign client with clear contracts
-@FeignClient(name = "movie-service", url = "http://localhost:8082")
-public interface MovieServiceClient {
-    @GetMapping("/api/showtimes/{showtimeId}")
-    ShowtimeDto getShowtime(@PathVariable Long showtimeId);
-
-    @GetMapping("/api/theaters/{theaterId}/seats")
-    List<SeatDto> getSeats(@PathVariable Long theaterId);
-}
-
-// Service usage with error handling
-@Service
-@RequiredArgsConstructor
-public class BookingServiceImpl {
-    private final MovieServiceClient movieClient;
-
-    @Transactional
-    public Booking reserve(ReserveRequest request) {
-        try {
-            ShowtimeDto showtime = movieClient.getShowtime(request.getShowtimeId());
-            List<SeatDto> seats = movieClient.getSeats(showtime.getTheaterId());
-            // Process booking...
-        } catch (FeignException.NotFound e) {
-            throw new EntityNotFoundException("Showtime not found");
+**Service-to-Service Calls:**
+- Declare @FeignClient with typed interfaces (e.g., MovieServiceClient)
+- Use @PathVariable for path parameters, @RequestParam for query params
+- Handle FeignException with specific catch clauses (NotFound, BadRequest, etc.)
         } catch (FeignException e) {
             throw new ServiceUnavailableException("Movie service unavailable");
         }
@@ -1059,45 +761,13 @@ location /ws/ {
 - Implement topic-based authorization (users can only subscribe to their own data)
 - Set connection timeouts to prevent zombie connections
 
-## Spring Batch Patterns (NEW March 31, 2026)
+## Spring Batch Patterns
 
-**Batch Job Configuration:**
-- Use @Configuration class with @EnableBatchProcessing
-- Define Job and Step as @Bean methods in config class
-- Register Step in Job using StepBuilderFactory
-- Set chunk size (e.g., 100) to balance memory vs. database round-trips
+**Configuration:** Use @Configuration + @EnableBatchProcessing, define Job/Step as @Bean methods, set chunk size (100) for memory balance
 
-**Implementing Batch Components:**
-```java
-// Reader: Implement ItemReader<T> or extend JdbcCursorItemReader/RepositoryItemReader
-public class LocalPaymentReader implements ItemReader<Payment> {
-  @Override public Payment read() throws Exception { ... }
-}
+**Components:** ItemReader → ItemProcessor → ItemWriter → JobExecutionListener for start/end hooks
 
-// Processor: Implement ItemProcessor<I, O> for transformation/filtering
-public class ReconciliationProcessor implements ItemProcessor<Payment, ReconciliationItem> {
-  @Override public ReconciliationItem process(Payment payment) throws Exception { ... }
-}
-
-// Writer: Implement ItemWriter<T> for batch persistence
-public class ReconciliationItemWriter implements ItemWriter<ReconciliationItem> {
-  @Override public void write(List<ReconciliationItem> items) throws Exception { ... }
-}
-
-// Listener: Implement StepExecutionListener or JobExecutionListener
-public class ReconciliationJobListener implements JobExecutionListener {
-  @Override public void afterJob(JobExecution execution) { ... }
-}
-```
-
-**Best Practices:**
-- Chunking: Break large datasets into chunks (100-1000 records) to manage memory
-- Idempotency: Design processors to be re-enterable (safe if job restarts)
-- Error Handling: Implement SkipListener/RetryListener for transient failures
-- Logging: Use JobRepository to track execution; log start/end/status
-- Scheduling: Use @Scheduled cron for daily/hourly jobs; disable auto-run with spring.batch.job.enabled=false
-- Database Init: Use spring.batch.jdbc.initialize-schema=always to auto-create metadata tables
-- Transaction Management: Chunked writing auto-wraps in @Transactional; custom listeners may need explicit tx
+**Best Practices:** Chunking (100-1000 records), idempotent processors (safe on restart), SkipListener/RetryListener for failures, @Scheduled cron with spring.batch.job.enabled=false, auto-init with spring.batch.jdbc.initialize-schema=always
 
 ## Deprecated Patterns (Avoid)
 

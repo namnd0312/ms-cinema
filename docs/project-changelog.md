@@ -1,11 +1,39 @@
 # Project Changelog
 
 **Project:** ms-cinema
-**Updated:** March 31, 2026
+**Updated:** April 1, 2026
 
 ## Version 0.0.1-SNAPSHOT
 
 ### [Unreleased]
+
+#### Frontend Date/Time Utilities (FR-3.4 COMPLETE ✓) — April 1, 2026
+- **Feature:** Timezone-safe date/time formatting utilities for form submissions
+  - Utility file: date-format.util.ts (src/app/shared/utils/)
+  - Functions: formatDate(date, format?), combineDatetime(dateStr, timeStr), parseTime(timeStr)
+  - formatDate: Formats Date to local timezone string (YYYY-MM-DD HH:mm:ss format)
+  - combineDatetime: Merges date + time strings into Date object with timezone conversion
+  - parseTime: Parses HH:mm string into minutes for time picker logic
+  - Integration: Used in showtime-form-dialog and movie-form-dialog
+  - Problem Solved: Prevents browser timezone offset issues when submitting datetime values
+  - Testing: Manual verification with form submissions across different timezones
+- **Benefits:** Consistent datetime handling across frontend forms, eliminates timezone-related data corruption
+
+#### Stripe Reconciliation Admin Dashboard (FR-3.5 COMPLETE ✓) — March 31, 2026
+- **Feature:** Admin UI for viewing and managing payment reconciliation results
+  - Dashboard component: reconciliation-dashboard.component.ts
+    - Summary cards: Total runs, matched/mismatched/missing counts
+    - Date range picker: Manual trigger for custom date ranges (max 31 days)
+    - Run history table: MatTable with startDate, endDate, status, counts, pagination
+  - Detail component: reconciliation-detail.component.ts
+    - Items table: stripePaymentIntentId, localPaymentId, discrepancyType, amounts, statuses
+    - Filter dropdown: By discrepancyType (MATCHED, STATUS_MISMATCH, AMOUNT_MISMATCH, MISSING_LOCAL, MISSING_STRIPE)
+    - CSV export: Download reconciliation items as CSV file
+    - Resolve action: Mark item as resolved with admin notes
+  - API service: Wraps backend reconciliation endpoints (trigger, getRuns, getRunDetails, getRunItems, getSummary, resolveItem)
+  - Routes: Added /admin/reconciliation, /admin/reconciliation/:runId
+  - Navigation: Added "Reconciliation" tab to admin-nav.component.ts
+- **Benefits:** Real-time visibility into payment discrepancies, streamlined resolution workflow, audit trail for admin actions
 
 #### Stripe Payment Reconciliation with Spring Batch (FR-3.3 COMPLETE ✓) — March 31, 2026
 - **Feature:** Daily automated reconciliation between local payments and Stripe PaymentIntent states

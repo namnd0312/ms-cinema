@@ -76,7 +76,7 @@ Infrastructure:
   - `/api/notifications/**` → notification-service (SSE stream, REST CRUD, broadcast)
   - `/api/notifications/stream` → notification-service (SSE endpoint, **ContentCachingResponseWrapper skipped to prevent thread exhaustion**)
   - `/api/audit/**` → audit-service (admin-only audit log API, requires ADMIN role)
-  - `/ws/**` → Nginx proxy directly to booking-service (WebSocket STOMP endpoint, **NEW March 22, 2026**, bypasses gateway)
+  - `/ws/**` → Nginx proxy directly to booking-service (WebSocket STOMP endpoint, bypasses gateway)
 - Aggregates OpenAPI documentation: `/v3/api-docs`
 - Swagger UI: `/swagger-ui.html`
 - HttpLoggingFilter: Logs requests with X-Correlation-ID, skips response caching for SSE paths
@@ -127,7 +127,7 @@ Infrastructure:
 - Kafka Listeners: Consumes PaymentCompletedEvent (CONFIRMED), PaymentFailedEvent (CANCELLED)
 - Redis Locks: Seat:lock:{showtimeId}:{seatId} with 5-min TTL
 - Scheduler: BookingExpiryScheduler (60s check) transitions expired PENDING bookings
-- **WebSocket Configuration (NEW March 22, 2026):**
+- **WebSocket Configuration:**
   - WebSocketConfig.java: Spring WebSocket + STOMP, in-memory broker (app:/topic/showtime/*)
   - SeatStatusMessage.java: DTO (showtimeId, seatId, status, userId, action: LOCK/RESERVE/CANCEL)
   - SeatWebSocketPublisher.java: Broadcasts SeatStatusMessage to /topic/showtime/{showtimeId}/seats endpoint
@@ -237,7 +237,7 @@ Infrastructure:
 **cinema-frontend (Angular 18)** - Web UI
 - Port: 4200 (dev) → 80 (prod via Nginx)
 - Stack: TypeScript 5.5, Material 18, Stripe.js 8.9, RxJS
-- **WebSocket Packages (NEW March 22, 2026):** @stomp/stompjs, sockjs-client
+- **WebSocket Packages:** @stomp/stompjs, sockjs-client
 - Lazy-loaded routes: /auth, /movies, /booking, /payment, /profile (includes /profile/change-password), /admin, /notifications
 - **Seat Grid Components (FR-3.1 NEW):**
   - seat-grid.component.ts: Color-coded seats (STANDARD=green, PREMIUM=blue, VIP=amber), row A-Z labels, legend
@@ -259,7 +259,7 @@ Infrastructure:
 
 ### Authentication Flow
 
-#### User Registration (Deferred Password Setup - NEW March 27, 2026)
+#### User Registration (Deferred Password Setup)
 ```
 CLIENT: POST /api/auth/register
         └─► api-gateway (routes to auth-service)
@@ -388,7 +388,7 @@ FAIL CASE: Payment failed
             └─ Send failure notification
 ```
 
-### Real-Time Seat Availability Flow (WebSocket STOMP - NEW March 22, 2026 - FR-3.1 COMPLETE)
+### Real-Time Seat Availability Flow (WebSocket STOMP)
 ```
 cinema-frontend: Seat Selection Page Load (FR-3.1 Implementation)
       ├─ seat-websocket.service.ts: Connect to /ws via SockJS+STOMP (nginx proxy to booking-service:8083)
@@ -430,7 +430,7 @@ FRONTEND: seat-websocket.service.ts event handlers
       ├─ Reconnect Logic: Auto-reconnect with exponential backoff
       │  └─ Disconnect detected → retry 1s, 2s, 4s, 8s, 16s, 30s max
       │
-      ├─ Nginx Routing (NEW March 22, 2026):**
+      ├─ Nginx Routing:**
       │  ├─ /ws/* directly routed to booking-service:8083 (bypasses api-gateway)
       │  ├─ WebSocket upgrade headers: Connection: Upgrade, Upgrade: websocket
       │  └─ <100ms latency (vs. 2-3s polling; 100x faster)
