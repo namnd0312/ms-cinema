@@ -5,7 +5,9 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
 import { MatSelectModule } from '@angular/material/select';
+import { MatDatepickerModule } from '@angular/material/datepicker';
 import { ShowtimeAdminService } from '../../../core/services/showtime-admin.service';
+import { combineDatetime, parseTime } from '../../../core/utils/date-format.util';
 import { Movie, Theater, Showtime, CreateShowtimeRequest } from '../../../core/models/movie.model';
 
 export interface ShowtimeDialogData {
@@ -19,7 +21,8 @@ export interface ShowtimeDialogData {
   standalone: true,
   imports: [
     ReactiveFormsModule, MatDialogModule, MatFormFieldModule,
-    MatInputModule, MatButtonModule, MatSelectModule
+    MatInputModule, MatButtonModule, MatSelectModule,
+    MatDatepickerModule
   ],
   template: `
     <h2 mat-dialog-title>{{ data.showtime ? 'Edit Showtime' : 'Add Showtime' }}</h2>
@@ -37,12 +40,18 @@ export interface ShowtimeDialogData {
               <mat-option [value]="t.id">{{t.name}} — {{t.location}}</mat-option>
             }
           </mat-select></mat-form-field>
+        <mat-form-field><mat-label>Start Date</mat-label>
+          <input matInput [matDatepicker]="startDp" formControlName="startDate">
+          <mat-datepicker-toggle matSuffix [for]="startDp"></mat-datepicker-toggle>
+          <mat-datepicker #startDp></mat-datepicker></mat-form-field>
         <mat-form-field><mat-label>Start Time</mat-label>
-          <input matInput type="datetime-local" formControlName="startTime">
-        </mat-form-field>
+          <input matInput type="time" formControlName="startTime"></mat-form-field>
+        <mat-form-field><mat-label>End Date</mat-label>
+          <input matInput [matDatepicker]="endDp" formControlName="endDate">
+          <mat-datepicker-toggle matSuffix [for]="endDp"></mat-datepicker-toggle>
+          <mat-datepicker #endDp></mat-datepicker></mat-form-field>
         <mat-form-field><mat-label>End Time</mat-label>
-          <input matInput type="datetime-local" formControlName="endTime">
-        </mat-form-field>
+          <input matInput type="time" formControlName="endTime"></mat-form-field>
         <mat-form-field><mat-label>Base Price</mat-label>
           <input matInput type="number" step="0.01" formControlName="basePrice">
           <span matPrefix>$&nbsp;</span>
@@ -70,14 +79,15 @@ export class ShowtimeFormDialogComponent {
   form = inject(FormBuilder).group({
     movieId: [this.data.showtime?.movie.id ?? null, Validators.required],
     theaterId: [this.data.showtime?.theater.id ?? null, Validators.required],
-    startTime: [this.formatDatetime(this.data.showtime?.startTime), Validators.required],
-    endTime: [this.formatDatetime(this.data.showtime?.endTime), Validators.required],
+    startDate: [this.parseDate(this.data.showtime?.startTime), Validators.required],
+    startTime: [this.data.showtime?.startTime ? parseTime(this.data.showtime.startTime) : '', Validators.required],
+    endDate: [this.parseDate(this.data.showtime?.endTime), Validators.required],
+    endTime: [this.data.showtime?.endTime ? parseTime(this.data.showtime.endTime) : '', Validators.required],
     basePrice: [this.data.showtime?.basePrice ?? null, [Validators.required, Validators.min(0)]]
   });
 
-  private formatDatetime(iso?: string): string {
-    if (!iso) return '';
-    return iso.substring(0, 16);
+  private parseDate(iso?: string): Date | null {
+    return iso ? new Date(iso) : null;
   }
 
   save(): void {
@@ -87,8 +97,8 @@ export class ShowtimeFormDialogComponent {
     const request: CreateShowtimeRequest = {
       movieId: val.movieId!,
       theaterId: val.theaterId!,
-      startTime: val.startTime!,
-      endTime: val.endTime!,
+      startTime: combineDatetime(val.startDate!, val.startTime!),
+      endTime: combineDatetime(val.endDate!, val.endTime!),
       basePrice: val.basePrice!
     };
     const op = this.data.showtime

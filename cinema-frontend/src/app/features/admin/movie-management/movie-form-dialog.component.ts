@@ -5,9 +5,9 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDatepickerModule } from '@angular/material/datepicker';
-import { MatNativeDateModule } from '@angular/material/core';
 import { MatSelectModule } from '@angular/material/select';
 import { MovieService } from '../../../core/services/movie.service';
+import { formatDate } from '../../../core/utils/date-format.util';
 import { Movie, CreateMovieRequest } from '../../../core/models/movie.model';
 
 @Component({
@@ -15,8 +15,7 @@ import { Movie, CreateMovieRequest } from '../../../core/models/movie.model';
   standalone: true,
   imports: [
     ReactiveFormsModule, MatDialogModule, MatFormFieldModule,
-    MatInputModule, MatButtonModule, MatDatepickerModule,
-    MatNativeDateModule, MatSelectModule
+    MatInputModule, MatButtonModule, MatDatepickerModule, MatSelectModule
   ],
   template: `
     <h2 mat-dialog-title>{{ data ? 'Edit Movie' : 'Add Movie' }}</h2>
@@ -83,7 +82,7 @@ export class MovieFormDialogComponent {
       durationMin: val.durationMin!,
       rating: val.rating ?? '',
       posterUrl: val.posterUrl ?? '',
-      releaseDate: val.releaseDate?.toISOString().split('T')[0] ?? ''
+      releaseDate: val.releaseDate ? formatDate(val.releaseDate) : ''
     } as CreateMovieRequest;
     const op = this.data
       ? this.movieService.updateMovie(this.data.id, request)

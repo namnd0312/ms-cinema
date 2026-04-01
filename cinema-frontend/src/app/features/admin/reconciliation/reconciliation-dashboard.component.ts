@@ -12,7 +12,9 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatDatepickerModule } from '@angular/material/datepicker';
 import { ReconciliationService } from '../../../core/services/reconciliation.service';
+import { formatDate } from '../../../core/utils/date-format.util';
 import { ReconciliationRun, ReconciliationSummary } from '../../../core/models/reconciliation.model';
 
 @Component({
@@ -21,7 +23,8 @@ import { ReconciliationRun, ReconciliationSummary } from '../../../core/models/r
   imports: [
     DatePipe, FormsModule,
     MatTableModule, MatButtonModule, MatIconModule, MatProgressSpinnerModule,
-    MatChipsModule, MatCardModule, MatFormFieldModule, MatInputModule, MatPaginatorModule
+    MatChipsModule, MatCardModule, MatFormFieldModule, MatInputModule, MatPaginatorModule,
+    MatDatepickerModule
   ],
   template: `
     <div class="admin-container">
@@ -44,9 +47,13 @@ import { ReconciliationRun, ReconciliationSummary } from '../../../core/models/r
       <!-- Trigger Section -->
       <div class="trigger-section">
         <mat-form-field><mat-label>Start Date</mat-label>
-          <input matInput type="date" [(ngModel)]="startDate"></mat-form-field>
+          <input matInput [matDatepicker]="startDp" [(ngModel)]="startDate">
+          <mat-datepicker-toggle matSuffix [for]="startDp"></mat-datepicker-toggle>
+          <mat-datepicker #startDp></mat-datepicker></mat-form-field>
         <mat-form-field><mat-label>End Date</mat-label>
-          <input matInput type="date" [(ngModel)]="endDate"></mat-form-field>
+          <input matInput [matDatepicker]="endDp" [(ngModel)]="endDate">
+          <mat-datepicker-toggle matSuffix [for]="endDp"></mat-datepicker-toggle>
+          <mat-datepicker #endDp></mat-datepicker></mat-form-field>
         <button mat-raised-button color="primary" (click)="trigger()" [disabled]="triggering()">
           @if (triggering()) { <mat-spinner diameter="20"></mat-spinner> }
           @else { Run Reconciliation }
@@ -112,15 +119,15 @@ export class ReconciliationDashboardComponent implements OnInit {
   totalRuns = signal(0);
   loading = signal(true);
   triggering = signal(false);
-  startDate = '';
-  endDate = '';
+  startDate: Date | null = null;
+  endDate: Date | null = null;
   columns = ['id', 'dateRange', 'status', 'matched', 'mismatched', 'missing', 'createdAt'];
 
   ngOnInit(): void {
     const today = new Date();
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
-    this.startDate = this.endDate = yesterday.toISOString().split('T')[0];
+    this.startDate = this.endDate = yesterday;
     this.loadSummary();
     this.loadRuns(0);
   }
@@ -140,7 +147,7 @@ export class ReconciliationDashboardComponent implements OnInit {
   trigger(): void {
     if (!this.startDate || !this.endDate) return;
     this.triggering.set(true);
-    this.service.triggerReconciliation(this.startDate, this.endDate).subscribe({
+    this.service.triggerReconciliation(formatDate(this.startDate), formatDate(this.endDate)).subscribe({
       next: () => {
         this.snackBar.open('Reconciliation started', 'OK', { duration: 3000 });
         this.triggering.set(false);
