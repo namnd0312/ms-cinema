@@ -12,7 +12,7 @@ import java.util.List;
  * Feign client for communicating with movie-service.
  * Retrieves showtime details and seat information for booking validation.
  */
-@FeignClient(name = "movie-service")
+@FeignClient(name = "movie-service", url = "${movie.service.url:}")
 public interface MovieServiceClient {
 
     @GetMapping("/api/showtimes/{id}")

@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ms-cinema-config
+  namespace: ms-cinema
+data:
+  # Spring profile - disables Eureka routes, uses static URIs
+  SPRING_PROFILES_ACTIVE: "k8s"
+  # Disable Eureka and config-server
+  EUREKA_CLIENT_ENABLED: "false"
+  SPRING_CLOUD_CONFIG_ENABLED: "false"
+  # Infrastructure hosts (in-cluster K8s DNS)
+  DB_HOST: "postgresql"
+  REDIS_HOST: "redis"
+  KAFKA_HOST: "kafka"
+  ZIPKIN_HOST: "zipkin"
+  # --- Migrated from config-server config-repo ---
+  # Kafka configuration
+  SPRING_KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+  SPRING_KAFKA_CONSUMER_AUTO_OFFSET_RESET: "earliest"
+  SPRING_KAFKA_CONSUMER_VALUE_DESERIALIZER: "org.springframework.kafka.support.serializer.JsonDeserializer"
+  SPRING_KAFKA_PRODUCER_VALUE_SERIALIZER: "org.springframework.kafka.support.serializer.JsonSerializer"
+  SPRING_KAFKA_PROPERTIES_SPRING_JSON_TRUSTED_PACKAGES: "com.namnd.kafka.events.*"
+  # Zipkin tracing
+  MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: "http://zipkin:9411/api/v2/spans"
+  # JWT alias (non-secret)
+  NAMND_APP_JWTALIAS: "namnd-cinema"
+  # Inter-service URLs (for FeignClient)
+  MOVIE_SERVICE_URL: "http://movie-service:8082"
+  # Java timezone
+  TZ: "Asia/Ho_Chi_Minh"
+  JAVA_OPTS: "-Duser.timezone=Asia/Ho_Chi_Minh"

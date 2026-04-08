@@ -33,3 +33,7 @@ build/
 .vscode/
 
 docker-compose.yml
+
+### K8s Secrets (contains real credentials) ###
+k8s/secrets.yml
+k8s/base/secrets.yml

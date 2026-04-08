@@ -1,0 +1,106 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+  namespace: ms-cinema
+  labels:
+    app.kubernetes.io/name: auth-service
+    app.kubernetes.io/part-of: ms-cinema
+    app.kubernetes.io/component: service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: auth-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: auth-service
+        app.kubernetes.io/part-of: ms-cinema
+    spec:
+      initContainers:
+        - name: wait-for-postgresql
+          image: busybox:1.36
+          command: ['sh', '-c']
+          args:
+            - |
+              until nc -z postgresql 5432; do
+                echo "Waiting for postgresql..."
+                sleep 3
+              done
+        - name: wait-for-kafka
+          image: busybox:1.36
+          command: ['sh', '-c']
+          args:
+            - |
+              until nc -z kafka 9092; do
+                echo "Waiting for kafka..."
+                sleep 3
+              done
+        - name: wait-for-redis
+          image: busybox:1.36
+          command: ['sh', '-c']
+          args:
+            - |
+              until nc -z redis 6379; do
+                echo "Waiting for redis..."
+                sleep 3
+              done
+      containers:
+        - name: auth-service
+          image: ms-cinema/auth-service:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8081
+          envFrom:
+            - configMapRef:
+                name: ms-cinema-config
+          env:
+            # auth-service hardcodes datasource URL, override via env
+            - name: SPRING_DATASOURCE_URL
+              valueFrom:
+                secretKeyRef: { name: ms-cinema-secrets, key: SPRING_DATASOURCE_URL }
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef: { name: ms-cinema-secrets, key: SPRING_DATASOURCE_USERNAME }
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: ms-cinema-secrets, key: SPRING_DATASOURCE_PASSWORD }
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef: { name: ms-cinema-secrets, key: JWT_SECRET }
+            - name: GOOGLE_CLIENT_ID
+              valueFrom:
+                secretKeyRef: { name: ms-cinema-secrets, key: GOOGLE_CLIENT_ID }
+            - name: GOOGLE_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef: { name: ms-cinema-secrets, key: GOOGLE_CLIENT_SECRET }
+            - name: MAIL_USERNAME
+              valueFrom:
+                secretKeyRef: { name: ms-cinema-secrets, key: MAIL_USERNAME }
+            - name: MAIL_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: ms-cinema-secrets, key: MAIL_PASSWORD }
+          resources:
+            limits: { memory: "256Mi", cpu: "300m" }
+          readinessProbe:
+            httpGet: { path: /actuator/health, port: 8081 }
+            initialDelaySeconds: 40
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /actuator/health, port: 8081 }
+            initialDelaySeconds: 80
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-service
+  namespace: ms-cinema
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: auth-service
+  ports:
+    - port: 8081
+      targetPort: 8081

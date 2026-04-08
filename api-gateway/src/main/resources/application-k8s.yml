@@ -1,0 +1,103 @@
+# K8s profile: static URI routing (no Eureka), disable config-server
+spring:
+  cloud:
+    gateway:
+      mvc:
+        routes:
+          # Auth routes
+          - id: auth-service
+            uri: http://auth-service:8081
+            predicates:
+              - Path=/api/auth/**
+          - id: auth-service-users
+            uri: http://auth-service:8081
+            predicates:
+              - Path=/api/users/**
+          - id: auth-service-oauth2-authorization
+            uri: http://auth-service:8081
+            predicates:
+              - Path=/oauth2/authorization/**
+          - id: auth-service-oauth2-callback
+            uri: http://auth-service:8081
+            predicates:
+              - Path=/login/oauth2/code/**
+          # Movie routes
+          - id: movie-service
+            uri: http://movie-service:8082
+            predicates:
+              - Path=/api/movies/**
+          - id: movie-service-showtimes
+            uri: http://movie-service:8082
+            predicates:
+              - Path=/api/showtimes/**
+          - id: movie-service-theaters
+            uri: http://movie-service:8082
+            predicates:
+              - Path=/api/theaters/**
+          - id: movie-service-comments
+            uri: http://movie-service:8082
+            predicates:
+              - Path=/api/comments/**
+          # Booking routes
+          - id: booking-service-ws
+            uri: http://booking-service:8083
+            predicates:
+              - Path=/ws/**
+          - id: booking-service
+            uri: http://booking-service:8083
+            predicates:
+              - Path=/api/bookings/**
+          # Other services
+          - id: payment-service
+            uri: http://payment-service:8084
+            predicates:
+              - Path=/api/payments/**
+          - id: notification-service
+            uri: http://notification-service:8085
+            predicates:
+              - Path=/api/notifications/**
+          - id: audit-service
+            uri: http://audit-service:8086
+            predicates:
+              - Path=/api/audit/**
+          # Swagger api-docs routes (with StripPrefix=1)
+          - id: auth-service-docs
+            uri: http://auth-service:8081
+            predicates:
+              - Path=/auth-service/v3/api-docs/**
+            filters:
+              - StripPrefix=1
+          - id: movie-service-docs
+            uri: http://movie-service:8082
+            predicates:
+              - Path=/movie-service/v3/api-docs/**
+            filters:
+              - StripPrefix=1
+          - id: booking-service-docs
+            uri: http://booking-service:8083
+            predicates:
+              - Path=/booking-service/v3/api-docs/**
+            filters:
+              - StripPrefix=1
+          - id: payment-service-docs
+            uri: http://payment-service:8084
+            predicates:
+              - Path=/payment-service/v3/api-docs/**
+            filters:
+              - StripPrefix=1
+          - id: notification-service-docs
+            uri: http://notification-service:8085
+            predicates:
+              - Path=/notification-service/v3/api-docs/**
+            filters:
+              - StripPrefix=1
+          - id: audit-service-docs
+            uri: http://audit-service:8086
+            predicates:
+              - Path=/audit-service/v3/api-docs/**
+            filters:
+              - StripPrefix=1
+
+eureka:
+  client:
+    enabled: false
