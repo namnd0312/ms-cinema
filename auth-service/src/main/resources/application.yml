@@ -27,7 +27,7 @@ spring:
             client-id: ${GOOGLE_CLIENT_ID:1089359077505-9bplo54297vhkb3v7vdg321cfa57v0to.apps.googleusercontent.com}
             client-secret: ${GOOGLE_CLIENT_SECRET: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}
             scope: openid,profile,email
-            redirect-uri: ${OAUTH2_REDIRECT_URI:http://localhost:8080/login/oauth2/code/google}
+            redirect-uri: ${OAUTH2_REDIRECT_URI:http://localhost/login/oauth2/code/google}
   kafka:
     bootstrap-servers: ${KAFKA_HOST:localhost}:9092
     producer:
