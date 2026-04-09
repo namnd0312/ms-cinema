@@ -23,15 +23,18 @@ spec:
           image: openzipkin/zipkin:3.4
           ports:
             - containerPort: 9411
+          env:
+            - name: JAVA_OPTS
+              value: "-Xms64m -Xmx192m"
           resources:
-            limits: { memory: "128Mi", cpu: "150m" }
+            limits: { memory: "256Mi", cpu: "200m" }
           readinessProbe:
             httpGet: { path: /health, port: 9411 }
-            initialDelaySeconds: 10
+            initialDelaySeconds: 30
             periodSeconds: 10
           livenessProbe:
             httpGet: { path: /health, port: 9411 }
-            initialDelaySeconds: 20
+            initialDelaySeconds: 60
             periodSeconds: 15
 ---
 apiVersion: v1

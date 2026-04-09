@@ -1,25 +1,29 @@
 ---
-title: "K8s Minikube Full Deployment (No Eureka, No Config-Server, All Infra on K8s)"
-description: "Deploy entire ms-cinema stack to K8s on Minikube - infrastructure + services, per-service manifests for CI/CD"
+title: "K8s Deployment on OrbStack (No Eureka, No Config-Server, All Infra on K8s)"
+description: "Deploy entire ms-cinema stack to K8s on OrbStack — infrastructure + services, per-service manifests for CI/CD"
 status: completed
 priority: P2
-effort: 9h
-branch: master
-tags: [kubernetes, minikube, deployment, devops, cicd]
+effort: 10h
+branch: k8s
+tags: [kubernetes, orbstack, deployment, devops, cicd]
 created: 2026-04-07
-updated: 2026-04-08
+updated: 2026-04-09
+effort: 12h
 ---
 
-# K8s Minikube Full Deployment Plan
+# K8s OrbStack Deployment Plan
 
-## Changes from Original Plan
-1. **Eureka removed** — K8s native service discovery (DNS)
-2. **Config-server removed** — K8s ConfigMap/Secret replaces centralized config
-3. **All infrastructure on K8s** — PostgreSQL, Kafka, Redis, Zipkin deployed as K8s workloads
-4. **Per-service K8s structure** — each service has own directory for independent CI/CD
+## Changes from Original Minikube Plan
+1. **Minikube → OrbStack** — lighter, native macOS K8s with built-in LoadBalancer
+2. **No `minikube tunnel`** — OrbStack provides native LoadBalancer IPs + `.k8s.orb.local` DNS
+3. **No `eval $(minikube docker-env)`** — use OrbStack Docker context directly
+4. **Eureka removed** — K8s native service discovery (DNS)
+5. **Config-server removed** — K8s ConfigMap/Secret replaces centralized config
+6. **All infrastructure on K8s** — PostgreSQL, Kafka, Redis, Zipkin deployed as K8s workloads
+7. **Per-service K8s structure** — each service has own directory for independent CI/CD
 
 ## Scope
-Deploy **everything** to Minikube: infrastructure (PostgreSQL, Kafka, Redis, Zipkin) + 7 services (api-gateway + 6 business) + Angular frontend. No eureka-server, no config-server. Optional monitoring (Prometheus, Grafana, Loki).
+Deploy **everything** to OrbStack K8s: infrastructure (PostgreSQL, Kafka, Redis, Zipkin, Loki, Promtail, Grafana) + 7 services (api-gateway + 6 business) + Angular frontend. No eureka-server, no config-server.
 
 ## Architecture
 - K8s Service DNS for discovery (`http://auth-service:8081`)
@@ -27,42 +31,19 @@ Deploy **everything** to Minikube: infrastructure (PostgreSQL, Kafka, Redis, Zip
 - Config-server configs migrated to K8s ConfigMap (Kafka, Zipkin) and Secret (JWT)
 - FeignClient (booking→movie): URL via env var
 - Per-service K8s dirs for independent CI/CD
-- LoadBalancer + `minikube tunnel` for external access
+- OrbStack native LoadBalancer for external access (no tunnel needed)
+- OrbStack DNS: `<service>.ms-cinema.svc.cluster.local` or `<service>.k8s.orb.local`
 - PersistentVolumeClaim for PostgreSQL data
+- `imagePullPolicy: Never` — images built in OrbStack Docker context
 
 ## File Structure
 ```
 k8s/
-├── base/
-│   ├── namespace.yml
-│   ├── configmap.yml
-│   └── secrets.yml
-├── infra/
-│   ├── postgresql/
-│   │   └── deployment.yml      # Deployment + Service + PVC
-│   ├── kafka/
-│   │   └── deployment.yml      # KRaft mode, single broker
-│   ├── redis/
-│   │   └── deployment.yml
-│   └── zipkin/
-│       └── deployment.yml
-├── api-gateway/
-│   └── deployment.yml
-├── auth-service/
-│   └── deployment.yml
-├── movie-service/
-│   └── deployment.yml
-├── booking-service/
-│   └── deployment.yml
-├── payment-service/
-│   └── deployment.yml
-├── notification-service/
-│   └── deployment.yml
-├── audit-service/
-│   └── deployment.yml
+├── base/                        # namespace, configmap, secrets
+├── infra/{postgresql,kafka,redis,zipkin}/
+├── {api-gateway,auth,movie,booking,payment,notification,audit}-service/
 ├── cinema-frontend/
-│   └── deployment.yml
-├── deploy-all.sh
+├── deploy-all.sh               # OrbStack-aware deploy script
 └── teardown.sh
 ```
 
@@ -75,24 +56,16 @@ k8s/
 | 3 | [K8s Base Configs & Service Manifests](./phase-03-k8s-base-configs-and-per-service-manifests.md) | completed | 2.5h |
 | 4 | [Frontend & External Access](./phase-04-frontend-and-external-access.md) | completed | 30m |
 | 5 | [Deploy Scripts & Testing](./phase-05-deploy-scripts-and-testing.md) | completed | 2.5h |
+| 6 | [Migrate to OrbStack](./phase-06-migrate-minikube-to-orbstack.md) | completed | 1h |
+| 7 | [Loki Log Aggregation](./phase-07-deploy-loki-log-aggregation.md) | completed | 2h |
 
 ## Key Decisions
-- Eureka disabled via `EUREKA_CLIENT_ENABLED=false` env var (no pom.xml changes)
-- Config-server replaced: `spring.config.import` is `optional:` so services start without it
-- Config-server values migrated: JWT→Secret, Kafka/Zipkin config→ConfigMap env vars
-- PostgreSQL: single instance, 6 databases created via init script
-- Kafka: KRaft mode (no ZooKeeper), single broker
-- Redis: no auth (dev mode)
-- `SPRING_PROFILES_ACTIVE=k8s` controls all K8s-specific behavior
-
-## Resource Philosophy
-**Study/research purpose** — minimize resource usage. No production-grade sizing.
-- Spring Boot services: 256Mi limit (no requests specified — let K8s schedule freely)
-- Infrastructure: minimal viable (PostgreSQL 256Mi, Kafka 512Mi, Redis 64Mi, Zipkin 128Mi)
-- No resource requests — only limits (avoids guaranteed QoS overhead)
-- Minikube: 6GB RAM, 2 CPUs sufficient
+- OrbStack replaces Minikube — lighter, native macOS LoadBalancer, no tunnel
+- `imagePullPolicy: Never` still valid — OrbStack K8s shares Docker daemon
+- K8s manifests unchanged — only deploy/teardown scripts updated
+- Docker context switched to `orbstack` for builds
 
 ## Dependencies
-- Minikube (6GB RAM, 2 CPUs sufficient for study)
+- OrbStack (with Kubernetes enabled)
 - Maven + Java 21
-- No Docker Compose needed — everything on K8s
+- No Docker Compose, no Minikube needed

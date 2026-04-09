@@ -27,15 +27,21 @@ spec:
           envFrom:
             - configMapRef:
                 name: ms-cinema-config
+          env:
+            - name: JAVA_TOOL_OPTIONS
+              value: "-Xms64m -Xmx256m -Duser.timezone=Asia/Ho_Chi_Minh"
           resources:
-            limits: { memory: "256Mi", cpu: "300m" }
-          readinessProbe:
+            limits: { memory: "512Mi", cpu: "300m" }
+          startupProbe:
             httpGet: { path: /actuator/health, port: 8080 }
             initialDelaySeconds: 30
             periodSeconds: 10
+            failureThreshold: 30
+          readinessProbe:
+            httpGet: { path: /actuator/health, port: 8080 }
+            periodSeconds: 10
           livenessProbe:
             httpGet: { path: /actuator/health, port: 8080 }
-            initialDelaySeconds: 60
             periodSeconds: 15
 ---
 apiVersion: v1

@@ -56,6 +56,8 @@ spec:
             - configMapRef:
                 name: ms-cinema-config
           env:
+            - name: JAVA_TOOL_OPTIONS
+              value: "-Xms128m -Xmx384m -Duser.timezone=Asia/Ho_Chi_Minh"
             - name: DB_USERNAME
               valueFrom:
                 secretKeyRef: { name: ms-cinema-secrets, key: DB_USERNAME }
@@ -72,14 +74,17 @@ spec:
               valueFrom:
                 secretKeyRef: { name: ms-cinema-secrets, key: MAIL_PASSWORD }
           resources:
-            limits: { memory: "256Mi", cpu: "300m" }
+            limits: { memory: "768Mi", cpu: "500m" }
+          startupProbe:
+            httpGet: { path: /actuator/health, port: 8085 }
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 30
           readinessProbe:
             httpGet: { path: /actuator/health, port: 8085 }
-            initialDelaySeconds: 40
             periodSeconds: 10
           livenessProbe:
             httpGet: { path: /actuator/health, port: 8085 }
-            initialDelaySeconds: 80
             periodSeconds: 15
 ---
 apiVersion: v1

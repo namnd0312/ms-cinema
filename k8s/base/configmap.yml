@@ -12,6 +12,10 @@ data:
   # Infrastructure hosts (in-cluster K8s DNS)
   DB_HOST: "postgresql"
   REDIS_HOST: "redis"
+  # Override Redis properties explicitly to avoid K8s service env var clash
+  # (K8s injects REDIS_PORT=tcp://<ip>:6379 which breaks ${REDIS_PORT:6379} int binding)
+  SPRING_DATA_REDIS_HOST: "redis"
+  SPRING_DATA_REDIS_PORT: "6379"
   KAFKA_HOST: "kafka"
   ZIPKIN_HOST: "zipkin"
   # --- Migrated from config-server config-repo ---
@@ -27,6 +31,12 @@ data:
   NAMND_APP_JWTALIAS: "namnd-cinema"
   # Inter-service URLs (for FeignClient)
   MOVIE_SERVICE_URL: "http://movie-service:8082"
+  # Exclude mail from health checks (credentials are environment-specific)
+  MANAGEMENT_HEALTH_MAIL_ENABLED: "false"
   # Java timezone
   TZ: "Asia/Ho_Chi_Minh"
-  JAVA_OPTS: "-Duser.timezone=Asia/Ho_Chi_Minh"
+  # Frontend URLs for auth redirects (password reset email link, OAuth2 callback)
+  PASSWORD_RESET_BASE_URL: "http://192.168.139.2/auth/reset-password"
+  OAUTH2_CALLBACK_URL: "http://192.168.139.2/auth/oauth2/callback"
+  # JAVA_TOOL_OPTIONS set per-service in deployment.yml (includes timezone + heap)
+
