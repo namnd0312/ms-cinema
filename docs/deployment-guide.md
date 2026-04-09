@@ -212,7 +212,7 @@ docker-compose ps     # Verify running
 docker-compose logs -f auth-service  # View logs
 ```
 
-**Service Dependencies:** auth-service (postgres, redis, kafka, eureka, config-server), notification-service (kafka, redis, eureka, config-server)
+**Service Dependencies:** auth-service (postgres, redis, kafka), notification-service (kafka, redis)
 
 ### 3. Environment Variables for Docker
 
@@ -688,7 +688,7 @@ http://localhost:9411/zipkin
 
 **Configuration:**
 ```yaml
-# Centralized in config-server (application.yml)
+# Each service application.yml (k8s profile)
 management:
   tracing:
     sampling:
@@ -696,9 +696,6 @@ management:
   zipkin:
     tracing:
       endpoint: http://zipkin:9411/api/v2/spans
-
-# Fallback: All 6 business services have local application.yml copies as startup safeguard
-# (when config-server is unavailable during boot)
 ```
 
 **Production Tuning:**

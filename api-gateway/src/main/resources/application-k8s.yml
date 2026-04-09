@@ -1,4 +1,4 @@
-# K8s profile: static URI routing (no Eureka), disable config-server
+# K8s profile: static URI routing
 spring:
   cloud:
     gateway:
@@ -98,6 +98,3 @@ spring:
             filters:
               - StripPrefix=1
 
-eureka:
-  client:
-    enabled: false

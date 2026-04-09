@@ -12,13 +12,6 @@ spring:
     bootstrap-servers: localhost:9092
     consumer:
       auto-offset-reset: earliest
-  cloud:
-    config:
-      enabled: false
-
-eureka:
-  client:
-    enabled: false
 
 jwt:
   secret: dGVzdC1zZWNyZXQta2V5LXRoYXQtaXMtbG9uZy1lbm91Z2gtZm9yLWhzNTEyLWFsZ29yaXRobS10ZXN0aW5n

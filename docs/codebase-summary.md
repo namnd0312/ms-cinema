@@ -2,18 +2,16 @@
 
 **Project:** ms-cinema
 **Generated:** April 2026
-**Architecture:** 11-module Maven microservices (Spring Cloud)
+**Architecture:** 9-module Maven microservices (Spring Cloud)
 **Java Version:** 21 LTS
 **Spring Boot:** 3.4.3
 **Spring Cloud:** 2024.0.1
 
-## 11 Maven Modules Overview
+## 9 Maven Modules Overview
 
 ```
 ms-cinema/ (root pom: packaging=pom)
-├── Infrastructure (3 modules)
-│   ├── eureka-server (:8761) - Service registry
-│   ├── config-server (:8888) - Centralized config
+├── Infrastructure (1 module)
 │   └── api-gateway (:8080) - Single entry point, OpenAPI aggregation, /api/audit/** route
 ├── Business Services (6 modules)
 │   ├── auth-service (:8081) - JWT auth, user management, @Auditable integration
@@ -29,7 +27,6 @@ ms-cinema/ (root pom: packaging=pom)
 │   └── cinema-frontend (:4200→80) - Angular 18
 └── Infrastructure Config
     ├── docker-compose.yml - PostgreSQL (6 DBs), Kafka, Redis, monitoring stack
-    ├── config-server/config-repo/ - audit-service.yml config
     ├── monitoring/ - Prometheus.yml, Grafana dashboards, Loki config
     └── docs/ - Documentation files
 ```
@@ -57,7 +54,7 @@ src/main/java/com/namnd/cinema/
 ├── service/ - JwtService, UserService, RoleService, RefreshTokenService, PasswordResetService, EmailService, ActivationService, BlacklistedTokenService, AccountLockService, RedisService
 ├── repository/ - UserRepository, RoleRepository, RefreshTokenRepository, PasswordResetTokenRepository, ActivationTokenRepository
 └── resources/
-    ├── application.yml - port 8081, config-server import, eureka registration
+    ├── application.yml - port 8081, k8s profile, static service URIs
     └── schema.sql - Users, roles, tokens tables (7 tables)
 ```
 
@@ -265,7 +262,7 @@ src/main/java/com/namnd/cinema/
 - reconciliation_items table: id, runId FK, stripePaymentIntentId, localPaymentId, discrepancyType ENUM, stripeAmount, localAmount, stripeStatus, localStatus, resolved, notes, createdAt
   - Indexes: (run_id), (discrepancy_type) for filtering
 
-**Configuration (application.yml / config-repo/payment-service.yml):**
+**Configuration (application.yml):**
 - spring.batch.jdbc.initialize-schema=always (auto-create Spring Batch metadata tables)
 - spring.batch.job.enabled=false (disable auto-run on startup)
 - reconciliation.cron: 0 2 * * * (2 AM daily, Asia/Saigon timezone)
@@ -412,7 +409,7 @@ jwt:
 
 **Usage in Downstream Services:**
 - Add jwt-auth-autoconfigure as dependency
-- Configure jwt.auth.secret in application.yml (from config-server)
+- Configure jwt.auth.secret in application.yml (via JWT_SECRET environment variable)
 - Annotate controller methods with @PreAuthorize("hasRole('ROLE_USER')")
 - JwtAuthenticationFilter auto-wired via auto-config
 
@@ -434,7 +431,7 @@ jwt:
 
 **Features:**
 - Spring Cloud Gateway MVC (servlet-based)
-- ServiceInstanceListSupplier for Eureka load balancing
+- Static URI routing via service hostnames (K8s DNS / docker-compose)
 - HttpLoggingFilter - Logs request/response with X-Correlation-ID header
 - OpenAPI endpoint aggregation: /v3/api-docs (combines all service OpenAPIs)
 - Swagger UI: /swagger-ui.html
@@ -448,41 +445,9 @@ spring:
         - id: auth-service-routes
           predicates:
             - Path=/api/auth/**,/api/users/**
-          uri: lb://auth-service
-        # ... more routes
+          uri: http://auth-service:8081
+        # ... more routes (static URIs, no Eureka)
 ```
-
-## eureka-server (Port 8761)
-
-**Purpose:** Service discovery registry
-
-**Configuration:**
-- eureka.server.enable-self-preservation: false
-- eureka.client.register-with-eureka: false
-- eureka.client.fetch-registry: false
-- Heartbeat interval: 10s (client → server)
-- Lease timeout: 30s
-
-## config-server (Port 8888)
-
-**Purpose:** Centralized configuration management
-
-**Configuration:**
-- Loads from classpath:/config-repo/ (native profile)
-- Alternative: Git repository support
-
-**Shared Config (config-repo/application.yml):**
-```yaml
-namnd.app.jwtSecret: ${JWT_SECRET}
-jwt.auth.secret: ${JWT_SECRET}
-```
-
-**Per-Service Configs:**
-- auth-service/application.yml (auth-specific)
-- movie-service/application.yml
-- booking-service/application.yml
-- payment-service/application.yml
-- notification-service/application.yml
 
 ## cinema-frontend (Angular 18)
 
@@ -717,8 +682,7 @@ docker build -t movie-service ./movie-service
 |---------|---------|-----------|
 | Service-to-Service (Sync) | booking-service → movie-service (seat details) | Feign HTTP |
 | Event-Driven (Async) | payment-service → booking-service (PaymentCompletedEvent) | Kafka |
-| Configuration Sharing | all services ← config-server (JWT secret) | Spring Cloud Config |
-| Service Discovery | all services ← eureka-server (dynamic routing) | Eureka |
+| Configuration Sharing | all services use environment variables (JWT secret) | K8s ConfigMap / docker-compose env |
 | Token Validation | downstream services validate JWT | jwt-auth-autoconfigure |
 
 ## Data Isolation

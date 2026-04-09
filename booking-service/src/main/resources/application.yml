@@ -4,8 +4,6 @@ server:
 spring:
   application:
     name: booking-service
-  config:
-    import: "optional:configserver:http://${CONFIG_SERVER_HOST:localhost}:8888"
   jpa:
     hibernate:
       ddl-auto: update
@@ -46,14 +44,6 @@ springdoc:
     path: /v3/api-docs
   swagger-ui:
     path: /swagger-ui.html
-
-eureka:
-  client:
-    service-url:
-      defaultZone: http://${EUREKA_HOST:localhost}:8761/eureka/
-  instance:
-    prefer-ip-address: true
-    instance-id: ${spring.application.name}:${server.port}
 
 management:
   endpoints:

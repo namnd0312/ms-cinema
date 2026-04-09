@@ -32,16 +32,6 @@ scrape_configs:
     static_configs:
       - targets: ['payment-service:8084']
 
-  - job_name: 'eureka-server'
-    metrics_path: '/actuator/prometheus'
-    static_configs:
-      - targets: ['eureka-server:8761']
-
-  - job_name: 'config-server'
-    metrics_path: '/actuator/prometheus'
-    static_configs:
-      - targets: ['config-server:8888']
-
   - job_name: 'notification-service'
     metrics_path: '/actuator/prometheus'
     static_configs:

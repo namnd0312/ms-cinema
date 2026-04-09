@@ -65,35 +65,6 @@ services:
       - my-net
     restart: unless-stopped
 
-  eureka-server:
-    build:
-      context: ./eureka-server
-      dockerfile: Dockerfile
-    ports:
-      - "8761:8761"
-    networks:
-      - my-net
-    environment:
-      <<: *java-tz
-      ZIPKIN_HOST: zipkin
-    restart: unless-stopped
-
-  config-server:
-    build:
-      context: ./config-server
-      dockerfile: Dockerfile
-    ports:
-      - "8888:8888"
-    networks:
-      - my-net
-    depends_on:
-      - eureka-server
-    environment:
-      <<: *java-tz
-      EUREKA_HOST: eureka-server
-      ZIPKIN_HOST: zipkin
-    restart: unless-stopped
-
   api-gateway:
     build:
       context: ./api-gateway
@@ -102,13 +73,8 @@ services:
       - "8080:8080"
     networks:
       - my-net
-    depends_on:
-      - eureka-server
-      - config-server
     environment:
       <<: *java-tz
-      EUREKA_HOST: eureka-server
-      CONFIG_SERVER_HOST: config-server
       ZIPKIN_HOST: zipkin
     restart: unless-stopped
 
@@ -123,14 +89,10 @@ services:
     depends_on:
       - postgres-service
       - redis-service
-      - eureka-server
-      - config-server
       - kafka
     environment:
       <<: *java-tz
       SERVER_PORT: 8081
-      EUREKA_HOST: eureka-server
-      CONFIG_SERVER_HOST: config-server
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-service:5432/testdb
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: postgres
@@ -151,14 +113,10 @@ services:
       - my-net
     depends_on:
       - postgres-service
-      - eureka-server
-      - config-server
       - kafka
     environment:
       <<: *java-tz
       SERVER_PORT: 8082
-      EUREKA_HOST: eureka-server
-      CONFIG_SERVER_HOST: config-server
       DB_HOST: postgres-service
       DB_USERNAME: postgres
       DB_PASSWORD: postgres
@@ -177,14 +135,10 @@ services:
     depends_on:
       - postgres-service
       - redis-service
-      - eureka-server
-      - config-server
       - kafka
     environment:
       <<: *java-tz
       SERVER_PORT: 8083
-      EUREKA_HOST: eureka-server
-      CONFIG_SERVER_HOST: config-server
       DB_HOST: postgres-service
       DB_USERNAME: postgres
       DB_PASSWORD: postgres
@@ -203,14 +157,10 @@ services:
       - my-net
     depends_on:
       - postgres-service
-      - eureka-server
-      - config-server
       - kafka
     environment:
       <<: *java-tz
       SERVER_PORT: 8084
-      EUREKA_HOST: eureka-server
-      CONFIG_SERVER_HOST: config-server
       DB_HOST: postgres-service
       DB_USERNAME: postgres
       DB_PASSWORD: postgres
@@ -230,15 +180,11 @@ services:
       - my-net
     depends_on:
       - postgres-service
-      - eureka-server
-      - config-server
       - kafka
       - redis-service
     environment:
       <<: *java-tz
       SERVER_PORT: 8085
-      EUREKA_HOST: eureka-server
-      CONFIG_SERVER_HOST: config-server
       DB_HOST: postgres-service
       DB_USERNAME: postgres
       DB_PASSWORD: postgres
@@ -259,14 +205,10 @@ services:
       - my-net
     depends_on:
       - postgres-service
-      - eureka-server
-      - config-server
       - kafka
     environment:
       <<: *java-tz
       SERVER_PORT: 8086
-      EUREKA_HOST: eureka-server
-      CONFIG_SERVER_HOST: config-server
       DB_HOST: postgres-service
       DB_USERNAME: postgres
       DB_PASSWORD: postgres

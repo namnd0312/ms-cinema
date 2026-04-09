@@ -6,9 +6,9 @@ Enterprise-grade cinema ticket booking system built on Spring Boot 3.4.3 microse
 
 ## Architecture Overview
 
-**11 Maven modules:**
+**9 Maven modules:**
 - 6 Business Services (auth, movie, booking, payment, notification, audit)
-- 3 Infrastructure Services (eureka-server, config-server, api-gateway)
+- 1 Infrastructure Service (api-gateway)
 - 2 Shared Libraries (jwt-auth-autoconfigure, kafka-events with @Auditable support)
 - 1 Frontend (Angular 18)
 
@@ -22,7 +22,7 @@ Enterprise-grade cinema ticket booking system built on Spring Boot 3.4.3 microse
 ### Option 1: Docker Compose (Recommended)
 ```bash
 docker-compose up --build
-# Starts: PostgreSQL, Kafka, Redis, Prometheus, Grafana, Loki, Zipkin, all 8 services
+# Starts: PostgreSQL, Kafka, Redis, Prometheus, Grafana, Loki, Zipkin, all 7 app services
 ```
 
 ### Option 2: Local Setup
@@ -31,8 +31,6 @@ docker-compose up --build
 docker-compose up postgres kafka redis
 
 # In separate terminals, build & run each service:
-mvn -pl eureka-server spring-boot:run           # port 8761
-mvn -pl config-server spring-boot:run           # port 8888
 mvn -pl api-gateway spring-boot:run             # port 8080
 mvn -pl auth-service spring-boot:run            # port 8081
 mvn -pl movie-service spring-boot:run           # port 8082
@@ -46,8 +44,6 @@ mvn -pl audit-service spring-boot:run           # port 8086
 
 | Service | Port | Purpose | Key Features |
 |---------|------|---------|--------------|
-| eureka-server | 8761 | Service discovery | Dynamic registration |
-| config-server | 8888 | Centralized config | Git/classpath profiles |
 | api-gateway | 8080 | Request routing | OpenAPI aggregation, logging, SSE streaming support, WebSocket proxy |
 | auth-service | 8081 | Authentication | JWT, email activation, account lockout, OAuth2 Google login, password history |
 | movie-service | 8082 | Movies/ratings/comments | Showtimes, auto seat grids, star ratings, comments, reactions |
@@ -127,7 +123,7 @@ Error handling: 3 retries, exponential backoff, DLT for failures. Real-time in-a
 
 ## Configuration
 
-**Service Configuration:** `config-server` loads from `classpath:/config-repo/` + Git (if enabled)
+**Service Configuration:** Services use `k8s` Spring profile with static URIs via K8s DNS (docker-compose) or environment variables.
 
 **Key Environment Variables:**
 ```bash
@@ -161,11 +157,11 @@ Follow [.claude/rules/development-rules.md](./.claude/rules/development-rules.md
 
 ## Troubleshooting
 
-**Services won't start:** Check `config-server` logs; ensure PostgreSQL/Kafka/Redis are running.
+**Services won't start:** Ensure PostgreSQL/Kafka/Redis are running and environment variables are set.
 
 **API returns 401:** JWT expired (use refresh token) or invalid secret; verify Authorization header.
 
-**Stripe webhook fails:** Check webhook secret in config-server; validate signature.
+**Stripe webhook fails:** Check STRIPE_WEBHOOK_SECRET env var; validate signature.
 
 **Booking fails:** Redis lock timeout (increase TTL) or seat already reserved; check booking-service logs.
 

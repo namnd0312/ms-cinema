@@ -8,7 +8,7 @@
 
 ## Executive Summary
 
-MS Cinema is an **11-module Spring Cloud microservices platform** for cinema ticket booking with event-driven architecture, JWT authentication, Stripe payments with daily reconciliation, comprehensive audit logging, and observability. The system consists of infrastructure services (Eureka, Config Server, API Gateway), 6 business services, 2 shared libraries, and Angular frontend.
+MS Cinema is a **9-module Spring Cloud microservices platform** for cinema ticket booking with event-driven architecture, JWT authentication, Stripe payments with daily reconciliation, comprehensive audit logging, and observability. The system consists of an API Gateway, 6 business services, 2 shared libraries, and Angular frontend.
 
 **Key Characteristics:**
 - Single external entry point: API Gateway (port 8080)
@@ -20,7 +20,7 @@ MS Cinema is an **11-module Spring Cloud microservices platform** for cinema tic
 - **Audit-service** (port 8086): Centralized audit logging, Kafka consumer for audit-events, admin API with filtering, PostgreSQL immutable audit logs, 90-day retention
 - **kafka-events module:** Shared domain events (PaymentCompletedEvent, BookingCreatedEvent, AuditEvent), @Auditable annotation, AOP aspect, JPA listeners
 - **jwt-auth-autoconfigure:** Reusable JWT validator for all services (JJWT 0.12.6, HS512)
-- Spring Cloud Eureka for service discovery, Config Server for centralized configuration
+- Spring Cloud Gateway for request routing; service discovery via K8s DNS / static URIs
 - **Kafka topics:** payment-events, movie-events, notification-events, notification.in_app, audit-events (3 retries, exponential backoff, DLT, 90-day audit retention)
 - Redis for token blacklist, booking locks, notification dedup
 - PostgreSQL per-service (auth→testdb, movie→moviedb, booking→bookingdb, payment→paymentdb, notification→notificationdb, audit→auditdb)
@@ -183,10 +183,10 @@ MS Cinema is an **11-module Spring Cloud microservices platform** for cinema tic
 
 ### Scalability (NFR-003)
 - **Stateless Architecture:** No session affinity required
-- **Service Discovery:** Eureka enables load-balanced multi-instance auth-service
-- **Shared Config:** JWT secret distributed via Config Server (all instances consistent)
+- **Service Discovery:** K8s DNS enables multi-instance routing; docker-compose uses static hostnames
+- **Shared Config:** JWT secret distributed via K8s Secret / environment variables (all instances consistent)
 - **JWT claims:** roles + userId embedded, downstream services avoid DB lookups
-- **Gateway routing:** `lb://auth-service` uses Eureka for load balancing
+- **Gateway routing:** Static URIs (e.g., `http://auth-service:8081`) for service forwarding
 
 ### Availability (NFR-004)
 - **Database Dependency:** PostgreSQL required for startup
@@ -540,9 +540,7 @@ Response (403 Forbidden):
 - ✓ Account lockout after N failed attempts (auto-unlock)
 
 ### Phase 3: Microservice Integration (COMPLETE)
-- ✓ 11-module Maven project: 6 business services, 3 infrastructure, 2 shared libs, 1 frontend
-- ✓ Spring Cloud Eureka (service registry, :8761)
-- ✓ Spring Cloud Config Server (shared JWT secret, :8888, classpath:/config-repo/)
+- ✓ 9-module Maven project: 6 business services, 1 infrastructure (api-gateway), 2 shared libs, 1 frontend
 - ✓ Spring Cloud Gateway MVC (single entry :8080, routes, OpenAPI aggregation, HttpLoggingFilter)
 - ✓ JWT tokens include `roles` + `userId` claims for downstream use
 - ✓ POST /api/auth/validate-token (microservice validation, no DB lookup)
@@ -584,7 +582,7 @@ Response (403 Forbidden):
 | Library | Version | Purpose |
 |---------|---------|---------|
 | Spring Boot | 3.4.3 | Framework |
-| Spring Cloud | 2024.0.1 | Eureka, Config, Gateway |
+| Spring Cloud | 2024.0.1 | Gateway |
 | Spring Security | 6.x (via Spring Boot) | Authentication/Authorization |
 | Spring Data JPA | via Spring Boot | ORM |
 | Spring Kafka | via Spring Boot | Message broker integration |
@@ -592,7 +590,7 @@ Response (403 Forbidden):
 | Spring Boot Actuator | via Spring Boot | Metrics endpoint /actuator/prometheus |
 | Micrometer | via Actuator | JVM + HTTP + custom business metrics |
 | JJWT | 0.12.6 (api, impl, jackson) | JWT handling (HS512) |
-| Spring Cloud | 2024.0.1 | Eureka, Config, Gateway, LoadBalancer |
+| Spring Cloud | 2024.0.1 | Gateway |
 | Stripe Java SDK | latest | Payment processing, webhooks |
 | Feign Client | via Spring Cloud | Service-to-service HTTP calls |
 | PostgreSQL Driver | latest | Database (auth-service) |
@@ -606,9 +604,7 @@ Response (403 Forbidden):
 |-----------|---------|-------|-------|
 | server.port (auth-service) | 8081 | Spring Boot | Changed from 8080 |
 | server.port (api-gateway) | 8080 | Spring Boot | External entry point |
-| server.port (eureka-server) | 8761 | Spring Boot | Service registry |
-| server.port (config-server) | 8888 | Spring Boot | Shared config |
-| namnd.app.jwtSecret | (Base64 key) | Custom | Shared via Config Server |
+| namnd.app.jwtSecret | (Base64 key) | Custom | Provided via JWT_SECRET environment variable |
 | namnd.app.jwtExpiration | 900000 | Custom (ms) | 15 min |
 | namnd.app.jwtRefreshExpiration | 604800000 | Custom (ms) | 7 days |
 | jwt.auth.secret | (from namnd.app.jwtSecret) | Starter lib | For downstream services |
@@ -644,15 +640,15 @@ Response (403 Forbidden):
 ## Implementation Notes
 
 ### Multi-Module Build Order
-Config Server and Eureka must be running before auth-service and api-gateway start.
-Config Server loads `config-repo/application.yml` (shared JWT secret) and per-service configs.
+Infrastructure (PostgreSQL, Kafka, Redis) must be running before application services start.
+JWT secret and other config distributed via environment variables / K8s ConfigMap and Secrets.
 
 ### JWT Starter Library Usage
 Downstream services add `jwt-auth-autoconfigure` as a dependency, configure:
 ```yaml
 jwt:
   auth:
-    secret: ${namnd.app.jwtSecret}  # received from Config Server
+    secret: ${namnd.app.jwtSecret}  # provided via JWT_SECRET environment variable
     publicPaths: ["/public/**"]
 ```
 Auto-configuration wires `JwtAuthenticationFilter` and stateless `SecurityFilterChain`.

@@ -4,11 +4,8 @@ metadata:
   name: ms-cinema-config
   namespace: ms-cinema
 data:
-  # Spring profile - disables Eureka routes, uses static URIs
+  # Spring profile - uses static URIs (K8s DNS)
   SPRING_PROFILES_ACTIVE: "k8s"
-  # Disable Eureka and config-server
-  EUREKA_CLIENT_ENABLED: "false"
-  SPRING_CLOUD_CONFIG_ENABLED: "false"
   # Infrastructure hosts (in-cluster K8s DNS)
   DB_HOST: "postgresql"
   REDIS_HOST: "redis"
@@ -18,7 +15,7 @@ data:
   SPRING_DATA_REDIS_PORT: "6379"
   KAFKA_HOST: "kafka"
   ZIPKIN_HOST: "zipkin"
-  # --- Migrated from config-server config-repo ---
+  # --- Application-level configuration ---
   # Kafka configuration
   SPRING_KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
   SPRING_KAFKA_CONSUMER_AUTO_OFFSET_RESET: "earliest"

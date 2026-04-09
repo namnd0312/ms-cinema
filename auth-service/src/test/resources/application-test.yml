@@ -1,9 +1,4 @@
 spring:
-  config:
-    import: ""
-  cloud:
-    config:
-      enabled: false
   jpa:
     hibernate:
       ddl-auto: create-drop
@@ -50,12 +45,6 @@ namnd:
     maxFailedAttempts: 5
     lockDurationMs: 900000
     oauth2CallbackUrl: http://localhost:4200/auth/oauth2/callback
-
-eureka:
-  client:
-    enabled: false
-    service-url:
-      defaultZone: http://localhost:8761/eureka/
 
 management:
   endpoints:

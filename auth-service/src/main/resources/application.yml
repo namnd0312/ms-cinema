@@ -3,13 +3,6 @@ server:
 spring:
   application:
     name: auth-service
-  config:
-    import: "optional:configserver:http://${CONFIG_SERVER_HOST:localhost}:8888"
-  cloud:
-    config:
-      fail-fast: false
-      retry:
-        max-attempts: 3
   jpa:
     hibernate:
       ddl-auto: update
@@ -51,16 +44,6 @@ namnd:
     maxFailedAttempts: ${MAX_FAILED_ATTEMPTS:5}
     lockDurationMs: ${LOCK_DURATION_MS:900000}
     oauth2CallbackUrl: ${OAUTH2_CALLBACK_URL:http://localhost:4200/auth/oauth2/callback}
-
-eureka:
-  client:
-    service-url:
-      defaultZone: http://${EUREKA_HOST:localhost}:8761/eureka/
-    register-with-eureka: true
-    fetch-registry: true
-  instance:
-    prefer-ip-address: true
-    instance-id: ${spring.application.name}:${server.port}
 
 management:
   endpoints:

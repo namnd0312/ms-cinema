@@ -6,7 +6,7 @@
 
 ## High-Level Overview
 
-MS Cinema is an 11-module Spring Cloud microservices platform for cinema ticket booking:
+MS Cinema is a 9-module Spring Cloud microservices platform for cinema ticket booking:
 
 ```
                         CLIENT (Web/Mobile)
@@ -16,26 +16,19 @@ MS Cinema is an 11-module Spring Cloud microservices platform for cinema ticket 
                     │   (:8080, gateway) │
                     └────────┬───────────┘
                              │
-        ┌────────────────────┼────────────────────┐
-        │                    │                    │
-        ▼                    ▼                    ▼
-┌──────────────┐    ┌──────────────┐    ┌──────────────┐
-│ eureka-srv   │    │config-server │    │auth-service  │
-│  (:8761)     │    │  (:8888)     │    │  (:8081)     │
-└──────────────┘    └──────────────┘    └──────────────┘
-                                              │
-                ┌─────────────────────────────┼──────────────────┐
-                ▼                             ▼                  ▼
-           ┌─────────────┐        ┌──────────────┐    ┌──────────────┐
-           │movie-service│        │booking-svc   │    │payment-svc   │
-           │  (:8082)    │        │  (:8083)     │    │  (:8084)     │
-           └─────────────┘        └──────────────┘    └──────────────┘
-                                        │
-                                        ▼
-                                  ┌─────────────┐
-                                  │notification │
-                                  │  (:8085)    │
-                                  └─────────────┘
+                    ┌────────┴──────────┐
+                    ▼                   ▼
+             ┌──────────────┐    ┌──────────────┐
+             │auth-service  │    │movie-service │
+             │  (:8081)     │    │  (:8082)     │
+             └──────────────┘    └──────────────┘
+                    │
+     ┌──────────────┼──────────────┐
+     ▼              ▼              ▼
+┌──────────┐  ┌──────────┐  ┌──────────────┐
+│booking   │  │payment   │  │notification  │
+│  (:8083) │  │  (:8084) │  │  (:8085)     │
+└──────────┘  └──────────┘  └──────────────┘
 
 Infrastructure:
 - PostgreSQL (auth→testdb, movie→moviedb, booking→bookingdb, payment→paymentdb, audit→auditdb, notification→notificationdb)
@@ -48,21 +41,11 @@ Infrastructure:
 
 ## Module Architecture
 
-### Infrastructure Services (3 modules)
-
-**eureka-server (:8761)** - Service discovery registry
-- Netflix Eureka (self-register disabled, client discovery)
-- All services register heartbeat every 10s
-- Lease timeout: 30s
-
-**config-server (:8888)** - Centralized configuration
-- Loads from classpath:/config-repo/ (native profile)
-- Provides shared JWT secret to all services
-- Per-service override configs supported
+### Infrastructure Services (1 module)
 
 **api-gateway (:8080)** - Single entry point
 - Spring Cloud Gateway MVC (servlet-based, not WebFlux)
-- Routes requests to downstream services via Eureka load balancing
+- Routes requests to downstream services via static URIs (K8s DNS / docker-compose hostnames)
 - Routes:
   - `/api/auth/**` → auth-service
   - `/api/users/**` → auth-service
@@ -221,7 +204,7 @@ Infrastructure:
 - JwtAuthProperties: Configuration properties (prefix=jwt.auth)
 - JwtTokenValidator: Validates HS512 signature, expiration
 - JwtAuthenticationFilter: Extracts token, validates, sets SecurityContext
-- Usage: Downstream services add this dependency, configure jwt.auth.secret from config-server, auto-enable via SecurityFilterChain
+- Usage: Downstream services add this dependency, configure jwt.auth.secret via environment variable, auto-enable via SecurityFilterChain
 
 **kafka-events** - Shared domain event models & audit infrastructure
 - EventEnvelope<T>: Wrapper (eventId UUID, eventType, source service, correlationId, timestamp, payload)
@@ -670,7 +653,7 @@ ADMIN: Query audit logs
 |-----------|---------|---------|
 | Java | 21 LTS | Runtime |
 | Spring Boot | 3.4.3 | Framework |
-| Spring Cloud | 2024.0.1 | Microservices (Eureka, Config, Gateway) |
+| Spring Cloud | 2024.0.1 | Microservices (Gateway) |
 | Spring Security | 6.x | Authentication/Authorization |
 | JJWT | 0.12.6 | JWT handling |
 | Spring Kafka | (via Boot) | Event streaming |
@@ -701,7 +684,7 @@ Starts:
 **Production Considerations:**
 - Database: Migrate from per-service to shared schema with row-level security
 - Secrets: Use external vault (HashiCorp Vault, AWS Secrets Manager)
-- Replicas: Scale services via Kubernetes, service discovery via Eureka
+- Replicas: Scale services via Kubernetes, service discovery via K8s DNS
 - Load Balancing: API Gateway can run multiple instances behind external LB
 - Monitoring: Add Prometheus alerting rules, PagerDuty integration
 - Logging: Collect logs to Loki, query via Grafana

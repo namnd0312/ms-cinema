@@ -13,21 +13,13 @@
 
     <artifactId>api-gateway</artifactId>
     <name>api-gateway</name>
-    <description>API Gateway — servlet-based Spring Cloud Gateway MVC that routes requests to downstream microservices via Eureka discovery</description>
+    <description>API Gateway — servlet-based Spring Cloud Gateway MVC that routes requests to downstream microservices</description>
 
     <dependencies>
         <!-- Servlet-based MVC gateway (NOT spring-cloud-starter-gateway which is WebFlux) -->
         <dependency>
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-gateway-mvc</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.cloud</groupId>
-            <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.cloud</groupId>
-            <artifactId>spring-cloud-starter-config</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>

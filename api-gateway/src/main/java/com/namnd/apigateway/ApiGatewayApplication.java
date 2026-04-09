@@ -5,7 +5,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 /**
  * API Gateway entry point.
- * Routes all inbound HTTP requests to downstream microservices via Eureka service discovery.
+ * Routes all inbound HTTP requests to downstream microservices.
  * Uses spring-cloud-starter-gateway-mvc (servlet-based, not WebFlux) for compatibility with the servlet stack.
  * Routes: /api/auth/** and /api/users/** -> auth-service (lb://auth-service)
  */

@@ -29,8 +29,6 @@
 graph TD
     Client["Client\n(Browser / Mobile)"]
     Gateway["api-gateway\n:8080"]
-    Eureka["eureka-server\n:8761"]
-    Config["config-server\n:8888"]
 
     AuthSvc["auth-service\n:8081"]
     MovieSvc["movie-service\n:8082"]
@@ -51,11 +49,10 @@ graph TD
     KafkaEvents["kafka-events\n(shared lib)"]
 
     Client --> Gateway
-    Gateway --> Eureka
-    Gateway -->|lb://auth-service| AuthSvc
-    Gateway -->|lb://movie-service| MovieSvc
-    Gateway -->|lb://booking-service| BookingSvc
-    Gateway -->|lb://payment-service| PaymentSvc
+    Gateway -->|http://auth-service:8081| AuthSvc
+    Gateway -->|http://movie-service:8082| MovieSvc
+    Gateway -->|http://booking-service:8083| BookingSvc
+    Gateway -->|http://payment-service:8084| PaymentSvc
 
     AuthSvc --> PG
     AuthSvc --> Redis
@@ -73,18 +70,6 @@ graph TD
     MovieSvc --> Kafka
     PaymentSvc --> Kafka
     BookingSvc --> Kafka
-
-    AuthSvc -.->|register| Eureka
-    MovieSvc -.->|register| Eureka
-    BookingSvc -.->|register| Eureka
-    PaymentSvc -.->|register| Eureka
-    NotifSvc -.->|register| Eureka
-
-    AuthSvc -.->|fetch config| Config
-    MovieSvc -.->|fetch config| Config
-    BookingSvc -.->|fetch config| Config
-    PaymentSvc -.->|fetch config| Config
-    NotifSvc -.->|fetch config| Config
 
     MovieSvc -.->|metrics| Prometheus
     BookingSvc -.->|metrics| Prometheus
@@ -109,14 +94,12 @@ graph TD
 
 | Service | Port | Database | Dependencies | Kafka Topics | Key Endpoints |
 |---|---|---|---|---|---|
-| api-gateway | 8080 | — | Eureka, config-server | — | All routes |
+| api-gateway | 8080 | — | K8s DNS / static URIs | — | All routes |
 | auth-service | 8081 | testdb (PostgreSQL), Redis | — | Produces: notification-events | /api/auth/**, /api/users/**, /api/auth/validate-token |
 | movie-service | 8082 | moviedb (PostgreSQL) | — | Produces: movie-events | /api/movies/**, /api/showtimes/**, /api/theaters/**, /api/comments/** |
 | booking-service | 8083 | bookingdb (PostgreSQL), Redis | movie-service (Feign) | Consumes: payment-events | /api/bookings/** |
 | payment-service | 8084 | paymentdb (PostgreSQL) | Stripe API | Produces: payment-events | /api/payments/** |
 | notification-service | 8085 | Redis (dedup) | SMTP (Gmail) | Consumes: notification-events | — (Kafka consumer only) |
-| eureka-server | 8761 | — | — | — | /eureka |
-| config-server | 8888 | — | Config repo | — | /actuator |
 | PostgreSQL | 5432 | testdb, moviedb, bookingdb | — | — | — |
 | Redis | 6379 | — | — | — | — |
 | Kafka (KRaft) | 9092 | — | — | payment-events, movie-events, notification-events | — |
@@ -127,14 +110,14 @@ graph TD
 
 | Path Pattern | Target Service |
 |---|---|
-| /api/auth/** | lb://auth-service |
-| /api/users/** | lb://auth-service |
-| /api/movies/** | lb://movie-service |
-| /api/showtimes/** | lb://movie-service |
-| /api/theaters/** | lb://movie-service |
-| /api/comments/** | lb://movie-service |
-| /api/bookings/** | lb://booking-service |
-| /api/payments/** | lb://payment-service |
+| /api/auth/** | http://auth-service:8081 |
+| /api/users/** | http://auth-service:8081 |
+| /api/movies/** | http://movie-service:8082 |
+| /api/showtimes/** | http://movie-service:8082 |
+| /api/theaters/** | http://movie-service:8082 |
+| /api/comments/** | http://movie-service:8082 |
+| /api/bookings/** | http://booking-service:8083 |
+| /api/payments/** | http://payment-service:8084 |
 
 ---
 
@@ -148,8 +131,6 @@ graph LR
             PG[("postgres\n:5432")]
             Redis[("redis\n:6379")]
             Kafka[["kafka\n:9092 (KRaft)"]]
-            Config["config-server\n:8888"]
-            Eureka["eureka-server\n:8761"]
         end
 
         subgraph services["Microservices"]
@@ -169,14 +150,6 @@ graph LR
         end
     end
 
-    Config --> Eureka
-    Config --> Auth
-    Config --> Movie
-    Config --> Booking
-    Config --> Payment
-    Config --> Notif
-    Config --> Gateway
-    Eureka --> Gateway
     PG --> Auth
     PG --> Movie
     PG --> Booking
@@ -210,9 +183,7 @@ graph LR
 ```mermaid
 flowchart TD
     C["Client"] -->|HTTP request| GW["api-gateway :8080"]
-    GW -->|service lookup| EU["eureka-server :8761"]
-    EU -->|instance address| GW
-    GW -->|load-balanced forward| SVC["Microservice"]
+    GW -->|static URI forward| SVC["Microservice"]
 
     SVC -->|reads/writes| DB[("PostgreSQL")]
     SVC -->|cache / seat lock / blacklist| RD[("Redis")]
@@ -1136,7 +1107,6 @@ sequenceDiagram
 sequenceDiagram
     participant Client
     participant APIGateway
-    participant Eureka
     participant auth-service
     participant movie-service
     participant booking-service
@@ -1145,24 +1115,16 @@ sequenceDiagram
     Client->>APIGateway: HTTP request with path
 
     alt /api/auth/** or /api/users/**
-        APIGateway->>Eureka: lookup lb://auth-service
-        Eureka-->>APIGateway: instance address
-        APIGateway->>auth-service: forward request
+        APIGateway->>auth-service: forward to http://auth-service:8081
         auth-service-->>APIGateway: response
     else /api/movies/** or /api/showtimes/** or /api/theaters/** or /api/comments/**
-        APIGateway->>Eureka: lookup lb://movie-service
-        Eureka-->>APIGateway: instance address
-        APIGateway->>movie-service: forward request
+        APIGateway->>movie-service: forward to http://movie-service:8082
         movie-service-->>APIGateway: response
     else /api/bookings/**
-        APIGateway->>Eureka: lookup lb://booking-service
-        Eureka-->>APIGateway: instance address
-        APIGateway->>booking-service: forward request
+        APIGateway->>booking-service: forward to http://booking-service:8083
         booking-service-->>APIGateway: response
     else /api/payments/**
-        APIGateway->>Eureka: lookup lb://payment-service
-        Eureka-->>APIGateway: instance address
-        APIGateway->>payment-service: forward request
+        APIGateway->>payment-service: forward to http://payment-service:8084
         payment-service-->>APIGateway: response
     end
 
@@ -1171,58 +1133,7 @@ sequenceDiagram
 
 ---
 
-### 5.2 Service Discovery & Registration
-
-```mermaid
-sequenceDiagram
-    participant Services
-    participant EurekaServer
-
-    Note over Services,EurekaServer: Startup Phase
-    Services->>EurekaServer: POST /eureka/apps/{appName} (register)
-    Note over Services: sends: hostname, port, healthCheckUrl, status=UP
-    EurekaServer-->>Services: 204 No Content (registered)
-
-    Note over Services,EurekaServer: Heartbeat Phase (every 30s)
-    loop every 30 seconds
-        Services->>EurekaServer: PUT /eureka/apps/{appName}/{instanceId} (heartbeat)
-        EurekaServer-->>Services: 200 OK
-    end
-
-    Note over Services,EurekaServer: Gateway Discovery
-    Services->>EurekaServer: GET /eureka/apps (fetch registry)
-    EurekaServer-->>Services: all registered instances
-
-    Note over Services: api-gateway resolves lb://service-name<br/>→ load-balanced instance from registry
-```
-
----
-
-### 5.3 Config Server Bootstrap
-
-```mermaid
-sequenceDiagram
-    participant ConfigServer
-    participant ConfigRepo
-    participant Services
-
-    Note over ConfigServer,Services: Application Startup
-
-    Services->>ConfigServer: GET /config/{service-name}/{profile}
-    Note over Services: bootstrap.yml points to config-server URL
-    ConfigServer->>ConfigRepo: read config files
-    ConfigRepo-->>ConfigServer: YAML / properties
-    ConfigServer-->>Services: merged configuration
-
-    Note over Services: Shared JWT secret distributed via config-server.<br/>All services use same HS512 signing key.
-
-    Services->>Services: apply config (DB URL, Kafka brokers, JWT secret, etc.)
-    Services->>Services: complete Spring context initialization
-```
-
----
-
-### 5.4 Kafka DLT Error Handling
+### 5.2 Kafka DLT Error Handling
 
 ```mermaid
 sequenceDiagram
@@ -1261,7 +1172,7 @@ sequenceDiagram
 
 ---
 
-### 5.5 JWT Starter Authentication Filter
+### 5.3 JWT Starter Authentication Filter
 
 ```mermaid
 sequenceDiagram

@@ -4,13 +4,6 @@ server:
 spring:
   application:
     name: audit-service
-  config:
-    import: "optional:configserver:http://${CONFIG_SERVER_HOST:localhost}:8888"
-  cloud:
-    config:
-      fail-fast: false
-      retry:
-        max-attempts: 5
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:5432/auditdb
     username: ${DB_USERNAME:postgres}
@@ -31,14 +24,6 @@ spring:
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
-
-eureka:
-  client:
-    service-url:
-      defaultZone: http://${EUREKA_HOST:localhost}:8761/eureka/
-  instance:
-    prefer-ip-address: true
-    instance-id: ${spring.application.name}:${server.port}
 
 jwt:
   auth:

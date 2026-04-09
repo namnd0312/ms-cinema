@@ -37,10 +37,8 @@ MS Cinema is a comprehensive cinema ticket booking platform built on Spring Boot
 **Focus:** Multi-module architecture with service discovery & event streaming
 
 **Completed Features:**
-- ✓ 11-module Maven structure (6 business services, 3 infrastructure, 2 shared libs, 1 frontend)
-- ✓ Spring Cloud Eureka service discovery (:8761)
-- ✓ Spring Cloud Config Server (:8888, classpath:/config-repo/)
-- ✓ Spring Cloud Gateway MVC (:8080, OpenAPI aggregation)
+- ✓ 9-module Maven structure (6 business services, 1 infrastructure, 2 shared libs, 1 frontend)
+- ✓ Spring Cloud Gateway MVC (:8080, OpenAPI aggregation, static URI routing)
 - ✓ JWT tokens embed roles+userId claims for downstream use
 - ✓ POST /api/auth/validate-token (microservice JWT validation, no DB hit)
 - ✓ GET /api/users/me (authenticated user profile retrieval)
@@ -55,7 +53,7 @@ MS Cinema is a comprehensive cinema ticket booking platform built on Spring Boot
 - ✓ Prometheus (:9090, 15s scrape) + Grafana (:3000, 2 dashboards) + Loki (:3100)
 
 **Success Metrics:**
-- 11 services + infrastructure successfully deployed via docker-compose
+- 9 modules successfully deployed via docker-compose
 - Cross-service JWT validation < 50ms
 - Booking-to-payment event latency < 2s (p95)
 - All endpoints documented in OpenAPI (0 manual docs needed)
@@ -148,7 +146,7 @@ MS Cinema is a comprehensive cinema ticket booking platform built on Spring Boot
 - ✓ @JsonIgnore on User.password for API security
 - ✓ api-gateway route /api/audit/** → audit-service
 - ✓ Requires ADMIN role (@PreAuthorize("hasRole('ADMIN')"))
-- ✓ CONFIG: config-server/config-repo/audit-service.yml
+- ✓ CONFIG: audit-service application.yml (kafka, retention settings)
 - ✓ DOCKER: audit-service Dockerfile, docker-compose.yml service definition, init-databases.sql auditdb creation
 
 **Planned Features:**
@@ -190,7 +188,7 @@ MS Cinema is a comprehensive cinema ticket booking platform built on Spring Boot
 - ✓ Password hashing, password_history seeding, user.active=true, token marked used
 - ✓ Frontend Register form: removed password field (username, email, fullName only)
 - ✓ New SetupPasswordComponent at /auth/setup-password route
-- ✓ Config: activationBaseUrl updated (application.yml, config-repo/auth-service.yml)
+- ✓ Config: activationBaseUrl updated (auth-service application.yml)
 - ✓ Backward compatibility: GET /api/auth/activate still works
 - **Status:** COMPLETE (March 27, 2026)
 - **Benefits:** Reduced signup friction, improved security (email verified before password), consistent with OAuth flow
