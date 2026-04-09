@@ -9,8 +9,8 @@ WAIT_TIMEOUT="300s"
 
 echo -e "${GREEN}=== ms-cinema Full K8s Deployment ===${NC}"
 
-# [1/7] Prerequisites
-echo -e "\n${YELLOW}[1/7] Checking prerequisites...${NC}"
+# [1/8] Prerequisites
+echo -e "\n${YELLOW}[1/8] Checking prerequisites...${NC}"
 for cmd in orbctl kubectl mvn docker; do
   command -v "$cmd" &>/dev/null || { echo -e "${RED}ERROR: $cmd not installed${NC}"; exit 1; }
 done
@@ -24,25 +24,25 @@ fi
 # Ensure Docker context is OrbStack
 docker context use orbstack 2>/dev/null
 
-# [2/7] Build Maven + Docker images
-echo -e "\n${YELLOW}[2/7] Building Maven + Docker images...${NC}"
+# [2/8] Build Maven + Docker images
+echo -e "\n${YELLOW}[2/8] Building Maven + Docker images...${NC}"
 cd "$PROJECT_ROOT"
 mvn clean package -DskipTests -q
 
-SERVICES=(api-gateway auth-service movie-service booking-service payment-service notification-service audit-service cinema-frontend)
+SERVICES=(auth-service movie-service booking-service payment-service notification-service audit-service cinema-frontend)
 for svc in "${SERVICES[@]}"; do
   echo "  Building ms-cinema/${svc}..."
   docker build -t "ms-cinema/${svc}:latest" "${PROJECT_ROOT}/${svc}" -q
 done
 
-# [3/7] Apply base configs (namespace first, then configs)
-echo -e "\n${YELLOW}[3/7] Applying namespace & configs...${NC}"
+# [3/8] Apply base configs (namespace first, then configs)
+echo -e "\n${YELLOW}[3/8] Applying namespace & configs...${NC}"
 kubectl apply -f "${SCRIPT_DIR}/base/namespace.yml"
 kubectl wait --for=jsonpath='{.status.phase}'=Active namespace/"$NAMESPACE" --timeout=30s
 kubectl apply -f "${SCRIPT_DIR}/base/"
 
-# [4/7] Deploy infrastructure
-echo -e "\n${YELLOW}[4/7] Deploying infrastructure...${NC}"
+# [4/8] Deploy infrastructure
+echo -e "\n${YELLOW}[4/8] Deploying infrastructure...${NC}"
 for infra in postgresql kafka redis zipkin loki promtail grafana; do
   echo "  Deploying ${infra}..."
   kubectl apply -f "${SCRIPT_DIR}/infra/${infra}/"
@@ -60,25 +60,29 @@ kubectl wait --for=condition=Ready pod -l "app.kubernetes.io/name=promtail" \
   echo -e "  ${RED}WARNING: promtail not ready within timeout${NC}"
 echo -e "  ${GREEN}Infrastructure ready!${NC}"
 
-# [5/7] Deploy services (parallel)
-echo -e "\n${YELLOW}[5/7] Deploying services...${NC}"
-for svc in api-gateway auth-service movie-service booking-service payment-service notification-service audit-service; do
+# [5/8] Deploy services (parallel)
+echo -e "\n${YELLOW}[5/8] Deploying services...${NC}"
+for svc in auth-service movie-service booking-service payment-service notification-service audit-service; do
   kubectl apply -f "${SCRIPT_DIR}/${svc}/"
 done
 
-# [6/7] Wait for services
-echo -e "\n${YELLOW}[6/7] Waiting for services...${NC}"
-for svc in api-gateway auth-service movie-service booking-service payment-service notification-service audit-service; do
+# [6/8] Wait for services
+echo -e "\n${YELLOW}[6/8] Waiting for services...${NC}"
+for svc in auth-service movie-service booking-service payment-service notification-service audit-service; do
   kubectl wait --for=condition=Ready pod -l "app.kubernetes.io/name=${svc}" \
     -n "$NAMESPACE" --timeout="$WAIT_TIMEOUT" 2>/dev/null || \
     echo -e "  ${RED}WARNING: ${svc} not ready${NC}"
 done
 
-# [7/7] Deploy frontend
-echo -e "\n${YELLOW}[7/7] Deploying frontend...${NC}"
+# [7/8] Deploy frontend
+echo -e "\n${YELLOW}[7/8] Deploying frontend...${NC}"
 kubectl apply -f "${SCRIPT_DIR}/cinema-frontend/"
 kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=cinema-frontend \
   -n "$NAMESPACE" --timeout="60s" 2>/dev/null || true
+
+# [8/8] Apply Ingress
+echo -e "\n${YELLOW}[8/8] Applying Ingress...${NC}"
+kubectl apply -f "${SCRIPT_DIR}/ingress.yml"
 
 # Summary
 echo -e "\n${GREEN}=== Deployment Complete ===${NC}"
@@ -86,8 +90,6 @@ kubectl get pods -n "$NAMESPACE"
 echo ""
 echo -e "${GREEN}Access:${NC}"
 echo "  Frontend:    http://localhost"
-echo "  API Gateway: http://localhost:8080"
-echo "  Swagger UI:  http://localhost:8080/swagger-ui.html"
 echo "  Grafana:     http://localhost:3000"
 echo ""
 echo -e "${GREEN}OrbStack DNS (alternative):${NC}"

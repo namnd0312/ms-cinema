@@ -2,19 +2,15 @@
 
 **Dự án:** ms-cinema
 **Ngày tạo:** Tháng 4 năm 2026
-**Kiến trúc:** 11 module Maven microservices (Spring Cloud)
+**Kiến trúc:** 8 module Maven microservices (Spring Cloud)
 **Java Version:** 21 LTS
 **Spring Boot:** 3.4.3
 **Spring Cloud:** 2024.0.1
 
-## Tổng Quan 11 Module Maven
+## Tổng Quan 8 Module Maven
 
 ```
 ms-cinema/ (root pom: packaging=pom)
-├── Hạ tầng (3 module)
-│   ├── eureka-server (:8761) - Registry dịch vụ
-│   ├── config-server (:8888) - Cấu hình tập trung
-│   └── api-gateway (:8080) - Điểm truy cập duy nhất
 ├── Dịch vụ Nghiệp vụ (6 module)
 │   ├── auth-service (:8081) - Xác thực JWT, quản lý người dùng
 │   ├── movie-service (:8082) - Phim, rạp, suất chiếu
@@ -414,41 +410,18 @@ jwt:
 - Đánh dấu phương thức controller với @PreAuthorize("hasRole('ROLE_USER')")
 - JwtAuthenticationFilter tự động kết nối qua auto-config
 
-## api-gateway (Cổng 8080)
+## Định Tuyến (K8s Ingress / nginx docker-compose)
 
-**Mục đích:** Điểm truy cập duy nhất, định tuyến yêu cầu, tổng hợp OpenAPI
+Định tuyến theo đường dẫn — không có gateway service riêng:
+- `/api/auth/**`, `/api/users/**`, `/oauth2/**` → auth-service:8081
+- `/api/movies/**`, `/api/showtimes/**`, `/api/theaters/**` → movie-service:8082
+- `/api/bookings/**` → booking-service:8083
+- `/api/payments/**` → payment-service:8084
+- `/api/notifications/**` → notification-service:8085
+- `/api/audit/**` → audit-service:8086
+- `/ws/**` → booking-service:8083 (WebSocket upgrade)
 
-**Định tuyến:**
-```
-/api/auth/** → lb://auth-service
-/api/users/** → lb://auth-service
-/api/movies/** → lb://movie-service
-/api/showtimes/** → lb://movie-service
-/api/theaters/** → lb://movie-service
-/api/bookings/** → lb://booking-service
-/api/payments/** → lb://payment-service
-/actuator/** → TỪ CHỐI (chỉ nội bộ)
-```
-
-**Tính năng:**
-- Spring Cloud Gateway MVC (dựa trên servlet)
-- ServiceInstanceListSupplier cho cân bằng tải Eureka
-- HttpLoggingFilter - Ghi log yêu cầu/phản hồi với header X-Correlation-ID
-- Tổng hợp endpoint OpenAPI: /v3/api-docs (kết hợp tất cả OpenAPI dịch vụ)
-- Swagger UI: /swagger-ui.html
-
-**Cấu hình:**
-```yaml
-spring:
-  cloud:
-    gateway:
-      routes:
-        - id: auth-service-routes
-          predicates:
-            - Path=/api/auth/**,/api/users/**
-          uri: lb://auth-service
-        # ... thêm route
-```
+**K8s:** `k8s/ingress.yml` | **Docker Compose:** `cinema-frontend/nginx.conf`
 
 ## eureka-server (Cổng 8761)
 
@@ -570,7 +543,7 @@ jwt.auth.secret: ${JWT_SECRET}
 - Component Đăng nhập: Nút "Sign in with Google" chuyển hướng đến /oauth2/authorization/google
 - Xử lý lỗi: Hiển thị thông báo lỗi nếu thiếu email hoặc callback không hợp lệ
 
-**API Proxy:** Cấu hình định tuyến /api/* đến http://api-gateway:8080
+**API Proxy:** nginx.conf định tuyến /api/* trực tiếp đến từng dịch vụ backend (K8s Ingress trong Kubernetes)
 
 **Cấu hình Nginx (Prod):** SPA fallback cho định tuyến phía client
 

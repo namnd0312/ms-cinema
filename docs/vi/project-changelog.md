@@ -90,7 +90,7 @@
   - Sửa đổi: BookingServiceImpl.java (publish LOCK/RESERVE/CANCEL qua WebSocket)
   - Sửa đổi: BookingExpiryScheduler.java (publish CANCEL khi hết hạn đặt vé)
   - Sửa đổi: booking-service/pom.xml (spring-boot-starter-websocket dependency)
-  - Sửa đổi: booking-service/application.yml, api-gateway/application.yml (WebSocket routes)
+  - Sửa đổi: booking-service/application.yml (WebSocket routes)
 - **Khả năng tiếp cận:** WCAG 2.1 AA compliant (lưới ARIA, điều hướng bàn phím, màu+biểu tượng, kiểu focus, tooltips)
 - **Hiệu suất:** WebSocket <100ms độ trễ vs. 2-3s polling (100x nhanh hơn); đề xuất O(n*m) chấp nhận được cho <1000 ghế
 - **Bảo mật:** WebSocket xác thực qua xác nhận handshake JWT
@@ -265,7 +265,7 @@
 #### Tài Liệu
 - Cập nhật `/docs/api-documentation.md` — Thêm bảng endpoints đánh giá, bình luận, phản ứng
 - Cập nhật `/docs/codebase-summary.md` — Thêm models, services, controllers mới, 7 bảng cho moviedb
-- Cập nhật `/docs/system-architecture.md` — Thêm schema cơ sở dữ liệu, tính năng mới, routes api-gateway
+- Cập nhật `/docs/system-architecture.md` — Thêm schema cơ sở dữ liệu, tính năng mới, quy tắc định tuyến
 - Cập nhật `/docs/project-roadmap.md` — Đánh dấu tính năng Giai đoạn 3 là hoàn thành
 
 #### Kiểm Thử
@@ -320,9 +320,8 @@ Hệ thống thông báo thời gian thực hoàn chỉnh với streaming Server
 - Service mới: NotificationPublisherService (publish InAppNotificationEvent sau thanh toán thành công/thất bại)
 - Publish InAppNotificationEvent → topic notification.in_app
 
-**api-gateway (Sửa lỗi)**
-- HttpLoggingFilter: Bỏ qua ContentCachingResponseWrapper cho đường dẫn SSE (/api/notifications/stream)
-- Ngăn cạn kiệt thread gateway trên kết nối SSE lâu dài
+**notification-service (Sửa lỗi)**
+- SSE endpoint /api/notifications/stream: Bỏ qua ContentCachingResponseWrapper để ngăn cạn kiệt thread trên kết nối SSE lâu dài
 
 **Angular Frontend (Components mới)**
 - Model mới: notification.model.ts (interfaces Notification, NotificationPage, UnreadCountResponse)

@@ -10,17 +10,18 @@ Tất cả dịch vụ xuất tài liệu tương tác OpenAPI 3.0 qua SpringDoc
 
 | Dịch vụ | Swagger UI | OpenAPI JSON | Cổng |
 |---------|-----------|---|------|
-| **api-gateway (tổng hợp)** | http://localhost:8080/swagger-ui.html | /v3/api-docs | 8080 |
 | auth-service | http://localhost:8081/swagger-ui.html | /v3/api-docs | 8081 |
 | movie-service | http://localhost:8082/swagger-ui.html | /v3/api-docs | 8082 |
 | booking-service | http://localhost:8083/swagger-ui.html | /v3/api-docs | 8083 |
 | payment-service | http://localhost:8084/swagger-ui.html | /v3/api-docs | 8084 |
+| notification-service | http://localhost:8085/swagger-ui.html | /v3/api-docs | 8085 |
+| audit-service | http://localhost:8086/swagger-ui.html | /v3/api-docs | 8086 |
 
 ## Kiến Trúc Cấu Hình
 
 ### Lớp OpenApiConfig
 
-Mỗi dịch vụ (auth-service, movie-service, booking-service, payment-service, api-gateway) chứa một lớp `OpenApiConfig` trong package `config` có chức năng:
+Mỗi dịch vụ chứa một lớp `OpenApiConfig` trong package `config` có chức năng:
 
 **1. Tùy chỉnh thông tin API:**
 - Tiêu đề, mô tả, phiên bản API

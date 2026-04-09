@@ -6,37 +6,20 @@
 
 ## Tổng Quan Cấp Cao
 
-MS Cinema là nền tảng microservices Spring Cloud gồm 11 module dành cho đặt vé xem phim:
+MS Cinema là nền tảng microservices Spring Cloud gồm 8 module dành cho đặt vé xem phim:
 
 ```
                         CLIENT (Web/Mobile)
-                              │ HTTP:8080
-                    ┌─────────▼──────────┐
-                    │   api-gateway      │
-                    │   (:8080, gateway) │
-                    └────────┬───────────┘
-                             │
-        ┌────────────────────┼────────────────────┐
-        │                    │                    │
-        ▼                    ▼                    ▼
-┌──────────────┐    ┌──────────────┐    ┌──────────────┐
-│ eureka-srv   │    │config-server │    │auth-service  │
-│  (:8761)     │    │  (:8888)     │    │  (:8081)     │
-└──────────────┘    └──────────────┘    └──────────────┘
-                                              │
-                ┌─────────────────────────────┼──────────────────┐
-                ▼                             ▼                  ▼
-           ┌─────────────┐        ┌──────────────┐    ┌──────────────┐
-           │movie-service│        │booking-svc   │    │payment-svc   │
-           │  (:8082)    │        │  (:8083)     │    │  (:8084)     │
-           └─────────────┘        └──────────────┘    └──────────────┘
-                                        │
-                                        ├─────────────────┐
-                                        ▼                 ▼
-                                  ┌─────────────┐  ┌──────────────┐
-                                  │notification │  │audit-service │
-                                  │  (:8085)    │  │  (:8086)     │
-                                  └─────────────┘  └──────────────┘
+                              │
+              ┌───────────────▼────────────────┐
+              │   K8s NGINX Ingress            │  (hoặc nginx trong docker-compose)
+              │   định tuyến theo đường dẫn    │
+              └───────────────┬────────────────┘
+                              │
+     ┌──────┬──────┬──────────┼──────┬──────┬──────┐
+     ▼      ▼      ▼          ▼      ▼      ▼      ▼
+   auth   movie  booking    pay   notif  audit  frontend
+  :8081  :8082  :8083      :8084  :8085  :8086   :80
 
 Hạ tầng:
 - PostgreSQL (auth→testdb, movie→moviedb, booking→bookingdb, payment→paymentdb, notification→notificationdb, audit→auditdb)
@@ -49,29 +32,20 @@ Hạ tầng:
 
 ## Kiến Trúc Module
 
-### Dịch Vụ Hạ Tầng (3 module)
+### Lớp Định Tuyến (K8s Ingress / nginx docker-compose)
 
-**eureka-server (:8761)** - Registry khám phá dịch vụ
-- Netflix Eureka (tự đăng ký tắt, khám phá client)
-- Tất cả dịch vụ đăng ký heartbeat mỗi 10 giây
-- Thời gian chờ lease: 30 giây
+Định tuyến theo đường dẫn — không có gateway service riêng:
+- `/api/auth/**`, `/api/users/**`, `/oauth2/**`, `/login/oauth2/**` → auth-service:8081
+- `/api/movies/**`, `/api/showtimes/**`, `/api/theaters/**` → movie-service:8082
+- `/api/bookings/**` → booking-service:8083
+- `/api/payments/**` → payment-service:8084
+- `/api/notifications/**` → notification-service:8085
+- `/api/audit/**` → audit-service:8086
+- `/ws/**` → booking-service:8083 (WebSocket upgrade)
 
-**config-server (:8888)** - Cấu hình tập trung
-- Tải từ classpath:/config-repo/ (native profile)
-- Cung cấp JWT secret dùng chung cho tất cả dịch vụ
-- Hỗ trợ cấu hình ghi đè riêng cho từng dịch vụ
+**K8s:** `k8s/ingress.yml` | **Docker Compose:** `cinema-frontend/nginx.conf`
 
-**api-gateway (:8080)** - Điểm truy cập duy nhất
-- Spring Cloud Gateway MVC (dựa trên servlet, không phải WebFlux)
-- Định tuyến yêu cầu đến dịch vụ downstream qua cân bằng tải Eureka
-- Định tuyến:
-  - `/api/auth/**` → auth-service
-  - `/api/users/**` → auth-service
-  - `/oauth2/authorization/**` → auth-service (endpoint phân quyền OAuth2)
-  - `/login/oauth2/code/**` → auth-service (endpoint callback OAuth2)
-  - `/api/movies/**` → movie-service (CRUD, đánh giá, bình luận, phản hồi)
-  - `/api/showtimes/**` → movie-service
-  - `/api/theaters/**` → movie-service
+### Dịch Vụ Nghiệp Vụ
   - `/api/bookings/**` → booking-service
   - `/api/payments/**` → payment-service
   - `/api/notifications/**` → notification-service (SSE stream, REST CRUD, broadcast)
@@ -128,7 +102,7 @@ Hạ tầng:
   - BookingServiceImpl sửa đổi: Gọi publishSeatStatusChange() khi lock/reserve/cancel
   - BookingExpiryScheduler sửa đổi: Phát hành CANCEL khi hết hạn đặt vé
   - **Proxy Nginx:** Endpoint /ws/* định tuyến trực tiếp đến booking-service:8083 với header upgrade WebSocket (Connection: Upgrade, Upgrade: websocket)
-  - **Kết nối Frontend:** Endpoint /ws kết nối qua Nginx đến booking-service (vượt api-gateway để tối ưu độ trễ WebSocket)
+  - **Kết nối Frontend:** Endpoint /ws kết nối qua Nginx trực tiếp đến booking-service (độ trễ thấp)
 - Cơ sở dữ liệu: bookingdb (2 bảng: bookings, booking_seats)
 
 **payment-service (:8084)** - Xử lý thanh toán Stripe
@@ -204,7 +178,7 @@ Hạ tầng:
 - Stack: TypeScript 5.5, Material 18, Stripe.js 8.9, RxJS
 - Route lazy-loaded: /auth, /movies, /booking, /payment, /profile (bao gồm /profile/change-password), /admin, /notifications
 - Component: ChangePasswordComponent (reactive form với các trường current/new/confirm, chuyển đổi hiển thị, xác thực)
-- API proxy: Cấu hình định tuyến /api/* đến http://api-gateway:8080
+- API proxy: nginx.conf định tuyến /api/* trực tiếp đến từng dịch vụ backend (K8s Ingress trong Kubernetes)
 - Nginx SPA fallback cho định tuyến phía client
 - Tích hợp đổi mật khẩu: Nút "Change Password" trên ProfileComponent
 
@@ -215,7 +189,7 @@ Hạ tầng:
 #### Đăng Nhập Truyền Thống (Email + Mật khẩu)
 ```
 CLIENT: POST /api/auth/login
-        └─► api-gateway (định tuyến đến auth-service)
+        └─► Ingress/nginx (định tuyến đến auth-service)
             └─► auth-service AuthController
                 ├─ AccountLockService.isLocked() → 423 nếu bị khóa
                 ├─ AuthenticationManager.authenticate() → so khớp mật khẩu BCrypt
@@ -231,13 +205,13 @@ CLIENT: POST /api/auth/login
 ```
 CLIENT: Nhấn nút "Sign in with Google"
         └─► GET /oauth2/authorization/google
-            └─► api-gateway → auth-service (Spring Security OAuth2)
+            └─► Ingress/nginx → auth-service (Spring Security OAuth2)
                 ├─ Chuyển hướng đến màn hình đồng ý Google
                 └─ Người dùng cấp quyền → Google chuyển hướng về callback
 
 CLIENT: [OAuth2 callback với authorization code]
         └─► GET /login/oauth2/code/google?code=...&state=...
-            └─► api-gateway → auth-service
+            └─► Ingress/nginx → auth-service
                 └─► OAuth2AuthenticationSuccessHandler.onAuthenticationSuccess()
                     ├─ Trích xuất OAuth2User attributes (sub, email, name, email_verified)
                     ├─ OAuth2UserLinkingService.processOAuth2User()
@@ -259,7 +233,7 @@ FRONTEND: OAuth2CallbackComponent
 #### Yêu Cầu Đã Xác Thực Tiếp Theo
 ```
 CLIENT: GET /api/movies, Authorization: Bearer {accessToken}
-        └─► api-gateway/auth-service
+        └─► Ingress/nginx → auth-service
             └─► JwtAuthenticationFilter.doFilterInternal()
                 ├─ Trích xuất Bearer token
                 ├─ JwtService.validateJwtToken() → kiểm tra chữ ký+hết hạn+danh sách đen
@@ -350,7 +324,7 @@ FRONTEND: seat-websocket.service.ts event handlers
       │  └─ Phát hiện ngắt kết nối → thử lại 1 giây, 2 giây, 4 giây, 8 giây, 16 giây, 30 giây tối đa
       │
       ├─ Định tuyến Nginx (MỚI 22 tháng 3, 2026):**
-      │  ├─ /ws/* định tuyến trực tiếp đến booking-service:8083 (vượt api-gateway)
+      │  ├─ /ws/* định tuyến trực tiếp đến booking-service:8083
       │  ├─ Header upgrade WebSocket: Connection: Upgrade, Upgrade: websocket
       │  └─ Độ trễ <100ms (so với 2-3 giây polling; nhanh hơn 100 lần)
       │

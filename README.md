@@ -6,11 +6,12 @@ Enterprise-grade cinema ticket booking system built on Spring Boot 3.4.3 microse
 
 ## Architecture Overview
 
-**9 Maven modules:**
+**8 Maven modules:**
 - 6 Business Services (auth, movie, booking, payment, notification, audit)
-- 1 Infrastructure Service (api-gateway)
 - 2 Shared Libraries (jwt-auth-autoconfigure, kafka-events with @Auditable support)
 - 1 Frontend (Angular 18)
+
+**Routing:** K8s NGINX Ingress (path-based) in Kubernetes; frontend nginx.conf in Docker Compose. No dedicated gateway service.
 
 ## Quick Start
 
@@ -31,7 +32,6 @@ docker-compose up --build
 docker-compose up postgres kafka redis
 
 # In separate terminals, build & run each service:
-mvn -pl api-gateway spring-boot:run             # port 8080
 mvn -pl auth-service spring-boot:run            # port 8081
 mvn -pl movie-service spring-boot:run           # port 8082
 mvn -pl booking-service spring-boot:run         # port 8083
@@ -44,7 +44,6 @@ mvn -pl audit-service spring-boot:run           # port 8086
 
 | Service | Port | Purpose | Key Features |
 |---------|------|---------|--------------|
-| api-gateway | 8080 | Request routing | OpenAPI aggregation, logging, SSE streaming support, WebSocket proxy |
 | auth-service | 8081 | Authentication | JWT, email activation, account lockout, OAuth2 Google login, password history |
 | movie-service | 8082 | Movies/ratings/comments | Showtimes, auto seat grids, star ratings, comments, reactions |
 | booking-service | 8083 | Seat reservation | Redis locking, lifecycle states, WebSocket real-time seat updates |
@@ -57,13 +56,13 @@ mvn -pl audit-service spring-boot:run           # port 8086
 
 ## API Documentation
 
-**Swagger UI:** http://localhost:8080/swagger-ui.html (aggregated by gateway)
-
-**Individual service docs:**
+**Swagger UI (per service):**
 - Auth: http://localhost:8081/swagger-ui.html
 - Movie: http://localhost:8082/swagger-ui.html
 - Booking: http://localhost:8083/swagger-ui.html
 - Payment: http://localhost:8084/swagger-ui.html
+- Notification: http://localhost:8085/swagger-ui.html
+- Audit: http://localhost:8086/swagger-ui.html
 
 See [docs/api-documentation.md](./docs/api-documentation.md) for full endpoint reference.
 

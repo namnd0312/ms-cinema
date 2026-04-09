@@ -122,7 +122,7 @@ MS Cinema is a comprehensive cinema ticket booking platform built on Spring Boot
 - ✓ Modified BookingServiceImpl.java: Calls SeatWebSocketPublisher on lock/reserve/cancel
 - ✓ Modified BookingExpiryScheduler.java: Publishes CANCEL event on booking expiry
 - ✓ Modified booking-service/pom.xml: Added spring-boot-starter-websocket
-- ✓ Modified api-gateway/application.yml: WebSocket route /ws/booking
+- ✓ Configured nginx/K8s Ingress: WebSocket route /ws → booking-service:8083
 - ✓ Frontend dependencies: @stomp/stompjs, sockjs-client
 - ✓ WCAG 2.1 AA accessibility (ARIA grid, keyboard nav, color + icons)
 - ✓ Real-time availability updates (<100ms latency vs. 2-3s polling)
@@ -144,7 +144,7 @@ MS Cinema is a comprehensive cinema ticket booking platform built on Spring Boot
 - ✓ Kafka topic: audit-events (3 partitions, 90-day retention, DLT)
 - ✓ Idempotent consumer: eventId UNIQUE constraint + DataIntegrityViolationException catch
 - ✓ @JsonIgnore on User.password for API security
-- ✓ api-gateway route /api/audit/** → audit-service
+- ✓ Ingress/nginx route /api/audit/** → audit-service
 - ✓ Requires ADMIN role (@PreAuthorize("hasRole('ADMIN')"))
 - ✓ CONFIG: audit-service application.yml (kafka, retention settings)
 - ✓ DOCKER: audit-service Dockerfile, docker-compose.yml service definition, init-databases.sql auditdb creation

@@ -540,8 +540,8 @@ Response (403 Forbidden):
 - ✓ Account lockout after N failed attempts (auto-unlock)
 
 ### Phase 3: Microservice Integration (COMPLETE)
-- ✓ 9-module Maven project: 6 business services, 1 infrastructure (api-gateway), 2 shared libs, 1 frontend
-- ✓ Spring Cloud Gateway MVC (single entry :8080, routes, OpenAPI aggregation, HttpLoggingFilter)
+- ✓ 8-module Maven project: 6 business services, 2 shared libs, 1 frontend
+- ✓ Routing via K8s NGINX Ingress (path-based) or frontend nginx.conf (docker-compose)
 - ✓ JWT tokens include `roles` + `userId` claims for downstream use
 - ✓ POST /api/auth/validate-token (microservice validation, no DB lookup)
 - ✓ GET /api/users/me (authenticated user profile retrieval)
@@ -603,7 +603,6 @@ Response (403 Forbidden):
 | Parameter | Default | Scope | Notes |
 |-----------|---------|-------|-------|
 | server.port (auth-service) | 8081 | Spring Boot | Changed from 8080 |
-| server.port (api-gateway) | 8080 | Spring Boot | External entry point |
 | namnd.app.jwtSecret | (Base64 key) | Custom | Provided via JWT_SECRET environment variable |
 | namnd.app.jwtExpiration | 900000 | Custom (ms) | 15 min |
 | namnd.app.jwtRefreshExpiration | 604800000 | Custom (ms) | 7 days |

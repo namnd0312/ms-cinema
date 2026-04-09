@@ -28,9 +28,7 @@
 ```mermaid
 graph TD
     Client["Client\n(Browser / Mobile)"]
-    Gateway["api-gateway\n:8080"]
-    Eureka["eureka-server\n:8761"]
-    Config["config-server\n:8888"]
+    Ingress["K8s NGINX Ingress\n(hoặc nginx docker-compose)"]
 
     AuthSvc["auth-service\n:8081"]
     MovieSvc["movie-service\n:8082"]
@@ -50,12 +48,11 @@ graph TD
     JwtStarter["jwt-auth-autoconfigure\n(shared lib)"]
     KafkaEvents["kafka-events\n(shared lib)"]
 
-    Client --> Gateway
-    Gateway --> Eureka
-    Gateway -->|lb://auth-service| AuthSvc
-    Gateway -->|lb://movie-service| MovieSvc
-    Gateway -->|lb://booking-service| BookingSvc
-    Gateway -->|lb://payment-service| PaymentSvc
+    Client --> Ingress
+    Ingress -->|/api/auth/**,/api/users/**| AuthSvc
+    Ingress -->|/api/movies/**,/api/showtimes/**| MovieSvc
+    Ingress -->|/api/bookings/**,/ws/**| BookingSvc
+    Ingress -->|/api/payments/**| PaymentSvc
 
     AuthSvc --> PG
     AuthSvc --> Redis
@@ -74,18 +71,15 @@ graph TD
     PaymentSvc --> Kafka
     BookingSvc --> Kafka
 
-    AuthSvc -.->|register| Eureka
-    MovieSvc -.->|register| Eureka
-    BookingSvc -.->|register| Eureka
-    PaymentSvc -.->|register| Eureka
-    NotifSvc -.->|register| Eureka
+    AuthSvc -.->|shared lib| JwtStarter
+    MovieSvc -.->|shared lib| JwtStarter
+    BookingSvc -.->|shared lib| JwtStarter
+    PaymentSvc -.->|shared lib| JwtStarter
+    NotifSvc -.->|shared lib| JwtStarter
 
     AuthSvc -.->|fetch config| Config
     MovieSvc -.->|fetch config| Config
     BookingSvc -.->|fetch config| Config
-    PaymentSvc -.->|fetch config| Config
-    NotifSvc -.->|fetch config| Config
-
     MovieSvc -.->|metrics| Prometheus
     BookingSvc -.->|metrics| Prometheus
     PaymentSvc -.->|metrics| Prometheus
@@ -109,32 +103,29 @@ graph TD
 
 | Service | Port | Database | Dependency | Kafka Topic | Endpoint chính |
 |---|---|---|---|---|---|
-| api-gateway | 8080 | — | Eureka, config-server | — | Tất cả route |
 | auth-service | 8081 | testdb (PostgreSQL), Redis | — | Produce: notification-events | /api/auth/**, /api/users/**, /api/auth/validate-token |
 | movie-service | 8082 | moviedb (PostgreSQL) | — | Produce: movie-events | /api/movies/**, /api/showtimes/**, /api/theaters/**, /api/comments/** |
 | booking-service | 8083 | bookingdb (PostgreSQL), Redis | movie-service (Feign) | Consume: payment-events | /api/bookings/** |
 | payment-service | 8084 | paymentdb (PostgreSQL) | Stripe API | Produce: payment-events | /api/payments/** |
 | notification-service | 8085 | Redis (chống trùng) | SMTP (Gmail) | Consume: notification-events | — (chỉ Kafka consumer) |
-| eureka-server | 8761 | — | — | — | /eureka |
-| config-server | 8888 | — | Config repo | — | /actuator |
 | PostgreSQL | 5432 | testdb, moviedb, bookingdb | — | — | — |
 | Redis | 6379 | — | — | — | — |
 | Kafka (KRaft) | 9092 | — | — | payment-events, movie-events, notification-events | — |
 | Prometheus | 9090 | — | — | — | /metrics |
 | Grafana | 3000 | — | Prometheus | — | Dashboard |
 
-**Bảng Route Gateway:**
+**Bảng Route Ingress / nginx:**
 
 | Mẫu đường dẫn | Service đích |
 |---|---|
-| /api/auth/** | lb://auth-service |
-| /api/users/** | lb://auth-service |
-| /api/movies/** | lb://movie-service |
-| /api/showtimes/** | lb://movie-service |
-| /api/theaters/** | lb://movie-service |
-| /api/comments/** | lb://movie-service |
-| /api/bookings/** | lb://booking-service |
-| /api/payments/** | lb://payment-service |
+| /api/auth/** | http://auth-service:8081 |
+| /api/users/** | http://auth-service:8081 |
+| /api/movies/** | http://movie-service:8082 |
+| /api/showtimes/** | http://movie-service:8082 |
+| /api/theaters/** | http://movie-service:8082 |
+| /api/comments/** | http://movie-service:8082 |
+| /api/bookings/** | http://booking-service:8083 |
+| /api/payments/** | http://payment-service:8084 |
 
 ---
 
@@ -148,8 +139,6 @@ graph LR
             PG[("postgres\n:5432")]
             Redis[("redis\n:6379")]
             Kafka[["kafka\n:9092 (KRaft)"]]
-            Config["config-server\n:8888"]
-            Eureka["eureka-server\n:8761"]
         end
 
         subgraph services["Microservice"]
@@ -158,8 +147,7 @@ graph LR
             Booking["booking-service\n:8083"]
             Payment["payment-service\n:8084"]
             Notif["notification-service\n:8085"]
-            Gateway["api-gateway\n:8080"]
-            Frontend["cinema-frontend\n:4200"]
+            Frontend["cinema-frontend\n:80\n(nginx proxy)"]
         end
 
         subgraph observability["Giám sát"]
@@ -169,14 +157,6 @@ graph LR
         end
     end
 
-    Config --> Eureka
-    Config --> Auth
-    Config --> Movie
-    Config --> Booking
-    Config --> Payment
-    Config --> Notif
-    Config --> Gateway
-    Eureka --> Gateway
     PG --> Auth
     PG --> Movie
     PG --> Booking
@@ -189,11 +169,10 @@ graph LR
     Kafka --> Booking
     Kafka --> Payment
     Kafka --> Notif
-    Auth --> Gateway
-    Movie --> Gateway
-    Booking --> Gateway
-    Payment --> Gateway
-    Frontend --> Gateway
+    Frontend --> Auth
+    Frontend --> Movie
+    Frontend --> Booking
+    Frontend --> Payment
     Auth --> Prometheus
     Movie --> Prometheus
     Booking --> Prometheus
@@ -209,10 +188,8 @@ graph LR
 
 ```mermaid
 flowchart TD
-    C["Client"] -->|HTTP request| GW["api-gateway :8080"]
-    GW -->|tra cứu service| EU["eureka-server :8761"]
-    EU -->|địa chỉ instance| GW
-    GW -->|chuyển tiếp cân bằng tải| SVC["Microservice"]
+    C["Client"] -->|HTTP request| ING["K8s Ingress / nginx\n(định tuyến theo đường dẫn)"]
+    ING -->|route đến service| SVC["Microservice"]
 
     SVC -->|đọc/ghi| DB[("PostgreSQL")]
     SVC -->|cache / khóa ghế / blacklist| RD[("Redis")]
@@ -1193,7 +1170,7 @@ sequenceDiagram
     Services->>EurekaServer: GET /eureka/apps (lấy registry)
     EurekaServer-->>Services: tất cả instance đã đăng ký
 
-    Note over Services: api-gateway phân giải lb://service-name<br/>→ instance cân bằng tải từ registry
+    Note over Services: Ingress/nginx định tuyến theo đường dẫn đến từng service
 ```
 
 ---

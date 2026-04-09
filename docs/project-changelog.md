@@ -103,7 +103,7 @@
   - Modified: BookingServiceImpl.java (publishes LOCK/RESERVE/CANCEL via WebSocket)
   - Modified: BookingExpiryScheduler.java (publishes CANCEL on booking expiry)
   - Modified: booking-service/pom.xml (spring-boot-starter-websocket dependency)
-  - Modified: booking-service/application.yml, api-gateway/application.yml (WebSocket routes)
+  - Modified: booking-service/application.yml (WebSocket routes)
 - **Accessibility:** WCAG 2.1 AA compliant (ARIA grid, keyboard nav, color+icons, focus styles, tooltips)
 - **Performance:** WebSocket <100ms latency vs. 2-3s polling (100x faster); suggestion O(n*m) acceptable for <1000 seats
 - **Security:** WebSocket authenticated via JWT handshake validation
@@ -237,7 +237,7 @@
 #### Documentation
 - Updated `/docs/api-documentation.md` — Added ratings, comments, reactions endpoints table
 - Updated `/docs/codebase-summary.md` — Added new models, services, controllers, 7 tables for moviedb
-- Updated `/docs/system-architecture.md` — Added database schema, new features, api-gateway routes
+- Updated `/docs/system-architecture.md` — Added database schema, new features, routing rules
 - Updated `/docs/project-roadmap.md` — Marked Phase 3 features as complete
 
 #### Testing
@@ -292,9 +292,8 @@ Complete real-time notification system with Server-Sent Events (SSE) streaming +
 - New Service: NotificationPublisherService (publishes InAppNotificationEvent after payment success/failure)
 - Publishes InAppNotificationEvent → notification.in_app topic
 
-**api-gateway (Bug Fix)**
-- HttpLoggingFilter: Skip ContentCachingResponseWrapper for SSE paths (/api/notifications/stream)
-- Prevents gateway thread exhaustion on long-lived SSE connections
+**notification-service (Bug Fix)**
+- SSE endpoint /api/notifications/stream: ContentCachingResponseWrapper skipped to prevent thread exhaustion on long-lived SSE connections
 
 **Angular Frontend (New Components)**
 - New Model: notification.model.ts (Notification, NotificationPage, UnreadCountResponse interfaces)

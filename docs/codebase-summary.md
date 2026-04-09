@@ -2,17 +2,15 @@
 
 **Project:** ms-cinema
 **Generated:** April 2026
-**Architecture:** 9-module Maven microservices (Spring Cloud)
+**Architecture:** 8-module Maven microservices (Spring Cloud)
 **Java Version:** 21 LTS
 **Spring Boot:** 3.4.3
 **Spring Cloud:** 2024.0.1
 
-## 9 Maven Modules Overview
+## 8 Maven Modules Overview
 
 ```
 ms-cinema/ (root pom: packaging=pom)
-├── Infrastructure (1 module)
-│   └── api-gateway (:8080) - Single entry point, OpenAPI aggregation, /api/audit/** route
 ├── Business Services (6 modules)
 │   ├── auth-service (:8081) - JWT auth, user management, @Auditable integration
 │   ├── movie-service (:8082) - Movies, theaters, showtimes, @Auditable on CRUD operations
@@ -413,42 +411,6 @@ jwt:
 - Annotate controller methods with @PreAuthorize("hasRole('ROLE_USER')")
 - JwtAuthenticationFilter auto-wired via auto-config
 
-## api-gateway (Port 8080)
-
-**Purpose:** Single entry point, request routing, OpenAPI aggregation
-
-**Routes:**
-```
-/api/auth/** → lb://auth-service
-/api/users/** → lb://auth-service
-/api/movies/** → lb://movie-service
-/api/showtimes/** → lb://movie-service
-/api/theaters/** → lb://movie-service
-/api/bookings/** → lb://booking-service
-/api/payments/** → lb://payment-service
-/actuator/** → REJECT (internal only)
-```
-
-**Features:**
-- Spring Cloud Gateway MVC (servlet-based)
-- Static URI routing via service hostnames (K8s DNS / docker-compose)
-- HttpLoggingFilter - Logs request/response with X-Correlation-ID header
-- OpenAPI endpoint aggregation: /v3/api-docs (combines all service OpenAPIs)
-- Swagger UI: /swagger-ui.html
-
-**Configuration:**
-```yaml
-spring:
-  cloud:
-    gateway:
-      routes:
-        - id: auth-service-routes
-          predicates:
-            - Path=/api/auth/**,/api/users/**
-          uri: http://auth-service:8081
-        # ... more routes (static URIs, no Eureka)
-```
-
 ## cinema-frontend (Angular 18)
 
 **Port:** 4200 (dev) → 80 (production via Nginx)
@@ -520,7 +482,7 @@ spring:
 - **Modified Components:**
   - seat-grid.component.ts: Color-coded seats (STANDARD=green, PREMIUM=blue, VIP=amber), row A-Z labels, legend (type+price), Instant→String serialization fix for seat data
   - seat-selection.component.ts: WebSocket integration, suggestion panel UI, timer countdown, global polyfill for sockjs-client
-- **Nginx Configuration:** nginx.conf configured to proxy /ws/ directly to booking-service:8083 (bypass api-gateway), includes WebSocket upgrade headers (Connection: Upgrade, Upgrade: websocket)
+- **Nginx Configuration:** nginx.conf configured to proxy /ws/ directly to booking-service:8083, includes WebSocket upgrade headers (Connection: Upgrade, Upgrade: websocket)
 - **Dependencies:** @stomp/stompjs, sockjs-client (added to package.json with global import)
 - **Accessibility:** WCAG 2.1 AA (ARIA role=grid, keyboard nav, color+icons, MatTooltip, aria-live)
 - **API Data Mapping:** Fixed rowLabel/seatNumber (API) → rowNumber/columnNumber/price (frontend) in seat grid display
@@ -573,7 +535,7 @@ spring:
 - Login Component: "Sign in with Google" button redirects to /oauth2/authorization/google
 - Error handling: Display error message if missing email or invalid callback
 
-**API Proxy:** Configured to route /api/* to http://api-gateway:8080
+**API Proxy:** Configured to route /api/* directly to each backend service (via nginx.conf in docker-compose; K8s Ingress in Kubernetes)
 
 **Nginx Config (Prod):** SPA fallback for client-side routing
 

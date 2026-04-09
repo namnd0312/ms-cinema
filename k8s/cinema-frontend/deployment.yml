@@ -41,7 +41,7 @@ metadata:
   name: cinema-frontend
   namespace: ms-cinema
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   selector:
     app.kubernetes.io/name: cinema-frontend
   ports:

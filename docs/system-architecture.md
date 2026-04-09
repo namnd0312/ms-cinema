@@ -6,29 +6,20 @@
 
 ## High-Level Overview
 
-MS Cinema is a 9-module Spring Cloud microservices platform for cinema ticket booking:
+MS Cinema is an 8-module Spring Cloud microservices platform for cinema ticket booking:
 
 ```
                         CLIENT (Web/Mobile)
-                              │ HTTP:8080
-                    ┌─────────▼──────────┐
-                    │   api-gateway      │
-                    │   (:8080, gateway) │
-                    └────────┬───────────┘
-                             │
-                    ┌────────┴──────────┐
-                    ▼                   ▼
-             ┌──────────────┐    ┌──────────────┐
-             │auth-service  │    │movie-service │
-             │  (:8081)     │    │  (:8082)     │
-             └──────────────┘    └──────────────┘
-                    │
-     ┌──────────────┼──────────────┐
-     ▼              ▼              ▼
-┌──────────┐  ┌──────────┐  ┌──────────────┐
-│booking   │  │payment   │  │notification  │
-│  (:8083) │  │  (:8084) │  │  (:8085)     │
-└──────────┘  └──────────┘  └──────────────┘
+                              │
+              ┌───────────────▼────────────────┐
+              │   K8s NGINX Ingress            │  (or nginx in docker-compose)
+              │   path-based routing           │
+              └───────────────┬────────────────┘
+                              │
+     ┌──────┬──────┬──────────┼──────┬──────┬──────┐
+     ▼      ▼      ▼          ▼      ▼      ▼      ▼
+   auth   movie  booking    pay   notif  audit  frontend
+  :8081  :8082  :8083      :8084  :8085  :8086   :80
 
 Infrastructure:
 - PostgreSQL (auth→testdb, movie→moviedb, booking→bookingdb, payment→paymentdb, audit→auditdb, notification→notificationdb)
@@ -41,23 +32,19 @@ Infrastructure:
 
 ## Module Architecture
 
-### Infrastructure Services (1 module)
+### Routing Layer (K8s Ingress / docker-compose nginx)
 
-**api-gateway (:8080)** - Single entry point
-- Spring Cloud Gateway MVC (servlet-based, not WebFlux)
-- Routes requests to downstream services via static URIs (K8s DNS / docker-compose hostnames)
-- Routes:
-  - `/api/auth/**` → auth-service
-  - `/api/users/**` → auth-service
-  - `/oauth2/authorization/**` → auth-service (OAuth2 authorization endpoint)
-  - `/login/oauth2/code/**` → auth-service (OAuth2 callback endpoint)
-  - `/api/movies/**` → movie-service (CRUD, ratings, comments, reactions)
-  - `/api/showtimes/**` → movie-service
-  - `/api/theaters/**` → movie-service
-  - `/api/bookings/**` → booking-service
-  - `/api/payments/**` → payment-service
-  - `/api/notifications/**` → notification-service (SSE stream, REST CRUD, broadcast)
-  - `/api/notifications/stream` → notification-service (SSE endpoint, **ContentCachingResponseWrapper skipped to prevent thread exhaustion**)
+Path-based routing — no dedicated gateway service:
+- `/api/auth/**`, `/api/users/**`, `/oauth2/**`, `/login/oauth2/**` → auth-service:8081
+- `/api/movies/**`, `/api/showtimes/**`, `/api/theaters/**` → movie-service:8082
+- `/api/bookings/**` → booking-service:8083
+- `/api/payments/**` → payment-service:8084
+- `/api/notifications/**` → notification-service:8085
+- `/api/audit/**` → audit-service:8086
+- `/ws/**` → booking-service:8083 (WebSocket upgrade headers)
+
+**K8s:** `k8s/ingress.yml` — NGINX Ingress resource
+**Docker Compose:** `cinema-frontend/nginx.conf` — nginx proxy_pass rules
   - `/api/audit/**` → audit-service (admin-only audit log API, requires ADMIN role)
   - `/ws/**` → Nginx proxy directly to booking-service (WebSocket STOMP endpoint, bypasses gateway)
 - Aggregates OpenAPI documentation: `/v3/api-docs`
@@ -117,7 +104,7 @@ Infrastructure:
   - Modified BookingServiceImpl: Calls publishSeatStatusChange() on lock/reserve/cancel
   - Modified BookingExpiryScheduler: Publishes CANCEL when booking expires
   - **nginx Proxy:** /ws/* endpoint routes directly to booking-service:8083 with WebSocket upgrade headers (Connection: Upgrade, Upgrade: websocket)
-  - **Frontend Connection:** /ws endpoint connects via nginx to booking-service (bypasses api-gateway for WebSocket latency optimization)
+  - **Frontend Connection:** /ws endpoint connects via nginx to booking-service directly (WebSocket upgrade, low-latency)
 - Database: bookingdb (2 tables: bookings, booking_seats)
 
 **payment-service (:8084)** - Stripe payment processing & daily reconciliation
@@ -226,13 +213,13 @@ Infrastructure:
   - seat-grid.component.ts: Color-coded seats (STANDARD=green, PREMIUM=blue, VIP=amber), row A-Z labels, legend
   - seat-selection.component.ts: Booking workflow + timer countdown
   - seat-suggestion-panel.component.ts: Displays recommended adjacent seat groups
-  - seat-websocket.service.ts: STOMP/SockJS client connecting to /ws on booking-service (via nginx proxy, bypassing api-gateway)
+  - seat-websocket.service.ts: STOMP/SockJS client connecting to /ws on booking-service (via nginx proxy)
   - seat-suggestion.service.ts: O(n*m) client-side seat matching algorithm
   - Utilities: seat-grid-layout.utils.ts, seat-grid-keyboard-navigation.utils.ts, seat-selection-timer.utils.ts
   - **March 22 Fixes:** Global sockjs-client polyfill added, Instant→String serialization fixed, nginx proxy with conditional Connection header for WebSocket upgrade
 - **Accessibility:** WCAG 2.1 AA (ARIA grid role, keyboard nav, color+icons, focus styles)
 - Components: ChangePasswordComponent (reactive form with current/new/confirm fields, visibility toggles, validation)
-- API proxy: Configured to route /api/* to http://api-gateway:8080
+- API proxy: nginx.conf routes /api/* directly to each backend service (K8s Ingress in Kubernetes)
 - WebSocket proxy: /ws/* routes directly to booking-service via nginx (for low-latency WebSocket connections)
 - Nginx SPA fallback for client-side routing
 - Password change integration: "Change Password" button on ProfileComponent
@@ -245,7 +232,7 @@ Infrastructure:
 #### User Registration (Deferred Password Setup)
 ```
 CLIENT: POST /api/auth/register
-        └─► api-gateway (routes to auth-service)
+        └─► Ingress/nginx (routes to auth-service)
             └─► auth-service AuthController.register()
                 ├─ Validate email unique, required
                 ├─ Create User: username, email, fullName, password=NULL, active=false, ROLE_USER
@@ -260,7 +247,7 @@ FRONTEND: User clicks activation link in email
               └─► SetupPasswordComponent extracts token, shows password form
 
 CLIENT: POST /api/auth/activate-with-password
-        └─► api-gateway (routes to auth-service)
+        └─► Ingress/nginx (routes to auth-service)
             └─► auth-service AuthController.activateWithPassword()
                 ├─ Validate token (exists, not expired, not used)
                 ├─ Validate password + confirmPassword match
@@ -279,7 +266,7 @@ BACKWARD COMPATIBILITY: Old GET /api/auth/activate?token=uuid still works
 #### Traditional Login (Email + Password)
 ```
 CLIENT: POST /api/auth/login
-        └─► api-gateway (routes to auth-service)
+        └─► Ingress/nginx (routes to auth-service)
             └─► auth-service AuthController
                 ├─ AccountLockService.isLocked() → 423 if locked
                 ├─ AuthenticationManager.authenticate() → BCrypt password match
@@ -295,13 +282,13 @@ CLIENT: POST /api/auth/login
 ```
 CLIENT: Click "Sign in with Google" button
         └─► GET /oauth2/authorization/google
-            └─► api-gateway → auth-service (Spring Security OAuth2)
+            └─► Ingress/nginx → auth-service (Spring Security OAuth2)
                 ├─ Redirect to Google consent screen
                 └─ User grants permission → Google redirects to callback
 
 CLIENT: [OAuth2 callback with authorization code]
         └─► GET /login/oauth2/code/google?code=...&state=...
-            └─► api-gateway → auth-service
+            └─► Ingress/nginx → auth-service
                 └─► OAuth2AuthenticationSuccessHandler.onAuthenticationSuccess()
                     ├─ Extract OAuth2User attributes (sub, email, name, email_verified)
                     ├─ OAuth2UserLinkingService.processOAuth2User()
@@ -323,7 +310,7 @@ FRONTEND: OAuth2CallbackComponent
 #### Subsequent Authenticated Requests
 ```
 CLIENT: GET /api/movies, Authorization: Bearer {accessToken}
-        └─► api-gateway/auth-service
+        └─► Ingress/nginx → auth-service
             └─► JwtAuthenticationFilter.doFilterInternal()
                 ├─ Extract Bearer token
                 ├─ JwtService.validateJwtToken() → signature+expiry+blacklist check
@@ -414,7 +401,7 @@ FRONTEND: seat-websocket.service.ts event handlers
       │  └─ Disconnect detected → retry 1s, 2s, 4s, 8s, 16s, 30s max
       │
       ├─ Nginx Routing:**
-      │  ├─ /ws/* directly routed to booking-service:8083 (bypasses api-gateway)
+      │  ├─ /ws/* directly routed to booking-service:8083
       │  ├─ WebSocket upgrade headers: Connection: Upgrade, Upgrade: websocket
       │  └─ <100ms latency (vs. 2-3s polling; 100x faster)
       │

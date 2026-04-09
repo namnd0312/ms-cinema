@@ -28,7 +28,7 @@
 ```mermaid
 graph TD
     Client["Client\n(Browser / Mobile)"]
-    Gateway["api-gateway\n:8080"]
+    Ingress["K8s NGINX Ingress\n(or nginx in docker-compose)"]
 
     AuthSvc["auth-service\n:8081"]
     MovieSvc["movie-service\n:8082"]
@@ -48,11 +48,11 @@ graph TD
     JwtStarter["jwt-auth-autoconfigure\n(shared lib)"]
     KafkaEvents["kafka-events\n(shared lib)"]
 
-    Client --> Gateway
-    Gateway -->|http://auth-service:8081| AuthSvc
-    Gateway -->|http://movie-service:8082| MovieSvc
-    Gateway -->|http://booking-service:8083| BookingSvc
-    Gateway -->|http://payment-service:8084| PaymentSvc
+    Client --> Ingress
+    Ingress -->|/api/auth/**,/api/users/**| AuthSvc
+    Ingress -->|/api/movies/**,/api/showtimes/**| MovieSvc
+    Ingress -->|/api/bookings/**,/ws/**| BookingSvc
+    Ingress -->|/api/payments/**| PaymentSvc
 
     AuthSvc --> PG
     AuthSvc --> Redis
@@ -94,7 +94,6 @@ graph TD
 
 | Service | Port | Database | Dependencies | Kafka Topics | Key Endpoints |
 |---|---|---|---|---|---|
-| api-gateway | 8080 | — | K8s DNS / static URIs | — | All routes |
 | auth-service | 8081 | testdb (PostgreSQL), Redis | — | Produces: notification-events | /api/auth/**, /api/users/**, /api/auth/validate-token |
 | movie-service | 8082 | moviedb (PostgreSQL) | — | Produces: movie-events | /api/movies/**, /api/showtimes/**, /api/theaters/**, /api/comments/** |
 | booking-service | 8083 | bookingdb (PostgreSQL), Redis | movie-service (Feign) | Consumes: payment-events | /api/bookings/** |
@@ -106,7 +105,7 @@ graph TD
 | Prometheus | 9090 | — | — | — | /metrics |
 | Grafana | 3000 | — | Prometheus | — | Dashboards |
 
-**Gateway Route Table:**
+**Ingress / nginx Route Table:**
 
 | Path Pattern | Target Service |
 |---|---|
@@ -139,8 +138,7 @@ graph LR
             Booking["booking-service\n:8083"]
             Payment["payment-service\n:8084"]
             Notif["notification-service\n:8085"]
-            Gateway["api-gateway\n:8080"]
-            Frontend["cinema-frontend\n:4200"]
+            Frontend["cinema-frontend\n:80\n(nginx proxy)"]
         end
 
         subgraph observability["Observability"]
@@ -162,11 +160,10 @@ graph LR
     Kafka --> Booking
     Kafka --> Payment
     Kafka --> Notif
-    Auth --> Gateway
-    Movie --> Gateway
-    Booking --> Gateway
-    Payment --> Gateway
-    Frontend --> Gateway
+    Frontend --> Auth
+    Frontend --> Movie
+    Frontend --> Booking
+    Frontend --> Payment
     Auth --> Prometheus
     Movie --> Prometheus
     Booking --> Prometheus
@@ -182,8 +179,8 @@ graph LR
 
 ```mermaid
 flowchart TD
-    C["Client"] -->|HTTP request| GW["api-gateway :8080"]
-    GW -->|static URI forward| SVC["Microservice"]
+    C["Client"] -->|HTTP request| ING["K8s Ingress / nginx\n(path-based routing)"]
+    ING -->|route to service| SVC["Microservice"]
 
     SVC -->|reads/writes| DB[("PostgreSQL")]
     SVC -->|cache / seat lock / blacklist| RD[("Redis")]

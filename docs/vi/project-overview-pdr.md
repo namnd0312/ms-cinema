@@ -550,9 +550,6 @@ Phản hồi (403 Forbidden):
 | Tham số | Mặc định | Phạm vi | Ghi chú |
 |---------|----------|---------|---------|
 | server.port (auth-service) | 8081 | Spring Boot | Đã đổi từ 8080 |
-| server.port (api-gateway) | 8080 | Spring Boot | Điểm truy cập bên ngoài |
-| server.port (eureka-server) | 8761 | Spring Boot | Registry dịch vụ |
-| server.port (config-server) | 8888 | Spring Boot | Cấu hình dùng chung |
 | namnd.app.jwtSecret | (Base64 key) | Tùy chỉnh | Chia sẻ qua Config Server |
 | namnd.app.jwtExpiration | 900000 | Tùy chỉnh (ms) | 15 phút |
 | namnd.app.jwtRefreshExpiration | 604800000 | Tùy chỉnh (ms) | 7 ngày |
@@ -589,8 +586,7 @@ Phản hồi (403 Forbidden):
 ## Ghi Chú Triển Khai
 
 ### Thứ Tự Build Multi-Module
-Config Server và Eureka phải chạy trước khi auth-service và api-gateway khởi động.
-Config Server tải `config-repo/application.yml` (JWT secret dùng chung) và cấu hình riêng cho từng dịch vụ.
+Các dịch vụ hạ tầng (PostgreSQL, Kafka, Redis) phải chạy trước khi khởi động các business services.
 
 ### Sử Dụng Thư Viện JWT Starter
 Dịch vụ downstream thêm `jwt-auth-autoconfigure` làm dependency, cấu hình:

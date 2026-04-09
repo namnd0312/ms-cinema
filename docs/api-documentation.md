@@ -10,18 +10,18 @@ All services export interactive OpenAPI 3.0 documentation via SpringDoc OpenAPI 
 
 | Service | Swagger UI | OpenAPI JSON | Port |
 |---------|-----------|---|------|
-| **api-gateway (aggregated)** | http://localhost:8080/swagger-ui.html | /v3/api-docs | 8080 |
 | auth-service | http://localhost:8081/swagger-ui.html | /v3/api-docs | 8081 |
 | movie-service | http://localhost:8082/swagger-ui.html | /v3/api-docs | 8082 |
 | booking-service | http://localhost:8083/swagger-ui.html | /v3/api-docs | 8083 |
 | payment-service | http://localhost:8084/swagger-ui.html | /v3/api-docs | 8084 |
+| notification-service | http://localhost:8085/swagger-ui.html | /v3/api-docs | 8085 |
 | audit-service | http://localhost:8086/swagger-ui.html | /v3/api-docs | 8086 |
 
 ## Configuration Architecture
 
 ### OpenApiConfig Class
 
-Each service (auth-service, movie-service, booking-service, payment-service, api-gateway) contains an `OpenApiConfig` class in the `config` package that:
+Each service contains an `OpenApiConfig` class in the `config` package that:
 
 **1. Customizes API Metadata:**
 - API title, description, version
@@ -372,7 +372,7 @@ stompClient.connect(
 **Nginx Routing (NEW March 22, 2026):**
 - /ws/* routes directly to booking-service:8083
 - WebSocket upgrade headers configured: `Connection: Upgrade`, `Upgrade: websocket`
-- Bypasses api-gateway for low-latency WebSocket connections
+- Direct nginx proxy to booking-service for low-latency WebSocket connections
 
 ## Security in OpenAPI
 

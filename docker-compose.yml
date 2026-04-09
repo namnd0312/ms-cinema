@@ -65,19 +65,6 @@ services:
       - my-net
     restart: unless-stopped
 
-  api-gateway:
-    build:
-      context: ./api-gateway
-      dockerfile: Dockerfile
-    ports:
-      - "8080:8080"
-    networks:
-      - my-net
-    environment:
-      <<: *java-tz
-      ZIPKIN_HOST: zipkin
-    restart: unless-stopped
-
   auth-service:
     build:
       context: .
@@ -224,8 +211,6 @@ services:
       - "4200:80"
     networks:
       - my-net
-    depends_on:
-      - api-gateway
     restart: unless-stopped
 
   prometheus:
