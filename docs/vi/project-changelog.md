@@ -1,11 +1,56 @@
 # Nhật Ký Thay Đổi Dự Án
 
 **Dự án:** ms-cinema
-**Cập nhật:** 1 tháng 4, 2026
+**Cập nhật:** 10 tháng 4, 2026
 
 ## Phiên bản 0.0.1-SNAPSHOT
 
 ### [Chưa phát hành]
+
+#### Kubernetes: Loại Bỏ API Gateway & Sử Dụng K8s Ingress (HOÀN THÀNH ✓) — 9 tháng 4, 2026
+- **Thay Đổi Kiến Trúc:** Loại bỏ dịch vụ Spring Cloud Gateway; thay thế bằng NGINX K8s Ingress cho định tuyến dựa trên đường dẫn
+  - Đã xóa: module spring-cloud-gateway
+  - Thay thế: `k8s/ingress.yml` — tài nguyên NGINX Ingress cho triển khai K8s
+  - Docker Compose: `cinema-frontend/nginx.conf` định tuyến trực tiếp đến các dịch vụ (không có lớp gateway)
+  - Dịch vụ Frontend: Thay đổi thành ClusterIP (Ingress xử lý truy cập bên ngoài)
+  - WebSocket: Chú thích NGINX Ingress cho hỗ trợ nâng cấp `/ws/**`
+  - CORS: Được xử lý ở mức dịch vụ (Spring Security) — không tập hợp tại gateway
+  - Swagger: Truy cập Swagger UI từng dịch vụ (không tập hợp) — cải thiện modular
+  - Tiết Kiệm Bộ Nhớ: Loại bỏ ~512Mi điểm dừng gateway từ triển khai
+- **Lợi Ích:** Topologies triển khai đơn giản hóa, giảm chi phí bộ nhớ, tích hợp Kubernetes gốc
+
+#### Đơn Giản Hóa Cơ Sở Hạ Tầng: Loại Bỏ Eureka & Config Server (HOÀN THÀNH ✓) — 9 tháng 4, 2026
+- **Thay Đổi Service Discovery:** Loại bỏ Spring Cloud Eureka hoàn toàn; áp dụng K8s DNS + URI tĩnh
+  - Đã xóa: module eureka-server
+  - Đã xóa: module config-server
+  - Loại bỏ: phụ thuộc eureka-client từ tất cả 6 tệp pom.xml dịch vụ
+  - Loại bỏ: phụ thuộc config-client từ tất cả 6 tệp pom.xml dịch vụ
+  - Loại bỏ: khối cấu hình Eureka từ tất cả các tệp application.yml
+  - Loại bỏ: chỉ thị `spring.config.import` từ tất cả các dịch vụ
+  - Mới: hồ sơ `application-k8s.yml` với URI dịch vụ tĩnh (http://service-name:port)
+- **Cơ Chế Service Discovery:**
+  - K8s: Các dịch vụ khám phá nhau qua K8s DNS (ví dụ: auth-service:8081)
+  - Docker Compose: Sử dụng tên máy chủ dịch vụ docker-compose (đã tĩnh)
+- **Quản Lý Cấu Hình:** Các dịch vụ sử dụng biến môi trường cho bí mật; không có Config Server tập trung
+- **Docker Compose:** Loại bỏ dịch vụ eureka-server và config-server từ docker-compose.yml
+- **Monitoring:** Loại bỏ các tác vụ scrape Prometheus cho eureka & config
+- **Lợi Ích:** Giảm độ phức tạp hoạt động, đơn giản hóa triển khai K8s, không có service discovery bên ngoài
+- **Tác Động Triển Khai:** Bản kê khai K8s hiện hoàn toàn độc lập; không cần dịch vụ cơ sở hạ tầng riêng
+
+#### Triển Khai Kubernetes Minikube (CHƯƠNG TRÌNH TRIỂN KHAI MỚI ✓) — 7 tháng 4, 2026
+- **Tùy Chọn Triển Khai Mới:** Bản kê khai K8s hoàn chỉnh cho triển khai Minikube / OrbStack cục bộ
+  - Vị trí: thư mục `/k8s` với bản kê khai cho tất cả 6 dịch vụ + cơ sở hạ tầng
+  - Dịch Vụ K8s: ClusterIP cho giao tiếp liên dịch vụ; truy cập bên ngoài qua NGINX Ingress
+  - NGINX Ingress: `k8s/ingress.yml` — định tuyến dựa trên đường dẫn cho `/api/**` và `/ws/**`
+  - ConfigMaps: Cấu hình K8s cho từng dịch vụ (KAFKA_BROKERS, REDIS_HOST, JWT_SECRET)
+  - Bí Mật: Lưu trữ trong các đối tượng K8s Secret (STRIPE_SECRET_KEY, MAIL_USERNAME, MAIL_PASSWORD)
+  - StatefulSet (tùy chọn): Cho PostgreSQL (nếu không sử dụng DB bên ngoài)
+  - Triển Khai: Tất cả 6 dịch vụ, Kafka, PostgreSQL, Redis, ngăn xếp monitoring
+- **Mạng:** Các dịch vụ sử dụng K8s DNS (auth-service, movie-service, v.v.) cho cuộc gọi liên dịch vụ
+- **Lưu Trữ Bền Vững:** K8s PVC cho PostgreSQL / Kafka (có thể cấu hình)
+- **Cách Sử Dụng:** `kubectl apply -f k8s/` để triển khai toàn bộ ngăn xếp trên Minikube / OrbStack
+- **Docker Compose Không Thay Đổi:** docker-compose.yml hiện tại vẫn là chế độ dev cục bộ chính
+- **Lợi Ích:** Hỗ trợ K8s gốc cho kiểm thử giống sản xuất, khả năng mở rộng, triển khai đa bản sao
 
 #### Tiện Ích Ngày/Giờ Frontend (FR-3.4 HOÀN THÀNH ✓) — 1 tháng 4, 2026
 - **Tính năng:** Tiện ích định dạng ngày/giờ an toàn múi giờ cho gửi biểu mẫu

@@ -3,24 +3,24 @@
 **Project:** MS Cinema
 **Version:** 0.0.1-SNAPSHOT
 **Group:** com.namnd
-**Status:** Active Development — Microservice Integration Phase
-**Last Updated:** April 2026
+**Status:** Active Development — Kubernetes-Ready Microservices
+**Last Updated:** April 10, 2026
 
 ## Executive Summary
 
-MS Cinema is a **9-module Spring Cloud microservices platform** for cinema ticket booking with event-driven architecture, JWT authentication, Stripe payments with daily reconciliation, comprehensive audit logging, and observability. The system consists of an API Gateway, 6 business services, 2 shared libraries, and Angular frontend.
+MS Cinema is a **6-service + 2-library Spring Boot microservices platform** for cinema ticket booking with event-driven architecture, JWT authentication, Stripe payments with daily reconciliation, comprehensive audit logging, and observability. Services are deployed via K8s Ingress (no API Gateway) with inter-service discovery via K8s DNS / static URIs. Includes Angular 18 frontend.
 
 **Key Characteristics:**
-- Single external entry point: API Gateway (port 8080)
-- **Auth-service** (port 8081): JWT auth lifecycle, deferred password setup on activation, email activation, account lockout (5 attempts/15min), token rotation, @Auditable integration, OAuth2 Google login, password change with history validation
+- **Routing:** K8s NGINX Ingress (path-based) for K8s; docker-compose nginx for local dev — no dedicated API Gateway service
+- **Auth-service** (port 8081): JWT auth lifecycle (HS512, 15min), deferred password setup on activation, email activation, account lockout (5 attempts/15min), token rotation, @Auditable integration, OAuth2 Google login, password change with history validation
 - **Movie-service** (port 8082): Movies, theaters, showtimes; auto-generates seat grids (A-Z rows); star ratings (1-5), paginated comments with soft-delete, comment reactions (like/dislike), @Auditable on CRUD
 - **Booking-service** (port 8083): Seat reservation with Redis locking (5-min TTL), lifecycle states (PENDING→CONFIRMED/CANCELLED/EXPIRED), @Auditable on operations, real-time WebSocket seat availability (STOMP /ws/booking, <100ms latency)
 - **Payment-service** (port 8084): Stripe integration, idempotent payment intents, webhook verification, Spring Batch daily reconciliation (2 AM cron), admin REST API, @Auditable on payments
-- **Notification-service** (port 8085): Kafka consumer, SMTP email delivery, Redis dedup (24h TTL), real-time SSE notifications
+- **Notification-service** (port 8085): Kafka consumer, SMTP email delivery, Redis dedup (24h TTL), real-time SSE notifications with heartbeat (30s)
 - **Audit-service** (port 8086): Centralized audit logging, Kafka consumer for audit-events, admin API with filtering, PostgreSQL immutable audit logs, 90-day retention
 - **kafka-events module:** Shared domain events (PaymentCompletedEvent, BookingCreatedEvent, AuditEvent), @Auditable annotation, AOP aspect, JPA listeners
 - **jwt-auth-autoconfigure:** Reusable JWT validator for all services (JJWT 0.12.6, HS512)
-- Spring Cloud Gateway for request routing; service discovery via K8s DNS / static URIs
+- **Service Discovery:** K8s DNS (inter-service URIs: auth-service:8081, etc.) or static hostnames in docker-compose
 - **Kafka topics:** payment-events, movie-events, notification-events, notification.in_app, audit-events (3 retries, exponential backoff, DLT, 90-day audit retention)
 - Redis for token blacklist, booking locks, notification dedup
 - PostgreSQL per-service (auth→testdb, movie→moviedb, booking→bookingdb, payment→paymentdb, notification→notificationdb, audit→auditdb)

@@ -1,11 +1,58 @@
 # Project Changelog
 
 **Project:** ms-cinema
-**Updated:** April 1, 2026
+**Updated:** April 10, 2026
 
 ## Version 0.0.1-SNAPSHOT
 
 ### [Unreleased]
+
+#### Kubernetes Migration: Remove API Gateway & Use K8s Ingress (COMPLETE ✓) — April 9, 2026
+- **Architecture Change:** Eliminated Spring Cloud Gateway service; replaced with NGINX K8s Ingress for path-based routing
+  - Deleted: spring-cloud-gateway module entirely
+  - Replacement: `k8s/ingress.yml` — NGINX Ingress resource for K8s deployment
+  - Docker Compose: `cinema-frontend/nginx.conf` routes directly to services (no gateway layer)
+  - Frontend Service: Changed to ClusterIP (Ingress handles external access)
+  - WebSocket: NGINX Ingress annotations for `/ws/**` WebSocket upgrade support
+  - CORS: Handled at service level (Spring Security) — no aggregation at gateway
+  - Swagger: Per-service Swagger UI access (no aggregation) — improved modularity
+  - Memory Savings: Removed ~512Mi gateway footprint from deployment
+- **Benefits:** Simplified deployment topology, reduced memory overhead, native Kubernetes integration
+- **Migration Path:** Docker Compose continues to use nginx proxy; K8s uses native Ingress
+
+#### Infrastructure Simplification: Remove Eureka & Config Server (COMPLETE ✓) — April 9, 2026
+- **Service Discovery Change:** Removed Spring Cloud Eureka entirely; adopted K8s DNS + static URIs
+  - Deleted: eureka-server module
+  - Deleted: config-server module
+  - Removed: eureka-client dependency from all 6 service pom.xml files
+  - Removed: config-client dependency from all 6 service pom.xml files
+  - Removed: Eureka configuration blocks from all application.yml files
+  - Removed: `spring.config.import` directive from all services
+  - New: `application-k8s.yml` profile with static service URIs (http://service-name:port)
+- **Service Discovery Mechanism:**
+  - K8s: Services discover each other via K8s DNS (e.g., auth-service:8081)
+  - Docker Compose: Uses docker-compose service hostnames (already static)
+- **Configuration Management:** Services use environment variables for secrets; no centralized Config Server
+- **Docker Compose:** Removed eureka-server and config-server services from docker-compose.yml
+- **Monitoring:** Removed Prometheus scrape jobs for eureka & config services
+- **Benefits:** Reduced operational complexity, simplified K8s deployment, no external service discovery
+- **Deployment Impact:** K8s manifests now fully self-contained; no separate infra services needed
+
+#### Kubernetes Minikube Deployment (NEW DEPLOYMENT MODE ✓) — April 7, 2026
+- **New Deployment Option:** Full K8s manifests for local Minikube / OrbStack deployment
+  - Location: `/k8s` directory with manifests for all 6 services + infrastructure
+  - K8s Services: ClusterIP for inter-service communication; external access via NGINX Ingress
+  - NGINX Ingress: `k8s/ingress.yml` — path-based routing for `/api/**` and `/ws/**` endpoints
+  - ConfigMaps: Per-service k8s environment configuration (KAFKA_BROKERS, REDIS_HOST, JWT_SECRET)
+  - Secrets: Stored in K8s Secret objects (STRIPE_SECRET_KEY, MAIL_USERNAME, MAIL_PASSWORD)
+  - StatefulSet (optional): For PostgreSQL (if not using external DB)
+  - Deployment: All 6 services, Kafka, PostgreSQL, Redis, monitoring stack
+- **Networking:** Services use K8s DNS (auth-service, movie-service, etc.) for inter-service calls
+- **Persistent Storage:** K8s PVC for PostgreSQL / Kafka (configurable)
+- **Usage:** `kubectl apply -f k8s/` to deploy entire stack on Minikube / OrbStack
+- **Docker Compose Unchanged:** Existing docker-compose.yml remains the primary local dev mode
+- **Benefits:** Native K8s support for production-like testing, scalability, multi-replica deployment
+
 
 #### Frontend Date/Time Utilities (FR-3.4 COMPLETE ✓) — April 1, 2026
 - **Feature:** Timezone-safe date/time formatting utilities for form submissions

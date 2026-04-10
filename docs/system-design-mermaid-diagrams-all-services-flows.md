@@ -1,6 +1,6 @@
 # System Design — Cinema Booking Platform
 
-> Last updated: 2026-03-10
+> Last updated: April 10, 2026
 
 ---
 

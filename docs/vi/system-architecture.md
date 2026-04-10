@@ -6,7 +6,7 @@
 
 ## Tổng Quan Cấp Cao
 
-MS Cinema là nền tảng microservices Spring Cloud gồm 8 module dành cho đặt vé xem phim:
+MS Cinema là nền tảng microservices Spring Boot gồm 6 dịch vụ + 2 thư viện dùng chung dành cho đặt vé xem phim:
 
 ```
                         CLIENT (Web/Mobile)

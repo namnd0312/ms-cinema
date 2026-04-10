@@ -6,7 +6,7 @@
 
 ## High-Level Overview
 
-MS Cinema is an 8-module Spring Cloud microservices platform for cinema ticket booking:
+MS Cinema is a 6-module Spring Boot microservices platform + 2 shared libraries for cinema ticket booking:
 
 ```
                         CLIENT (Web/Mobile)
@@ -28,6 +28,10 @@ Infrastructure:
 - Prometheus (:9090) + Grafana (:3000) + Loki (:3100) - monitoring
 - Zipkin (:9411) - distributed tracing
 - Kafdrop (:9000) - Kafka topic browser
+
+Business Services: 6 modules (auth, movie, booking, payment, notification, audit)
+Shared Libraries: 2 modules (jwt-auth-autoconfigure, kafka-events)
+Frontend: Angular 18
 ```
 
 ## Module Architecture
@@ -43,14 +47,18 @@ Path-based routing — no dedicated gateway service:
 - `/api/audit/**` → audit-service:8086
 - `/ws/**` → booking-service:8083 (WebSocket upgrade headers)
 
-**K8s:** `k8s/ingress.yml` — NGINX Ingress resource
+**K8s:** `k8s/ingress.yml` — NGINX Ingress resource with path-based rules
 **Docker Compose:** `cinema-frontend/nginx.conf` — nginx proxy_pass rules
-  - `/api/audit/**` → audit-service (admin-only audit log API, requires ADMIN role)
-  - `/ws/**` → Nginx proxy directly to booking-service (WebSocket STOMP endpoint, bypasses gateway)
-- Aggregates OpenAPI documentation: `/v3/api-docs`
-- Swagger UI: `/swagger-ui.html`
+  - `/api/auth/**`, `/api/users/**`, `/oauth2/**`, `/login/oauth2/**` → auth-service:8081
+  - `/api/movies/**`, `/api/showtimes/**`, `/api/theaters/**` → movie-service:8082
+  - `/api/bookings/**` → booking-service:8083
+  - `/api/payments/**` → payment-service:8084
+  - `/api/notifications/**` → notification-service:8085
+  - `/api/audit/**` → audit-service:8086 (admin-only, requires ADMIN role)
+  - `/ws/**` → booking-service:8083 (WebSocket STOMP with upgrade headers)
+- Per-Service Swagger UI: Each service exposes individual `/swagger-ui.html` (no aggregation)
 - HttpLoggingFilter: Logs requests with X-Correlation-ID, skips response caching for SSE paths
-- Actuator endpoints (internal only, not exposed via gateway)
+- Actuator endpoints: Internal only, not exposed via Ingress/nginx
 
 ### Business Services (6 modules)
 

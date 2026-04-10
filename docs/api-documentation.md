@@ -3,10 +3,12 @@
 **Project:** ms-cinema
 **Framework:** SpringDoc OpenAPI 2.8.4
 **OpenAPI Version:** 3.0
+**Updated:** April 10, 2026
 
 ## Swagger UI Access Points
 
-All services export interactive OpenAPI 3.0 documentation via SpringDoc OpenAPI with Swagger UI:
+**Development (Direct Service):**
+All services export interactive OpenAPI 3.0 documentation via SpringDoc OpenAPI with Swagger UI on individual ports:
 
 | Service | Swagger UI | OpenAPI JSON | Port |
 |---------|-----------|---|------|

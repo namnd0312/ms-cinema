@@ -2,19 +2,20 @@
 
 **Project:** ms-cinema
 **Version:** 0.0.1-SNAPSHOT
-**Updated:** April 2026
+**Updated:** April 10, 2026
 
 ## Table of Contents
 
 1. [Prerequisites](#prerequisites)
 2. [Local Development Setup](#local-development-setup)
-3. [Docker Deployment](#docker-deployment)
-4. [Production Deployment](#production-deployment)
-5. [Configuration Management](#configuration-management)
-6. [Database Setup](#database-setup)
-7. [Monitoring & Logging](#monitoring--logging)
-8. [Troubleshooting](./deployment-troubleshooting.md#troubleshooting)
-9. [Rollback Procedures](./deployment-troubleshooting.md#rollback-procedures)
+3. [Docker Compose Deployment](#docker-compose-deployment)
+4. [Kubernetes Minikube Deployment](#kubernetes-minikube-deployment)
+5. [Production Deployment](#production-deployment)
+6. [Configuration Management](#configuration-management)
+7. [Database Setup](#database-setup)
+8. [Monitoring & Logging](#monitoring--logging)
+9. [Troubleshooting](./deployment-troubleshooting.md#troubleshooting)
+10. [Rollback Procedures](./deployment-troubleshooting.md#rollback-procedures)
 
 ---
 
@@ -195,24 +196,41 @@ curl http://localhost:8080/api/auth/register
 
 ---
 
-## Docker Deployment
+## Docker Compose Deployment
 
-### 1. Build Docker Image
-
-```bash
-docker build -t auth-service:latest .
-docker images | grep auth-service  # verify
-```
-
-### 2. Run with Docker Compose (Recommended)
+### 1. Build Docker Images
 
 ```bash
-docker-compose up -d  # Start all services
-docker-compose ps     # Verify running
-docker-compose logs -f auth-service  # View logs
+# Build all services and frontend
+docker-compose build
+
+# Or build specific service
+docker-compose build auth-service
 ```
 
-**Service Dependencies:** auth-service (postgres, redis, kafka), notification-service (kafka, redis)
+### 2. Start All Services
+
+```bash
+# Start in background
+docker-compose up -d
+
+# Verify services running
+docker-compose ps
+
+# View logs for a specific service
+docker-compose logs -f auth-service
+
+# View all logs
+docker-compose logs -f
+```
+
+**Services Started:**
+- PostgreSQL (6 databases: testdb, moviedb, bookingdb, paymentdb, notificationdb, auditdb)
+- Kafka KRaft (single broker, no Zookeeper)
+- Redis
+- All 6 business services (auth, movie, booking, payment, notification, audit)
+- Cinema-frontend (Angular 18 via Nginx on port 80)
+- Monitoring: Prometheus, Grafana, Loki, Zipkin, Kafdrop
 
 ### 3. Environment Variables for Docker
 
@@ -252,7 +270,151 @@ services:
 ```bash
 docker-compose down     # Stop services
 docker-compose down -v  # Stop + remove volumes (WARNING: deletes data)
-docker rmi auth-service:latest  # Remove images
+```
+
+---
+
+## Kubernetes Minikube Deployment
+
+### 1. Prerequisites
+
+```bash
+# Install kubectl
+kubectl version --client
+
+# Install Minikube (macOS)
+brew install minikube
+
+# Or OrbStack (alternative)
+# https://orbstack.dev/
+
+# Start Minikube cluster
+minikube start --memory 4096 --cpus 2
+
+# Verify cluster
+kubectl cluster-info
+kubectl get nodes
+```
+
+### 2. Build and Push Images to Minikube
+
+```bash
+# Option A: Use Minikube Docker (no registry needed for local testing)
+eval $(minikube docker-env)
+docker-compose build
+
+# Option B: Build and push to registry (for production-like setup)
+docker-compose build
+docker tag auth-service:latest myregistry.azurecr.io/auth-service:latest
+docker push myregistry.azurecr.io/auth-service:latest
+# Update k8s/deployments/auth-service.yaml image reference
+```
+
+### 3. Deploy to Kubernetes
+
+```bash
+# Create namespaces (optional)
+kubectl create namespace ms-cinema
+
+# Apply all K8s manifests
+kubectl apply -f k8s/
+
+# Verify deployments
+kubectl get deployments
+kubectl get services
+kubectl get pods
+
+# Check logs
+kubectl logs -f deployment/auth-service
+```
+
+### 4. Access Services
+
+```bash
+# Get Minikube IP
+MINIKUBE_IP=$(minikube ip)
+echo $MINIKUBE_IP
+
+# Access Ingress endpoints via Minikube IP
+# Frontend: http://$MINIKUBE_IP/
+# Auth Swagger: http://$MINIKUBE_IP/api/auth/swagger-ui.html
+# Movie Swagger: http://$MINIKUBE_IP/api/movies/swagger-ui.html
+
+# Port forward for Kafka/Redis (optional)
+kubectl port-forward svc/kafka 9092:9092
+kubectl port-forward svc/redis 6379:6379
+
+# Port forward for monitoring
+kubectl port-forward svc/prometheus 9090:9090
+kubectl port-forward svc/grafana 3000:3000
+```
+
+### 5. K8s Manifest Structure
+
+```
+k8s/
+├── configmap-kafka.yml         # Kafka broker configuration
+├── configmap-auth-service.yml  # Auth-service config
+├── configmap-*.yml             # Per-service configs
+├── secret-app.yml              # Stripe key, JWT secret, mail credentials (create manually)
+├── deployment-*.yml            # Service deployments (6 services)
+├── service-*.yml               # K8s ClusterIP services
+├── statefulset-postgres.yml    # PostgreSQL StatefulSet (optional, use managed DB in production)
+├── statefulset-kafka.yml       # Kafka StatefulSet
+├── deployment-redis.yml        # Redis deployment
+├── ingress.yml                 # NGINX Ingress with path-based routing
+└── monitoring/                 # Prometheus, Grafana, Loki manifests (optional)
+```
+
+### 6. Create Required Secrets
+
+```bash
+# Create Secret for sensitive data
+kubectl create secret generic app-secrets \
+  --from-literal=jwt-secret="your-jwt-secret-key" \
+  --from-literal=stripe-secret-key="sk_test_..." \
+  --from-literal=stripe-webhook-secret="whsec_..." \
+  --from-literal=mail-username="your-gmail@gmail.com" \
+  --from-literal=mail-password="your-app-password"
+
+# Verify secret created
+kubectl get secrets
+kubectl describe secret app-secrets
+```
+
+### 7. Monitor Deployment
+
+```bash
+# Watch rollout status
+kubectl rollout status deployment/auth-service
+
+# Check service endpoints
+kubectl get svc
+
+# Describe ingress
+kubectl describe ingress ms-cinema-ingress
+
+# Get logs from pod
+kubectl logs <pod-name>
+
+# SSH into pod for debugging
+kubectl exec -it <pod-name> -- /bin/sh
+```
+
+### 8. Stop and Clean Up
+
+```bash
+# Delete all resources
+kubectl delete -f k8s/
+
+# Or delete specific namespace
+kubectl delete namespace ms-cinema
+
+# Stop Minikube
+minikube stop
+
+# Delete Minikube cluster (WARNING: deletes all data)
+minikube delete
 ```
 
 ---

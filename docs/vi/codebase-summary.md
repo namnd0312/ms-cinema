@@ -2,12 +2,12 @@
 
 **Dự án:** ms-cinema
 **Ngày tạo:** Tháng 4 năm 2026
-**Kiến trúc:** 8 module Maven microservices (Spring Cloud)
+**Kiến trúc:** 6 Dịch vụ Nghiệp vụ + 2 Thư viện Dùng chung + Angular Frontend
 **Java Version:** 21 LTS
 **Spring Boot:** 3.4.3
-**Spring Cloud:** 2024.0.1
+**Spring Cloud:** 2024.0.1 (Service Discovery qua K8s DNS / URI Tĩnh)
 
-## Tổng Quan 8 Module Maven
+## Tổng Quan Module Maven
 
 ```
 ms-cinema/ (root pom: packaging=pom)

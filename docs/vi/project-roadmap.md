@@ -242,17 +242,31 @@ MS Cinema là nền tảng đặt vé xem phim toàn diện được xây dựng
 - **Ưu tiên:** TRUNG BÌNH
 - **Công sức:** Trung bình (3-4 ngày)
 
-**FR-4.5: Triển Khai Kubernetes**
-- Helm charts cho tất cả dịch vụ
-- Liveness/readiness probes
-- Giới hạn & yêu cầu tài nguyên
-- ConfigMaps cho cấu hình môi trường
-- Secrets cho dữ liệu nhạy cảm
-- **Ưu tiên:** TRUNG BÌNH
-- **Công sức:** Lớn (5-7 ngày)
-- Tài liệu tất cả tham số cấu hình
-- **Ưu tiên:** CAO
-- **Công sức:** Nhỏ (1-2 ngày)
+**FR-4.0: Đơn Giản Hóa Cơ Sở Hạ Tầng (HOÀN THÀNH ✓ 9 tháng 4, 2026)**
+- ✓ **Loại Bỏ Eureka Service Discovery:** Xóa module eureka-server, xóa eureka-client từ 6 dịch vụ
+- ✓ **Loại Bỏ Config Server:** Xóa module config-server, xóa config-client và spring.config.import từ tất cả dịch vụ
+- ✓ **Áp Dụng URI Tĩnh:** Các dịch vụ cấu hình qua application-k8s.yml với K8s DNS (ví dụ: auth-service:8081)
+- ✓ **Đơn Giản Hóa Cấu Hình:** Biến môi trường cho bí mật, không có kho cấu hình tập trung
+- ✓ **Loại Bỏ API Gateway:** Xóa Spring Cloud Gateway service, thay thế bằng NGINX K8s Ingress
+- ✓ **Cập Nhật Docker Compose:** Xóa dịch vụ eureka-server và config-server
+- ✓ **Cập Nhật Prometheus:** Loại bỏ scrape jobs cho eureka và config
+- ✓ **Cập Nhật pom.xml:** Tất cả 6 dịch vụ loại bỏ spring-cloud-eureka và config-client
+- **Trạng thái:** HOÀN THÀNH (9 tháng 4, 2026)
+- **Lợi Ích:** Giảm độ phức tạp hoạt động, khởi động nhanh hơn, bộ nhớ nhỏ hơn, tiếp cận K8s gốc
+
+**FR-4.5: Triển Khai Kubernetes (HOÀN THÀNH ✓ 7 tháng 4, 2026)**
+- ✓ Bản kê khai K8s hoàn chỉnh dưới thư mục `/k8s` cho Minikube / OrbStack
+- ✓ Dịch vụ K8s sử dụng ClusterIP cho giao tiếp liên dịch vụ
+- ✓ NGINX Ingress resource cho định tuyến dựa trên đường dẫn (không có gateway)
+- ✓ ConfigMaps cho mỗi dịch vụ (cấu hình môi trường K8s)
+- ✓ Kubernetes Secrets cho dữ liệu nhạy cảm (JWT_SECRET, STRIPE_SECRET_KEY, mail credentials)
+- ✓ StatefulSet hoặc Deployment cho PostgreSQL, Kafka, Redis (có thể cấu hình)
+- ✓ Deployment manifest cho tất cả 6 dịch vụ
+- ✓ Service Discovery qua K8s DNS (ví dụ: auth-service:8081, movie-service:8082)
+- ✓ Docker-compose cập nhật sử dụng URI dịch vụ tĩnh (đã tương thích)
+- ✓ Toàn bộ monitoring stack (Prometheus, Grafana, Loki, Zipkin) sẵn sàng K8s
+- **Trạng thái:** HOÀN THÀNH (7 tháng 4, 2026)
+- **Lợi Ích:** Hỗ trợ K8s gốc để kiểm thử giống sản xuất, khả năng mở rộng, triển khai đa bản sao
 
 **Chỉ số thành công Giai đoạn 3:**
 - Khả dụng 99.95% trong production

@@ -2,19 +2,20 @@
 
 **Dự án:** ms-cinema
 **Phiên bản:** 0.0.1-SNAPSHOT
-**Cập nhật:** Tháng 4 năm 2026
+**Cập nhật:** 10 tháng 4 năm 2026
 
 ## Mục Lục
 
 1. [Yêu cầu tiên quyết](#yêu-cầu-tiên-quyết)
 2. [Thiết lập phát triển cục bộ](#thiết-lập-phát-triển-cục-bộ)
-3. [Triển khai Docker](#triển-khai-docker)
-4. [Triển khai production](#triển-khai-production)
-5. [Quản lý cấu hình](#quản-lý-cấu-hình)
-6. [Thiết lập cơ sở dữ liệu](#thiết-lập-cơ-sở-dữ-liệu)
-7. [Giám sát & Ghi log](#giám-sát--ghi-log)
-8. [Xử lý sự cố](./deployment-troubleshooting.md#troubleshooting)
-9. [Quy trình khôi phục](./deployment-troubleshooting.md#rollback-procedures)
+3. [Triển khai Docker Compose](#triển-khai-docker-compose)
+4. [Triển khai Kubernetes Minikube](#triển-khai-kubernetes-minikube)
+5. [Triển khai production](#triển-khai-production)
+6. [Quản lý cấu hình](#quản-lý-cấu-hình)
+7. [Thiết lập cơ sở dữ liệu](#thiết-lập-cơ-sở-dữ-liệu)
+8. [Giám sát & Ghi log](#giám-sát--ghi-log)
+9. [Xử lý sự cố](./deployment-troubleshooting.md#troubleshooting)
+10. [Quy trình khôi phục](./deployment-troubleshooting.md#rollback-procedures)
 
 ---
 

@@ -2,31 +2,32 @@
 
 **Project:** ms-cinema
 **Generated:** April 2026
-**Architecture:** 8-module Maven microservices (Spring Cloud)
+**Architecture:** 6 Business Services + 2 Shared Libraries + Angular Frontend
 **Java Version:** 21 LTS
 **Spring Boot:** 3.4.3
-**Spring Cloud:** 2024.0.1
+**Spring Cloud:** 2024.0.1 (Service Discovery via K8s DNS / Static URIs)
 
-## 8 Maven Modules Overview
+## Maven Modules Overview
 
 ```
 ms-cinema/ (root pom: packaging=pom)
 ├── Business Services (6 modules)
-│   ├── auth-service (:8081) - JWT auth, user management, @Auditable integration
-│   ├── movie-service (:8082) - Movies, theaters, showtimes, @Auditable on CRUD operations
-│   ├── booking-service (:8083) - Seat reservation, Feign → movie-service, @Auditable
-│   ├── payment-service (:8084) - Stripe payments, webhooks, @Auditable on payments
-│   ├── notification-service (:8085) - Kafka consumer, email (SMTP), SSE real-time
+│   ├── auth-service (:8081) - JWT auth, user management, @Auditable integration, OAuth2
+│   ├── movie-service (:8082) - Movies, theaters, showtimes, ratings, comments, @Auditable on CRUD
+│   ├── booking-service (:8083) - Seat reservation, Feign → movie-service, WebSocket STOMP, @Auditable
+│   ├── payment-service (:8084) - Stripe payments, webhooks, Spring Batch reconciliation, @Auditable
+│   ├── notification-service (:8085) - Kafka consumer, email (SMTP), SSE real-time streams
 │   └── audit-service (:8086) - Kafka consumer for audit-events, admin API with filtering
 ├── Shared Libraries (2 modules)
-│   ├── kafka-events - Event domain models, AuditEvent record, AuditAction enum, audit/ package
-│   └── jwt-auth-autoconfigure - Reusable JWT validator
+│   ├── kafka-events - Event domain models, AuditEvent record, AuditAction enum, audit infrastructure
+│   └── jwt-auth-autoconfigure - Reusable JWT validator (HS512, auto-configuration)
 ├── Frontend (1 module)
-│   └── cinema-frontend (:4200→80) - Angular 18
-└── Infrastructure Config
-    ├── docker-compose.yml - PostgreSQL (6 DBs), Kafka, Redis, monitoring stack
+│   └── cinema-frontend (:4200→80) - Angular 18, Material, Stripe.js, WebSocket STOMP client
+└── Infrastructure & Deployment
+    ├── docker-compose.yml - PostgreSQL (6 DBs), Kafka KRaft, Redis, monitoring stack (local dev)
+    ├── k8s/ - Kubernetes manifests for Minikube/OrbStack deployment (ConfigMaps, Secrets, Services, Ingress)
     ├── monitoring/ - Prometheus.yml, Grafana dashboards, Loki config
-    └── docs/ - Documentation files
+    └── docs/ - Project documentation
 ```
 
 ## auth-service (Port 8081)

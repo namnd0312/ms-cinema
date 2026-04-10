@@ -261,13 +261,25 @@ MS Cinema is a comprehensive cinema ticket booking platform built on Spring Boot
 
 ---
 
-### Phase 4: Security & Operations (IN PROGRESS)
+### Phase 4: Infrastructure Simplification & Security (PARTIALLY COMPLETE)
 
-**Status:** In Progress
-**Timeline:** May - July 2026
-**Focus:** Production hardening and compliance
+**Status:** Partially Complete
+**Timeline:** April 2026 - Ongoing
+**Focus:** Simplified architecture, production hardening, and compliance
 
 **Completed Features:**
+
+**FR-4.0: Infrastructure Simplification (COMPLETE ✓ April 9, 2026)**
+- ✓ **Removed Eureka Service Discovery:** Deleted eureka-server module, removed eureka-client from all 6 services
+- ✓ **Removed Config Server:** Deleted config-server module, removed config-client and spring.config.import from all services
+- ✓ **Adopted Static Service URIs:** Services configured via application-k8s.yml with K8s DNS (e.g., auth-service:8081)
+- ✓ **Simplified Configuration:** Environment variables for secrets, no centralized config repository
+- ✓ **Removed API Gateway:** Deleted Spring Cloud Gateway service, replaced with NGINX K8s Ingress
+- ✓ **Updated docker-compose:** Removed eureka-server and config-server services
+- ✓ **Updated Prometheus:** Removed scrape jobs for eureka and config services
+- ✓ **Updated pom.xml:** All 6 services cleaned of spring-cloud-eureka and config-client dependencies
+- **Status:** COMPLETE (April 9, 2026)
+- **Benefits:** Reduced operational complexity, faster startup, smaller memory footprint, K8s-native approach
 
 **FR-4.1: Audit Logging (COMPLETE ✓ March 21, 2026)**
 - ✓ Centralized audit-service (:8086) — Kafka event consumer
@@ -313,17 +325,19 @@ MS Cinema is a comprehensive cinema ticket booking platform built on Spring Boot
 - **Priority:** MEDIUM
 - **Effort:** Medium (3-4 days)
 
-**FR-4.5: Kubernetes Deployment**
-- Helm charts for all services
-- Liveness/readiness probes
-- Resource limits & requests
-- ConfigMaps for environment config
-- Secrets for sensitive data
-- **Priority:** MEDIUM
-- **Effort:** Large (5-7 days)
-- Document all configuration parameters
-- **Priority:** HIGH
-- **Effort:** Small (1-2 days)
+**FR-4.5: Kubernetes Deployment (COMPLETE ✓ April 7, 2026)**
+- ✓ Full K8s manifests under `/k8s` directory for Minikube / OrbStack deployment
+- ✓ Services use ClusterIP for inter-service communication
+- ✓ NGINX Ingress resource for path-based routing (no API Gateway)
+- ✓ ConfigMaps per service for environment configuration
+- ✓ Kubernetes Secrets for sensitive data (JWT_SECRET, STRIPE_SECRET_KEY, mail credentials)
+- ✓ StatefulSet or Deployment for PostgreSQL, Kafka, Redis (configurable)
+- ✓ Deployment manifest for all 6 business services
+- ✓ Service Discovery via K8s DNS (e.g., auth-service:8081, movie-service:8082)
+- ✓ Updated docker-compose to use static service URIs (already compatible)
+- ✓ All monitoring stack (Prometheus, Grafana, Loki, Zipkin) K8s-ready
+- **Status:** COMPLETE (April 7, 2026)
+- **Benefits:** Native Kubernetes support, production-ready deployments, no external service discovery needed
 
 **Phase 3 Success Metrics:**
 - 99.95% availability in production
