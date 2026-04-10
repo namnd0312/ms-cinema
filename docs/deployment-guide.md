@@ -230,7 +230,7 @@ docker-compose logs -f
 - Redis
 - All 6 business services (auth, movie, booking, payment, notification, audit)
 - Cinema-frontend (Angular 18 via Nginx on port 80)
-- Monitoring: Prometheus, Grafana, Loki, Zipkin, Kafdrop
+- Monitoring: Prometheus, Grafana, Loki, Zipkin
 
 ### 3. Environment Variables for Docker
 

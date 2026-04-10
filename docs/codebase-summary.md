@@ -570,12 +570,6 @@ jwt:
 - Auto-traces: service-to-service (HTTP/Feign), Kafka, database operations
 - Zero code changes: enabled by Spring Boot 3.4.3 auto-configuration
 
-**Kafdrop (Port 9000)**
-- Kafka topic browser UI for local development
-- Docker image: obsidiandynamics/kafdrop:4.0.2
-- Browse topics, inspect messages, monitor consumer groups
-- Not for production; use for troubleshooting Kafka events
-
 **Actuator Metrics (/actuator/prometheus):**
 - Exposed on all services
 - Security: Internal Docker network only (not via API Gateway)

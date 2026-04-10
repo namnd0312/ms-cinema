@@ -51,7 +51,6 @@ mvn -pl audit-service spring-boot:run           # port 8086
 | notification-service | 8085 | Real-time notifications | SSE streaming, Kafka consumer, email (SMTP), PostgreSQL persistence |
 | audit-service | 8086 | Audit logging | Kafka consumer, PostgreSQL persistence, admin API with filtering |
 | zipkin | 9411 | Distributed tracing | Trace visualization, span analysis |
-| kafdrop | 9000 | Kafka topic browser | Topic inspection, message viewing |
 | cinema-frontend | 4200→80 | Web UI | Angular 18, Material, Stripe.js, real-time notification bell, seat grid with WebSocket |
 
 ## API Documentation

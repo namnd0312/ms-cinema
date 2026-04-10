@@ -577,12 +577,6 @@ jwt.auth.secret: ${JWT_SECRET}
 - Tự động trace: giữa dịch vụ (HTTP/Feign), Kafka, thao tác cơ sở dữ liệu
 - Không cần thay đổi mã: kích hoạt bởi auto-configuration Spring Boot 3.4.3
 
-**Kafdrop (Cổng 9000)**
-- Giao diện trình duyệt Kafka topic cho phát triển cục bộ
-- Docker image: obsidiandynamics/kafdrop:4.0.2
-- Duyệt topic, kiểm tra message, giám sát consumer group
-- Không dùng cho production; dùng để gỡ lỗi sự kiện Kafka
-
 **Metrics Actuator (/actuator/prometheus):**
 - Lộ trên tất cả dịch vụ
 - Bảo mật: Chỉ mạng Docker nội bộ (không qua API Gateway)

@@ -27,7 +27,6 @@ Hạ tầng:
 - Kafka (:9092) - event streaming (5 topic: movie-events, payment-events, notification-events, notification.in_app, audit-events)
 - Prometheus (:9090) + Grafana (:3000) + Loki (:3100) - giám sát
 - Zipkin (:9411) - distributed tracing
-- Kafdrop (:9000) - trình duyệt Kafka topic
 ```
 
 ## Kiến Trúc Module
@@ -474,11 +473,6 @@ cinema-frontend: Kết Nối SSE Thời Gian Thực
 - traceId/spanId tự động chèn vào log qua MDC để tương quan
 - Không cần thay đổi mã: tự động cấu hình bởi Spring Boot 3.4.3
 - Docker image: openzipkin/zipkin:3.4 (phiên bản cố định)
-
-**Kafdrop (:9000)**
-- Giao diện trình duyệt Kafka topic cho phát triển và gỡ lỗi cục bộ
-- Xem topic, kiểm tra message, giám sát consumer group
-- Docker image: obsidiandynamics/kafdrop:4.0.2
 
 ## Tổng Hợp Stack Công Nghệ
 

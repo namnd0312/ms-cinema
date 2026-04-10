@@ -27,7 +27,6 @@ Infrastructure:
 - Kafka (:9092) - event streaming (5 topics: movie-events, payment-events, notification-events, notification.in_app, audit-events)
 - Prometheus (:9090) + Grafana (:3000) + Loki (:3100) - monitoring
 - Zipkin (:9411) - distributed tracing
-- Kafdrop (:9000) - Kafka topic browser
 
 Business Services: 6 modules (auth, movie, booking, payment, notification, audit)
 Shared Libraries: 2 modules (jwt-auth-autoconfigure, kafka-events)
@@ -636,11 +635,6 @@ ADMIN: Query audit logs
 - traceId/spanId auto-injected into logs via MDC for correlation
 - No code changes required: auto-configured by Spring Boot 3.4.3
 - Docker image: openzipkin/zipkin:3.4 (pinned version)
-
-**Kafdrop (:9000)**
-- Kafka topic browser UI for local development and debugging
-- Inspect topics, view messages, monitor consumer groups
-- Docker image: obsidiandynamics/kafdrop:4.0.2
 
 ## Technology Stack Summary
 
