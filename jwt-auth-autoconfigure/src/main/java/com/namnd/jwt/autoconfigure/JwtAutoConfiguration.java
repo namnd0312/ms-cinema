@@ -1,13 +1,16 @@
 package com.namnd.jwt.autoconfigure;
 
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
+import org.springframework.core.Ordered;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
@@ -63,5 +66,17 @@ public class JwtAutoConfiguration {
             .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(name = "serviceNameHeaderFilterRegistration")
+    public FilterRegistrationBean<ServiceNameHeaderFilter> serviceNameHeaderFilterRegistration(
+            @Value("${spring.application.name:unknown}") String applicationName) {
+        FilterRegistrationBean<ServiceNameHeaderFilter> registration = new FilterRegistrationBean<>();
+        registration.setFilter(new ServiceNameHeaderFilter(applicationName));
+        registration.addUrlPatterns("/*");
+        registration.setOrder(Ordered.HIGHEST_PRECEDENCE);
+        registration.setName("serviceNameHeaderFilter");
+        return registration;
     }
 }
