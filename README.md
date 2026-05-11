@@ -23,7 +23,7 @@ Enterprise-grade cinema ticket booking system built on Spring Boot 3.4.3 microse
 ### Option 1: Docker Compose (Recommended)
 ```bash
 docker-compose up --build
-# Starts: PostgreSQL, Kafka, Redis, Prometheus, Grafana, Loki, Zipkin, all 7 app services
+# Starts: PostgreSQL, Kafka, Redis, Prometheus, Grafana, Loki, Tempo, OTel Collector, all 7 app services
 ```
 
 ### Option 2: Local Setup
@@ -50,7 +50,8 @@ mvn -pl audit-service spring-boot:run           # port 8086
 | payment-service | 8084 | Payment processing | Stripe, webhook verification, payment notifications |
 | notification-service | 8085 | Real-time notifications | SSE streaming, Kafka consumer, email (SMTP), PostgreSQL persistence |
 | audit-service | 8086 | Audit logging | Kafka consumer, PostgreSQL persistence, admin API with filtering |
-| zipkin | 9411 | Distributed tracing | Trace visualization, span analysis |
+| tempo | 3200 | Distributed tracing backend | OTLP ingest, trace storage, Grafana datasource |
+| otel-collector | 4317/4318 | OTel Collector | Receives OTLP from apps, exports to Tempo |
 | cinema-frontend | 4200→80 | Web UI | Angular 18, Material, Stripe.js, real-time notification bell, seat grid with WebSocket |
 
 ## API Documentation
@@ -75,11 +76,11 @@ See [docs/api-documentation.md](./docs/api-documentation.md) for full endpoint r
 
 **Payments:** Stripe (idempotency, webhook verification)
 
-**Monitoring:** Prometheus (9090), Grafana (3000), Loki 3.0 (3100), Zipkin (9411)
+**Monitoring:** Prometheus (9090), Grafana (3000), Loki 3.0 (3100), Tempo 2.6 (3200), OTel Collector contrib 0.115 (4317/4318)
 
 **Frontend:** Angular 18, TypeScript 5.5, Material 18, Stripe.js 8.9
 
-**Distributed Tracing:** Micrometer Tracing (OpenTelemetry bridge) + Zipkin exporter
+**Distributed Tracing:** Micrometer Tracing → OpenTelemetry → OTLP/HTTP → OpenTelemetry Collector → Grafana Tempo. Trace-to-logs correlation in Grafana via Loki `service` label and Tempo `service.name` span attribute.
 
 ## Database Schema
 

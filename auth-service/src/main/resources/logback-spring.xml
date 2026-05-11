@@ -36,6 +36,8 @@
 
     <!-- Suppress framework noise -->
     <logger name="org.springframework" level="INFO"/>
+    <!-- Silence Spring Boot startup chatter (Tomcat banner, EndpointLinksResolver, etc.) -->
+    <logger name="org.springframework.boot" level="WARN"/>
     <logger name="org.hibernate" level="WARN"/>
     <logger name="com.netflix" level="WARN"/>
     <logger name="org.apache.kafka" level="WARN"/>

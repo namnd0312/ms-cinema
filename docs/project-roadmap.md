@@ -335,7 +335,7 @@ MS Cinema is a comprehensive cinema ticket booking platform built on Spring Boot
 - ✓ Deployment manifest for all 6 business services
 - ✓ Service Discovery via K8s DNS (e.g., auth-service:8081, movie-service:8082)
 - ✓ Updated docker-compose to use static service URIs (already compatible)
-- ✓ All monitoring stack (Prometheus, Grafana, Loki, Zipkin) K8s-ready
+- ✓ All monitoring stack (Prometheus, Grafana, Loki, Tempo, OTel Collector) K8s-ready
 - **Status:** COMPLETE (April 7, 2026)
 - **Benefits:** Native Kubernetes support, production-ready deployments, no external service discovery needed
 

@@ -26,7 +26,8 @@ Hạ tầng:
 - Redis (:6379) - danh sách đen token, khóa, dedup
 - Kafka (:9092) - event streaming (5 topic: movie-events, payment-events, notification-events, notification.in_app, audit-events)
 - Prometheus (:9090) + Grafana (:3000) + Loki (:3100) - giám sát
-- Zipkin (:9411) - distributed tracing
+- Tempo (:3200) - backend distributed tracing
+- OTel Collector (:4317/:4318) - bộ thu OTLP, xuất sang Tempo
 ```
 
 ## Kiến Trúc Module
@@ -458,21 +459,25 @@ cinema-frontend: Kết Nối SSE Thời Gian Thực
   - JVM Micrometer (bộ nhớ, GC, thread, CPU)
   - Spring Boot HTTP Overview (tốc độ request, độ trễ, lỗi, DB pool, bộ đếm nghiệp vụ)
 - Bộ đếm nghiệp vụ: auth.login/logout/register, booking.created/confirmed/cancelled, payment.initiated/completed/failed
-- Datasource Zipkin được cung cấp cho trực quan hóa trace
+- Datasource Tempo được cung cấp với `tracesToLogsV2` (Loki) + `tracesToMetrics` (Prometheus) để tương quan
+- Service Graph (đồ thị node) tự động hiển thị các kết nối liên dịch vụ
 
 **Loki (:3100)**
 - Tổng hợp log, lưu trữ 7 ngày
-- Nhãn: job, instance, application (tên dịch vụ)
+- Nhãn: job, instance, service (tên dịch vụ)
 - Tự động chèn traceId/spanId qua MDC + LogstashEncoder (hiển thị trong truy vấn log)
+- Grafana `tracesToLogsV2` join nhãn Loki `service` với thuộc tính span Tempo `service.name`
 
-**Zipkin (:9411)**
-- Distributed tracing qua Micrometer Tracing (cầu nối OpenTelemetry)
-- Endpoint: http://zipkin:9411/api/v2/spans
-- Lấy mẫu: 100% (có thể cấu hình qua biến môi trường TRACING_SAMPLING_PROBABILITY)
-- Trace tất cả yêu cầu giữa dịch vụ, sự kiện Kafka, gọi cơ sở dữ liệu
-- traceId/spanId tự động chèn vào log qua MDC để tương quan
+**Tempo (:3200) + OTel Collector (:4317/:4318)**
+- Pipeline distributed tracing: Spring Boot apps → Micrometer Tracing → OpenTelemetry SDK → OTLP/HTTP → OpenTelemetry Collector (contrib) → Grafana Tempo
+- App OTLP endpoint: `http://otel-collector:4318/v1/traces` (ghi đè qua `OTEL_COLLECTOR_HOST`)
+- Collector nhận trên 4317/gRPC + 4318/HTTP, gửi sang Tempo qua 4317/gRPC
+- Tempo storage: local FS, retention 24h (compactor), PVC 5Gi trong k8s
+- Lấy mẫu: 100% (có thể cấu hình qua biến môi trường `TRACING_SAMPLING_PROBABILITY`)
+- Trace tất cả yêu cầu giữa dịch vụ, sự kiện Kafka (header W3C `traceparent`), gọi cơ sở dữ liệu
+- traceId/spanId tự động chèn vào log qua MDC để tương quan với Loki
 - Không cần thay đổi mã: tự động cấu hình bởi Spring Boot 3.4.3
-- Docker image: openzipkin/zipkin:3.4 (phiên bản cố định)
+- Docker images cố định: `grafana/tempo:2.6.0`, `otel/opentelemetry-collector-contrib:0.115.1`
 
 ## Tổng Hợp Stack Công Nghệ
 
@@ -491,7 +496,9 @@ cinema-frontend: Kết Nối SSE Thời Gian Thực
 | Kafka | 3.7 KRaft | Message broker |
 | Stripe SDK | mới nhất | Xử lý thanh toán |
 | Micrometer Tracing | (qua Boot) | Cầu nối OpenTelemetry cho distributed tracing |
-| Zipkin | mới nhất | Tổng hợp & trực quan hóa trace |
+| OpenTelemetry OTLP Exporter | 1.43.x (qua Boot) | Bộ xuất OTLP/HTTP sang OTel Collector |
+| OpenTelemetry Collector (contrib) | 0.115.1 | Nhận/xử lý/xuất OTLP |
+| Grafana Tempo | 2.6.0 | Backend lưu trữ & truy vấn trace |
 | SpringDoc OpenAPI | 2.8.4 | Tài liệu API |
 | Lombok | 1.18.x | Giảm mã boilerplate |
 

@@ -26,7 +26,8 @@ Infrastructure:
 - Redis (:6379) - token blacklist, locks, dedup
 - Kafka (:9092) - event streaming (5 topics: movie-events, payment-events, notification-events, notification.in_app, audit-events)
 - Prometheus (:9090) + Grafana (:3000) + Loki (:3100) - monitoring
-- Zipkin (:9411) - distributed tracing
+- Tempo (:3200) - distributed tracing backend
+- OTel Collector (:4317/:4318) - OTLP receiver, exports to Tempo
 
 Business Services: 6 modules (auth, movie, booking, payment, notification, audit)
 Shared Libraries: 2 modules (jwt-auth-autoconfigure, kafka-events)
@@ -620,21 +621,25 @@ ADMIN: Query audit logs
   - JVM Micrometer (memory, GC, threads, CPU)
   - Spring Boot HTTP Overview (req rate, latency, errors, DB pool, business counters)
 - Business Counters: auth.login/logout/register, booking.created/confirmed/cancelled, payment.initiated/completed/failed
-- Zipkin datasource provisioned for trace visualization
+- Tempo datasource provisioned for trace visualization with `tracesToLogsV2` (Loki) + `tracesToMetrics` (Prometheus) correlation
+- Service Graph (node graph) renders inter-service edges automatically
 
 **Loki (:3100)**
 - Log aggregation, 7-day retention
-- Labels: job, instance, application (service name)
+- Labels: job, instance, service (service name)
 - Auto-injects traceId/spanId via MDC + LogstashEncoder (visible in log queries)
+- Grafana `tracesToLogsV2` joins on Loki `service` label to Tempo span `service.name`
 
-**Zipkin (:9411)**
-- Distributed tracing via Micrometer Tracing (OpenTelemetry bridge)
-- Endpoint: http://zipkin:9411/api/v2/spans
-- Sampling: 100% (configurable via TRACING_SAMPLING_PROBABILITY env var)
-- Traces all service-to-service requests, Kafka events, database calls
-- traceId/spanId auto-injected into logs via MDC for correlation
+**Tempo (:3200) + OTel Collector (:4317/:4318)**
+- Distributed tracing pipeline: Spring Boot apps → Micrometer Tracing → OpenTelemetry SDK → OTLP/HTTP → OpenTelemetry Collector (contrib) → Grafana Tempo
+- App OTLP endpoint: `http://otel-collector:4318/v1/traces` (overridable via `OTEL_COLLECTOR_HOST`)
+- Collector receives on 4317/gRPC + 4318/HTTP, ships to Tempo on 4317/gRPC
+- Tempo storage: local FS, 24h retention (compactor), 5Gi PVC in k8s
+- Sampling: 100% (configurable via `TRACING_SAMPLING_PROBABILITY` env var)
+- Traces all service-to-service requests, Kafka events (W3C `traceparent` headers), database calls
+- traceId/spanId auto-injected into logs via MDC for Loki correlation
 - No code changes required: auto-configured by Spring Boot 3.4.3
-- Docker image: openzipkin/zipkin:3.4 (pinned version)
+- Docker images pinned: `grafana/tempo:2.6.0`, `otel/opentelemetry-collector-contrib:0.115.1`
 
 ## Technology Stack Summary
 
@@ -653,7 +658,9 @@ ADMIN: Query audit logs
 | Kafka | 3.7 KRaft | Message broker |
 | Stripe SDK | latest | Payment processing |
 | Micrometer Tracing | (via Boot) | OpenTelemetry bridge for distributed tracing |
-| Zipkin | latest | Trace aggregation & visualization |
+| OpenTelemetry Exporter (OTLP) | 1.43.x (via Boot) | OTLP/HTTP exporter to OTel Collector |
+| OpenTelemetry Collector (contrib) | 0.115.1 | OTLP receive/process/export |
+| Grafana Tempo | 2.6.0 | Trace storage & query backend |
 | SpringDoc OpenAPI | 2.8.4 | API documentation |
 | Lombok | 1.18.x | Boilerplate reduction |
 

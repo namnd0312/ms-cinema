@@ -24,7 +24,7 @@ ms-cinema/ (root pom: packaging=pom)
 ├── Frontend (1 module)
 │   └── cinema-frontend (:4200→80) - Angular 18
 └── Cấu hình Hạ tầng
-    ├── docker-compose.yml - PostgreSQL, Kafka, Redis, Prometheus, Grafana, Loki, Zipkin
+    ├── docker-compose.yml - PostgreSQL, Kafka, Redis, Prometheus, Grafana, Loki, Tempo, OTel Collector
     ├── monitoring/ - Prometheus.yml, dashboard Grafana, cấu hình Loki
     ├── init-databases.sql - Khởi tạo schema (testdb, moviedb, bookingdb, paymentdb, notificationdb, auditdb)
     └── docs/ - Tài liệu
@@ -556,7 +556,7 @@ jwt.auth.secret: ${JWT_SECRET}
 - Metrics: JVM (bộ nhớ, GC, thread), HTTP (tốc độ request, độ trễ, lỗi), bộ đếm nghiệp vụ tùy chỉnh
 
 **Grafana (Cổng 3000)**
-- Datasource tự động cung cấp: Prometheus, Loki, Zipkin
+- Datasource tự động cung cấp: Prometheus, Loki, Tempo (với `tracesToLogsV2` + `tracesToMetrics`)
 - 2 dashboard dựng sẵn:
   - JVM Micrometer (bộ nhớ, GC, thread, sử dụng CPU)
   - Spring Boot HTTP Overview (tốc độ request, tỷ lệ lỗi, độ trễ, database pool, bộ đếm nghiệp vụ)
@@ -568,13 +568,15 @@ jwt.auth.secret: ${JWT_SECRET}
 - Khám phá log qua Grafana
 - Tự động bao gồm traceId và spanId từ Micrometer Tracing MDC
 
-**Zipkin (Cổng 9411)**
-- Distributed tracing qua Micrometer Tracing + cầu nối OpenTelemetry
-- Thu thập trace tập trung từ tất cả 8 dịch vụ
-- Docker image: openzipkin/zipkin:3.4 (phiên bản cố định)
-- Cấu hình: `management.zipkin.tracing.endpoint: http://zipkin:9411/api/v2/spans`
+**Tempo (Cổng 3200) + OTel Collector (Cổng 4317/4318)**
+- Pipeline distributed tracing: Spring Boot → Micrometer Tracing → OpenTelemetry SDK → OTLP/HTTP → OTel Collector (contrib) → Grafana Tempo
+- Thu thập trace tập trung từ tất cả 6 dịch vụ nghiệp vụ
+- Docker images cố định: `grafana/tempo:2.6.0`, `otel/opentelemetry-collector-contrib:0.115.1`
+- App config: `management.otlp.tracing.endpoint: http://otel-collector:4318/v1/traces`
+- Resource attributes: `service.name`, `deployment.environment`
 - Lấy mẫu: 100% mặc định (qua biến môi trường TRACING_SAMPLING_PROBABILITY)
-- Tự động trace: giữa dịch vụ (HTTP/Feign), Kafka, thao tác cơ sở dữ liệu
+- Tempo retention: 24h (compactor)
+- Tự động trace: giữa dịch vụ (HTTP/Feign), Kafka producer/consumer (W3C `traceparent`), thao tác cơ sở dữ liệu
 - Không cần thay đổi mã: kích hoạt bởi auto-configuration Spring Boot 3.4.3
 
 **Metrics Actuator (/actuator/prometheus):**
@@ -599,8 +601,8 @@ jwt.auth.secret: ${JWT_SECRET}
 - PostgreSQL Driver: 42.x
 - Lombok: 1.18.x (quản lý BOM)
 - Micrometer Tracing: (tự động bao gồm qua Spring Boot 3.4.3)
-- OpenTelemetry: (qua cầu nối Micrometer)
-- Zipkin Exporter: (qua auto-config Spring Boot)
+- OpenTelemetry SDK: (qua cầu nối Micrometer)
+- OpenTelemetry OTLP Exporter: 1.43.x (qua auto-config Spring Boot)
 
 ## Build & Triển Khai
 

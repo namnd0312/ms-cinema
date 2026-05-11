@@ -24,7 +24,7 @@ MS Cinema is a **6-service + 2-library Spring Boot microservices platform** for 
 - **Kafka topics:** payment-events, movie-events, notification-events, notification.in_app, audit-events (3 retries, exponential backoff, DLT, 90-day audit retention)
 - Redis for token blacklist, booking locks, notification dedup
 - PostgreSQL per-service (auth→testdb, movie→moviedb, booking→bookingdb, payment→paymentdb, notification→notificationdb, audit→auditdb)
-- Prometheus (9090) + Grafana (3000) + Loki 3.0 (3100) + Zipkin (9411) observability stack
+- Prometheus (9090) + Grafana (3000) + Loki 3.0 (3100) + Tempo (3200) + OTel Collector (4317/4318) observability stack
 
 ## Functional Requirements
 

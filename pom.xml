@@ -26,6 +26,9 @@
         <springdoc.version>2.8.4</springdoc.version>
         <logstash-logback-encoder.version>8.0</logstash-logback-encoder.version>
         <loki4j.version>1.5.2</loki4j.version>
+        <!-- JDBC tracing: wraps DataSource to emit Micrometer observations
+             that the OTel bridge converts to spans (db.statement attribute set). -->
+        <datasource-micrometer.version>1.1.1</datasource-micrometer.version>
     </properties>
 
     <modules>
@@ -72,6 +75,14 @@
                 <groupId>io.jsonwebtoken</groupId>
                 <artifactId>jjwt-jackson</artifactId>
                 <version>${jjwt.version}</version>
+            </dependency>
+
+            <!-- JDBC tracing starter: brings net.ttddyy.observation:datasource-micrometer
+                 which wraps every DataSource bean to emit query/connection observations. -->
+            <dependency>
+                <groupId>net.ttddyy.observation</groupId>
+                <artifactId>datasource-micrometer-spring-boot</artifactId>
+                <version>${datasource-micrometer.version}</version>
             </dependency>
 
             <!-- Structured JSON logging (logstash encoder for Logback) -->

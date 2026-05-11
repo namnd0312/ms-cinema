@@ -79,4 +79,24 @@ public class JwtAutoConfiguration {
         registration.setName("serviceNameHeaderFilter");
         return registration;
     }
+
+    /**
+     * Adds X-Trace-Id response header on every request so clients can correlate
+     * with the trace in Grafana/Tempo. Reads from SLF4J MDC (populated by
+     * Micrometer Tracing) so the filter does NOT need to be ordered after the
+     * tracing observation filter.
+     */
+    @Bean
+    @ConditionalOnMissingBean(name = "traceIdResponseHeaderFilterRegistration")
+    public FilterRegistrationBean<TraceIdResponseHeaderFilter> traceIdResponseHeaderFilterRegistration() {
+        FilterRegistrationBean<TraceIdResponseHeaderFilter> registration = new FilterRegistrationBean<>();
+        registration.setFilter(new TraceIdResponseHeaderFilter());
+        registration.addUrlPatterns("/*");
+        // Run AFTER Spring's ServerHttpObservationFilter (HIGHEST_PRECEDENCE + 1)
+        // which populates MDC, but BEFORE Spring Security (default order -100)
+        // which commits 401/403 responses early.
+        registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 10);
+        registration.setName("traceIdResponseHeaderFilter");
+        return registration;
+    }
 }

@@ -25,7 +25,7 @@ MS Cinema là một **nền tảng microservices Spring Boot gồm 6 dịch vụ
 - **Kafka topics:** payment-events, movie-events, notification-events, notification.in_app, audit-events (3 lần thử lại, exponential backoff, DLT, giữ nhật ký kiểm toán 90 ngày)
 - Redis cho danh sách đen token, khóa đặt chỗ, dedup thông báo
 - PostgreSQL riêng cho từng dịch vụ (auth→testdb, movie→moviedb, booking→bookingdb, payment→paymentdb, notification→notificationdb, audit→auditdb)
-- Bộ giám sát Prometheus (9090) + Grafana (3000) + Loki 3.0 (3100) + Zipkin (9411)
+- Bộ giám sát Prometheus (9090) + Grafana (3000) + Loki 3.0 (3100) + Tempo (3200) + OTel Collector (4317/4318)
 
 ## Yêu Cầu Chức Năng
 

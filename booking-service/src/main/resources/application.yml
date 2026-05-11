@@ -59,6 +59,10 @@ management:
   tracing:
     sampling:
       probability: ${TRACING_SAMPLING_PROBABILITY:1.0}  # Use 0.1 or lower in production
-  zipkin:
+  otlp:
     tracing:
-      endpoint: http://${ZIPKIN_HOST:localhost}:9411/api/v2/spans
+      endpoint: http://${OTEL_COLLECTOR_HOST:localhost}:4318/v1/traces
+  opentelemetry:
+    resource-attributes:
+      service.name: ${spring.application.name}
+      deployment.environment: ${DEPLOYMENT_ENV:dev}

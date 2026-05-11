@@ -9,6 +9,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -26,6 +27,18 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleNotFound(EntityNotFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(Map.of("status", 404, "error", "Not Found", "message", ex.getMessage()));
+    }
+
+    /**
+     * Spring 6 routes unmatched URLs to the static resource handler which throws
+     * NoResourceFoundException. Map it to a clean 404 instead of falling through
+     * to the catch-all 500 handler.
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleNoResource(NoResourceFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(Map.of("status", 404, "error", "Not Found",
+                        "message", "No endpoint mapped for: " + ex.getResourcePath()));
     }
 
     @ExceptionHandler(AccessDeniedException.class)

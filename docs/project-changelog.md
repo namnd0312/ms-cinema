@@ -1,11 +1,33 @@
 # Project Changelog
 
 **Project:** ms-cinema
-**Updated:** April 10, 2026
+**Updated:** May 9, 2026
 
 ## Version 0.0.1-SNAPSHOT
 
 ### [Unreleased]
+
+#### Distributed Tracing Migration: Zipkin → OpenTelemetry + Grafana Tempo (COMPLETE ✓) — May 9, 2026
+- **Pipeline Change:** Replaced legacy Zipkin tracing with industry-standard OTel pipeline
+  - New flow: Spring Boot apps → Micrometer Tracing → OpenTelemetry SDK → OTLP/HTTP (4318) → OTel Collector (contrib) → Grafana Tempo (3200)
+  - Maven dependency: `opentelemetry-exporter-zipkin` → `opentelemetry-exporter-otlp` (1.43.x via Spring Cloud BOM 2024.0.1)
+  - App config: `management.zipkin.tracing.endpoint` → `management.otlp.tracing.endpoint`
+  - Env var: `ZIPKIN_HOST` → `OTEL_COLLECTOR_HOST` (+ new `DEPLOYMENT_ENV`)
+  - Resource attributes added: `service.name`, `deployment.environment`
+- **New Infrastructure:**
+  - `tempo` service (grafana/tempo:2.6.0) — local FS storage, 24h retention, single replica
+  - `otel-collector` service (otel/opentelemetry-collector-contrib:0.115.1) — OTLP receivers (gRPC 4317 + HTTP 4318), batch/memory_limiter processors, OTLP exporter to Tempo
+  - K8s: Tempo as StatefulSet with 5Gi PVC; OTel Collector as Deployment
+  - Configs at `monitoring/tempo/tempo.yaml`, `monitoring/otel-collector/otel-collector-config.yaml`, `k8s/infra/tempo/`, `k8s/infra/otel-collector/`
+- **Grafana Datasource:** Added Tempo datasource with `tracesToLogsV2` (Loki via `service` label) and `tracesToMetrics` (Prometheus latency/rate). Service Graph and node graph enabled.
+- **Removed:**
+  - Zipkin service from docker-compose
+  - `k8s/infra/zipkin/` directory
+  - Zipkin Grafana datasource
+  - `ZIPKIN_HOST` and `MANAGEMENT_ZIPKIN_TRACING_ENDPOINT` env vars
+  - `opentelemetry-exporter-zipkin` Maven dependency from 6 services
+- **Preserved:** `micrometer-tracing-bridge-otel` (only exporter changed). Logback MDC traceId/spanId continues flowing into Loki. Spring Kafka 3.x W3C `traceparent` header propagation unchanged. 64-bit trace IDs preserved (no audit-service `trace_id` schema change required).
+- **Benefits:** Vendor-neutral OTLP pipeline, richer Grafana UX (trace-to-logs/metrics, service graph), unlocks future tail-sampling and span-metrics processing at the collector.
 
 #### Kubernetes Migration: Remove API Gateway & Use K8s Ingress (COMPLETE ✓) — April 9, 2026
 - **Architecture Change:** Eliminated Spring Cloud Gateway service; replaced with NGINX K8s Ingress for path-based routing

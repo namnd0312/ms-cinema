@@ -549,7 +549,7 @@ jwt:
 - Metrics: JVM (memory, GC, threads), HTTP (req rate, latency, errors), custom business counters
 
 **Grafana (Port 3000)**
-- Auto-provisioned datasources: Prometheus, Loki, Zipkin
+- Auto-provisioned datasources: Prometheus, Loki, Tempo (with `tracesToLogsV2` + `tracesToMetrics`)
 - 2 prebuilt dashboards:
   - JVM Micrometer (memory, GC, threads, CPU usage)
   - Spring Boot HTTP Overview (request rate, error rate, latency, database pool, business counters)
@@ -561,13 +561,15 @@ jwt:
 - Log discovery via Grafana
 - Auto-includes traceId and spanId from Micrometer Tracing MDC
 
-**Zipkin (Port 9411)**
-- Distributed tracing via Micrometer Tracing + OpenTelemetry bridge
-- Centralized trace collection from all 8 services
-- Docker image: openzipkin/zipkin:3.4 (pinned version)
-- Config: `management.zipkin.tracing.endpoint: http://zipkin:9411/api/v2/spans`
+**Tempo (Port 3200) + OTel Collector (Ports 4317/4318)**
+- Distributed tracing pipeline: Spring Boot → Micrometer Tracing → OpenTelemetry SDK → OTLP/HTTP → OTel Collector (contrib) → Grafana Tempo
+- Centralized trace collection from all 6 business services
+- Docker images pinned: `grafana/tempo:2.6.0`, `otel/opentelemetry-collector-contrib:0.115.1`
+- App config: `management.otlp.tracing.endpoint: http://otel-collector:4318/v1/traces`
+- Resource attributes: `service.name`, `deployment.environment`
 - Sampling: 100% by default (via TRACING_SAMPLING_PROBABILITY env var)
-- Auto-traces: service-to-service (HTTP/Feign), Kafka, database operations
+- Tempo retention: 24h (compactor)
+- Auto-traces: service-to-service (HTTP/Feign), Kafka producers/consumers (W3C `traceparent`), database operations
 - Zero code changes: enabled by Spring Boot 3.4.3 auto-configuration
 
 **Actuator Metrics (/actuator/prometheus):**
@@ -592,8 +594,8 @@ jwt:
 - PostgreSQL Driver: 42.x
 - Lombok: 1.18.x (BOM-managed)
 - Micrometer Tracing: (auto-included via Spring Boot 3.4.3)
-- OpenTelemetry: (via Micrometer bridge)
-- Zipkin Exporter: (via Spring Boot auto-config)
+- OpenTelemetry SDK: (via Micrometer bridge)
+- OpenTelemetry OTLP Exporter: 1.43.x (via Spring Boot auto-config)
 
 ## Build & Deployment
 

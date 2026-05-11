@@ -31,6 +31,14 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- Micrometer Tracing: needed by TraceIdResponseHeaderFilter.
+             Optional — consumer services already pull this in via micrometer-tracing-bridge-otel. -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-tracing</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <!-- JJWT: versions from parent dependencyManagement -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>

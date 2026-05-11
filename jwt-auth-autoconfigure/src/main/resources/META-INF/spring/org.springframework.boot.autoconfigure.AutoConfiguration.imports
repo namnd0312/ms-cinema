@@ -1,1 +1,2 @@
 com.namnd.jwt.autoconfigure.JwtAutoConfiguration
+com.namnd.jwt.autoconfigure.TrailingSlashWebMvcConfig

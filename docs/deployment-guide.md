@@ -230,7 +230,7 @@ docker-compose logs -f
 - Redis
 - All 6 business services (auth, movie, booking, payment, notification, audit)
 - Cinema-frontend (Angular 18 via Nginx on port 80)
-- Monitoring: Prometheus, Grafana, Loki, Zipkin
+- Monitoring: Prometheus, Grafana, Loki, Tempo, OTel Collector
 
 ### 3. Environment Variables for Docker
 
@@ -835,35 +835,51 @@ spring:
 
 ## Monitoring & Logging
 
-### 1. Distributed Tracing (Zipkin)
+### 1. Distributed Tracing (OpenTelemetry + Tempo)
 
-**Access Zipkin UI:**
+**Pipeline:** Spring Boot → Micrometer Tracing → OpenTelemetry SDK → OTLP/HTTP → OTel Collector → Grafana Tempo.
+
+**Access in Grafana:**
 ```
-http://localhost:9411/zipkin
+http://localhost:3000   →   Explore   →   Tempo datasource
 ```
+
+Direct Tempo API: `http://localhost:3200`
+
+**Ports:**
+- `4318` — OTLP/HTTP receiver (apps export here)
+- `4317` — OTLP/gRPC receiver
+- `13133` — OTel Collector health check
+- `3200` — Tempo HTTP query API
 
 **Features:**
-- Visualize request traces across all microservices
-- Track end-to-end request latency
-- Identify bottlenecks in service-to-service calls
-- View traceId correlation in logs (Loki) and traces (Zipkin)
+- Visualize request traces across all microservices in Grafana Explore → Tempo
+- Service Graph (node graph) renders inter-service edges automatically
+- `tracesToLogsV2`: click a span → opens Loki with `{service="…"} |= "<traceId>"`
+- `tracesToMetrics`: click a span → opens Prometheus latency/rate panels
+- Cross-service Kafka traces propagated via W3C `traceparent` headers (auto)
 
 **Configuration:**
 ```yaml
-# Each service application.yml (k8s profile)
+# Each service application.yml
 management:
   tracing:
     sampling:
       probability: 1.0  # 100% sampling (change via TRACING_SAMPLING_PROBABILITY env var)
-  zipkin:
+  otlp:
     tracing:
-      endpoint: http://zipkin:9411/api/v2/spans
+      endpoint: http://${OTEL_COLLECTOR_HOST:localhost}:4318/v1/traces
+  opentelemetry:
+    resource-attributes:
+      service.name: ${spring.application.name}
+      deployment.environment: ${DEPLOYMENT_ENV:dev}
 ```
 
 **Production Tuning:**
 - Reduce sampling to 10-20% for high-traffic systems: `TRACING_SAMPLING_PROBABILITY=0.1`
-- Traces auto-include service-to-service (Feign), Kafka, database operations
+- Traces auto-include service-to-service (Feign), Kafka producers/consumers, database operations
 - traceId/spanId auto-injected into logs via MDC for cross-log correlation
+- Tempo retention: 24h (compactor) — adjust `block_retention` in `monitoring/tempo/tempo.yaml`
 
 ### 2. Structured Logging
 

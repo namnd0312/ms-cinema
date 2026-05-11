@@ -14,7 +14,8 @@ data:
   SPRING_DATA_REDIS_HOST: "redis"
   SPRING_DATA_REDIS_PORT: "6379"
   KAFKA_HOST: "kafka"
-  ZIPKIN_HOST: "zipkin"
+  OTEL_COLLECTOR_HOST: "otel-collector"
+  DEPLOYMENT_ENV: "k8s"
   # --- Application-level configuration ---
   # Kafka configuration
   SPRING_KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
@@ -22,8 +23,8 @@ data:
   SPRING_KAFKA_CONSUMER_VALUE_DESERIALIZER: "org.springframework.kafka.support.serializer.JsonDeserializer"
   SPRING_KAFKA_PRODUCER_VALUE_SERIALIZER: "org.springframework.kafka.support.serializer.JsonSerializer"
   SPRING_KAFKA_PROPERTIES_SPRING_JSON_TRUSTED_PACKAGES: "com.namnd.kafka.events.*"
-  # Zipkin tracing
-  MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: "http://zipkin:9411/api/v2/spans"
+  # OTLP tracing → OpenTelemetry Collector → Tempo
+  MANAGEMENT_OTLP_TRACING_ENDPOINT: "http://otel-collector:4318/v1/traces"
   # JWT alias (non-secret)
   NAMND_APP_JWTALIAS: "namnd-cinema"
   # Inter-service URLs (for FeignClient)

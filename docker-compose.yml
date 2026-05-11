@@ -45,12 +45,39 @@ services:
       - my-net
     restart: unless-stopped
 
-  zipkin:
-    image: openzipkin/zipkin:3.4
+  tempo:
+    image: grafana/tempo:2.6.0
+    container_name: tempo
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    volumes:
+      - ./monitoring/tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo-data:/var/tempo
     ports:
-      - "9411:9411"
+      - "3200:3200"
     networks:
       - my-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3200/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.115.1
+    container_name: otel-collector
+    command: ["--config=/etc/otel-collector/config.yaml"]
+    volumes:
+      - ./monitoring/otel-collector/otel-collector-config.yaml:/etc/otel-collector/config.yaml:ro
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "13133:13133"
+    networks:
+      - my-net
+    depends_on:
+      tempo:
+        condition: service_healthy
     restart: unless-stopped
 
   auth-service:
@@ -65,6 +92,7 @@ services:
       - postgres-service
       - redis-service
       - kafka
+      - otel-collector
     environment:
       <<: *java-tz
       SERVER_PORT: 8081
@@ -73,7 +101,8 @@ services:
       SPRING_DATASOURCE_PASSWORD: postgres
       REDIS_HOST: redis-service
       KAFKA_HOST: kafka
-      ZIPKIN_HOST: zipkin
+      OTEL_COLLECTOR_HOST: otel-collector
+      DEPLOYMENT_ENV: dev
       GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-1089359077505-9bplo54297vhkb3v7vdg321cfa57v0to.apps.googleusercontent.com}"
       GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET:-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}"
     restart: unless-stopped
@@ -89,6 +118,7 @@ services:
     depends_on:
       - postgres-service
       - kafka
+      - otel-collector
     environment:
       <<: *java-tz
       SERVER_PORT: 8082
@@ -96,7 +126,8 @@ services:
       DB_USERNAME: postgres
       DB_PASSWORD: postgres
       KAFKA_HOST: kafka
-      ZIPKIN_HOST: zipkin
+      OTEL_COLLECTOR_HOST: otel-collector
+      DEPLOYMENT_ENV: dev
     restart: unless-stopped
 
   booking-service:
@@ -111,6 +142,7 @@ services:
       - postgres-service
       - redis-service
       - kafka
+      - otel-collector
     environment:
       <<: *java-tz
       SERVER_PORT: 8083
@@ -119,7 +151,8 @@ services:
       DB_PASSWORD: postgres
       REDIS_HOST: redis-service
       KAFKA_HOST: kafka
-      ZIPKIN_HOST: zipkin
+      OTEL_COLLECTOR_HOST: otel-collector
+      DEPLOYMENT_ENV: dev
     restart: unless-stopped
 
   payment-service:
@@ -133,6 +166,7 @@ services:
     depends_on:
       - postgres-service
       - kafka
+      - otel-collector
     environment:
       <<: *java-tz
       SERVER_PORT: 8084
@@ -142,7 +176,8 @@ services:
       KAFKA_HOST: kafka
       STRIPE_API_KEY: ${STRIPE_API_KEY:-sk_test_51O4nq6JasULoPDKqIHl2vL6vmmYhcNxXTVLpgQOkj7nZluIRtO36qbylQeHtAqV09CeHgZeacGTw20y6M5tdlIyx00hfdmO8Ry}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-whsec_7df692974e96a694944751bcabfc16ffd0e19d504f9803f3eae1ced2e2989c10}
-      ZIPKIN_HOST: zipkin
+      OTEL_COLLECTOR_HOST: otel-collector
+      DEPLOYMENT_ENV: dev
     restart: unless-stopped
 
   notification-service:
@@ -157,6 +192,7 @@ services:
       - postgres-service
       - kafka
       - redis-service
+      - otel-collector
     environment:
       <<: *java-tz
       SERVER_PORT: 8085
@@ -167,7 +203,8 @@ services:
       REDIS_HOST: redis-service
       MAIL_USERNAME: ${MAIL_USERNAME:-nghiemducnam0312@gmail.com}
       MAIL_PASSWORD: ${MAIL_PASSWORD:-sdxm fmia vuzf bvmq}
-      ZIPKIN_HOST: zipkin
+      OTEL_COLLECTOR_HOST: otel-collector
+      DEPLOYMENT_ENV: dev
     restart: unless-stopped
 
   audit-service:
@@ -181,6 +218,7 @@ services:
     depends_on:
       - postgres-service
       - kafka
+      - otel-collector
     environment:
       <<: *java-tz
       SERVER_PORT: 8086
@@ -188,7 +226,8 @@ services:
       DB_USERNAME: postgres
       DB_PASSWORD: postgres
       KAFKA_HOST: kafka
-      ZIPKIN_HOST: zipkin
+      OTEL_COLLECTOR_HOST: otel-collector
+      DEPLOYMENT_ENV: dev
     restart: unless-stopped
 
   cinema-frontend:
@@ -230,7 +269,8 @@ services:
     depends_on:
       - prometheus
       - loki
-      - zipkin
+      - tempo
+      - otel-collector
     restart: unless-stopped
 
   loki:
@@ -254,3 +294,4 @@ volumes:
   prometheus-data:
   grafana-data:
   loki-data:
+  tempo-data:

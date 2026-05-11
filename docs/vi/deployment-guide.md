@@ -61,7 +61,7 @@ docker --version
 docker-compose --version
 # Output: Docker Compose version 1.29.0 or higher
 
-# Docker Compose phải hỗ trợ services định dạng 3.8+ cho PostgreSQL, Kafka, Zipkin, audit-service
+# Docker Compose phải hỗ trợ services định dạng 3.8+ cho PostgreSQL, Kafka, Tempo, OTel Collector, audit-service
 ```
 
 ### Mạng & Tường Lửa
@@ -656,38 +656,51 @@ spring:
 
 ## Giám Sát & Ghi Log
 
-### 1. Distributed Tracing (Zipkin)
+### 1. Distributed Tracing (OpenTelemetry + Tempo)
 
-**Truy cập giao diện Zipkin:**
+**Pipeline:** Spring Boot → Micrometer Tracing → OpenTelemetry SDK → OTLP/HTTP → OTel Collector → Grafana Tempo.
+
+**Truy cập trong Grafana:**
 ```
-http://localhost:9411/zipkin
+http://localhost:3000   →   Explore   →   Datasource Tempo
 ```
+
+API trực tiếp Tempo: `http://localhost:3200`
+
+**Cổng:**
+- `4318` — Bộ thu OTLP/HTTP (apps xuất tới đây)
+- `4317` — Bộ thu OTLP/gRPC
+- `13133` — Health check OTel Collector
+- `3200` — Tempo HTTP query API
 
 **Tính năng:**
-- Trực quan hóa request traces trên tất cả microservices
-- Theo dõi độ trễ request đầu-cuối
-- Xác định điểm nghẽn trong các cuộc gọi giữa dịch vụ
-- Xem tương quan traceId trong log (Loki) và traces (Zipkin)
+- Trực quan hóa request traces trên tất cả microservices trong Grafana Explore → Tempo
+- Service Graph (đồ thị node) tự động hiển thị các kết nối liên dịch vụ
+- `tracesToLogsV2`: click span → mở Loki với `{service="…"} |= "<traceId>"`
+- `tracesToMetrics`: click span → mở panel độ trễ/tỷ lệ Prometheus
+- Trace Kafka liên dịch vụ được lan truyền qua header W3C `traceparent` (tự động)
 
 **Cấu hình:**
 ```yaml
-# Tập trung trong config-server (application.yml)
+# Mỗi service application.yml
 management:
   tracing:
     sampling:
       probability: 1.0  # 100% sampling (thay đổi qua biến TRACING_SAMPLING_PROBABILITY)
-  zipkin:
+  otlp:
     tracing:
-      endpoint: http://zipkin:9411/api/v2/spans
-
-# Dự phòng: Tất cả 6 business services có bản sao application.yml cục bộ làm safeguard khi khởi động
-# (khi config-server không khả dụng trong quá trình boot)
+      endpoint: http://${OTEL_COLLECTOR_HOST:localhost}:4318/v1/traces
+  opentelemetry:
+    resource-attributes:
+      service.name: ${spring.application.name}
+      deployment.environment: ${DEPLOYMENT_ENV:dev}
 ```
 
 **Tinh chỉnh Production:**
 - Giảm sampling xuống 10-20% cho hệ thống lưu lượng cao: `TRACING_SAMPLING_PROBABILITY=0.1`
-- Traces tự động bao gồm service-to-service (Feign), Kafka, các thao tác cơ sở dữ liệu
+- Traces tự động bao gồm service-to-service (Feign), Kafka producer/consumer, các thao tác cơ sở dữ liệu
 - traceId/spanId tự động được inject vào log qua MDC cho tương quan log chéo
+- Tempo retention: 24h (compactor) — chỉnh `block_retention` trong `monitoring/tempo/tempo.yaml`
 
 ### 2. Ghi Log Có Cấu Trúc
 

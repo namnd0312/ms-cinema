@@ -264,7 +264,7 @@ MS Cinema là nền tảng đặt vé xem phim toàn diện được xây dựng
 - ✓ Deployment manifest cho tất cả 6 dịch vụ
 - ✓ Service Discovery qua K8s DNS (ví dụ: auth-service:8081, movie-service:8082)
 - ✓ Docker-compose cập nhật sử dụng URI dịch vụ tĩnh (đã tương thích)
-- ✓ Toàn bộ monitoring stack (Prometheus, Grafana, Loki, Zipkin) sẵn sàng K8s
+- ✓ Toàn bộ monitoring stack (Prometheus, Grafana, Loki, Tempo, OTel Collector) sẵn sàng K8s
 - **Trạng thái:** HOÀN THÀNH (7 tháng 4, 2026)
 - **Lợi Ích:** Hỗ trợ K8s gốc để kiểm thử giống sản xuất, khả năng mở rộng, triển khai đa bản sao
 

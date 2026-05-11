@@ -43,13 +43,13 @@ kubectl apply -f "${SCRIPT_DIR}/base/"
 
 # [4/8] Deploy infrastructure
 echo -e "\n${YELLOW}[4/8] Deploying infrastructure...${NC}"
-for infra in postgresql kafka redis zipkin loki promtail grafana; do
+for infra in postgresql kafka redis tempo otel-collector loki promtail grafana; do
   echo "  Deploying ${infra}..."
   kubectl apply -f "${SCRIPT_DIR}/infra/${infra}/"
 done
 
 echo "  Waiting for infrastructure..."
-for infra in postgresql kafka redis zipkin loki grafana; do
+for infra in postgresql kafka redis tempo otel-collector loki grafana; do
   kubectl wait --for=condition=Ready pod -l "app.kubernetes.io/name=${infra}" \
     -n "$NAMESPACE" --timeout="$WAIT_TIMEOUT" || \
     echo -e "  ${RED}WARNING: ${infra} not ready within timeout${NC}"
