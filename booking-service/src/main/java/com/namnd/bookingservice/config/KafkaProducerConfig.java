@@ -32,6 +32,10 @@ public class KafkaProducerConfig {
 
     @Bean
     public KafkaTemplate<String, Object> kafkaTemplate(ProducerFactory<String, Object> producerFactory) {
-        return new KafkaTemplate<>(producerFactory);
+        KafkaTemplate<String, Object> template = new KafkaTemplate<>(producerFactory);
+        // Custom KafkaTemplate bean overrides Spring Boot auto-config — must enable observation
+        // explicitly so the producer injects W3C traceparent headers for cross-service trace continuity.
+        template.setObservationEnabled(true);
+        return template;
     }
 }

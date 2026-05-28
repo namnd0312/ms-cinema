@@ -26,6 +26,10 @@ spring:
       properties:
         spring.json.value.default.type: com.namnd.kafka.events.envelope.EventEnvelope
         spring.json.trusted.packages: com.namnd.kafka.events.*
+    template:
+      observation-enabled: true
+    listener:
+      observation-enabled: true
 
 jwt:
   auth:

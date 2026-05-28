@@ -23,6 +23,10 @@ spring:
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
     consumer:
       group-id: payment-service
+    template:
+      observation-enabled: true
+    listener:
+      observation-enabled: true
 
 jwt:
   auth:
