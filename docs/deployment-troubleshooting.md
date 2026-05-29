@@ -254,6 +254,106 @@ curl -X POST http://localhost:8084/api/payments/reconciliation/trigger \
 psql -U postgres -d paymentdb -c "SELECT * FROM batch_job_execution ORDER BY CREATE_TIME DESC LIMIT 5;"
 ```
 
+### OAuth2 / IdP Troubleshooting (Phase 06)
+
+**Issue: `invalid_redirect_uri` during authorization code flow**
+
+**Cause:** Client's redirect_uri doesn't match registered URI (case-sensitive, exact match)
+
+**Diagnose:**
+```bash
+# Check registered URIs for client
+curl -H "Authorization: Bearer $ADMIN_TOKEN" \
+  https://auth.example.com/api/oauth2/admin/clients/{clientId} | jq .
+
+# Verify exact match (case-sensitive)
+# e.g., registered: https://partner.example.com/callback
+# e.g., request: https://PARTNER.example.com/callback  ← FAILS (case mismatch)
+```
+
+**Fix:**
+```bash
+# Update client registration with correct URI
+curl -X PATCH https://auth.example.com/api/oauth2/admin/clients/{clientId} \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -d '{"redirectUris": ["https://partner.example.com/callback"]}'
+```
+
+**Issue: `invalid_client` or `invalid_grant` during token exchange**
+
+**Cause:** Client secret mismatch or code expired (60s)
+
+**Check:**
+```bash
+# Verify client_secret sent via basic auth (base64(clientId:clientSecret))
+# Using curl --basic -u $CLIENT_ID:$CLIENT_SECRET
+echo -n "clientId:clientSecret" | base64
+
+# Check authorization code age (valid for 60 seconds after generation)
+# If > 60s, code expired; must redo authorization flow
+```
+
+**Issue: JWKS cache stale after key rotation**
+
+**Cause:** Clients cached public keys; rotation not reflected in JWKS endpoint
+
+**Symptom:** Partner reports `invalid_signature` after key rotation
+
+**Solution:**
+```bash
+# Wait for JWKS cache to invalidate (Cache-Control: max-age=3600, default 1 hour)
+# OR manually purge client cache (depends on client implementation)
+
+# Verify new key published
+curl https://auth.example.com/.well-known/jwks.json | jq '.keys | length'
+
+# Check key expiration
+curl https://auth.example.com/.well-known/jwks.json | jq '.keys[] | .kid, .exp'
+```
+
+**Issue: 429 Too Many Requests on /oauth2/token**
+
+**Cause:** NGINX rate limit exceeded (10 rps, burst 20)
+
+**Check:**
+```bash
+# Verify rate limit in K8s Ingress annotation
+kubectl describe ingress ms-cinema-ingress | grep limit
+
+# Check client logs for 429 status
+# Implement exponential backoff: retry with jitter
+```
+
+**Solution:**
+- Adjust rate limit in k8s/ingress.yml (nginx.ingress.kubernetes.io/limit-rps)
+- Client implements exponential backoff with jitter
+
+**Issue: JWT algorithm mismatch (HS512 vs RS256)**
+
+**Cause:** Token issued with wrong algorithm, or downstream validator misconfigured
+
+**Diagnose:**
+```bash
+# Decode token and check 'alg' header
+TOKEN="eyJhbGciOiJIUzUxMiJ9..."
+echo "$TOKEN" | cut -d. -f1 | base64 -d | jq .alg
+# Output: "HS512" or "RS256"
+
+# Check dual-mode config in downstream service
+echo $JWT_AUTH_DUAL_MODE_ENABLED
+echo $OAUTH2_JWKS_URI
+```
+
+**Fix (Rollback to HS512):**
+```bash
+# If RS256 rollout fails, revert to HS512
+export TOKEN_SIGNING_ALGORITHM="HS512"
+# Restart auth-service
+# New tokens issued as HS512; existing RS256 tokens remain valid via dual-mode validator
+```
+
+See [sso-jwt-rollback-runbook.md](./sso-jwt-rollback-runbook.md) for emergency HS512 fallback procedures.
+
 ---
 
 ## Deployment Checklist

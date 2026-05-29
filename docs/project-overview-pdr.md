@@ -145,6 +145,33 @@ MS Cinema is a **6-service + 2-library Spring Boot microservices platform** for 
 - **Database:** reconciliation_runs, reconciliation_items tables with indexes
 - **Configuration:** Cron schedule, max date range, enable/disable flag via application.yml
 
+### SSO Identity Provider for B2B Partners (FR-008, Phase 06 — COMPLETE)
+- **OIDC Compliance:** Spring Authorization Server 1.3.x implements OpenID Connect Provider specification
+  - Endpoint: /oauth2/authorize (authorization code flow with PKCE mandatory)
+  - Endpoint: /oauth2/token (access token issuance, RS256-signed)
+  - Endpoint: /oauth2/revoke (token revocation)
+  - Endpoint: /.well-known/openid-configuration (OIDC discovery)
+  - Endpoint: /.well-known/jwks.json (public keys, auto-updated after key rotation)
+- **Partner Client Registration:** Up to 5 B2B partner relying parties with strict controls
+  - Client secret bcrypt-hashed, generated cryptographically (32+ chars)
+  - Redirect URIs: case-sensitive, exact match, validated against whitelist (max 5 URIs)
+  - Scopes: openid, profile, email only (no resource access)
+- **JWT Signing:** RS256 (asymmetric) default, rotation every 90 days (configurable)
+  - Signing key stored encrypted at rest (RSA 4096 key pairs, encrypted storage)
+  - Admin API: POST /api/oauth2/admin/signing-key/{id}/rotate (trigger new key)
+  - Admin API: POST /api/oauth2/admin/signing-key/{id}/deactivate (mark ROTATED)
+  - Admin API: POST /api/oauth2/admin/signing-key/{id}/delete (purge RETIRED keys)
+  - All key operations @Auditable with action oauth2.signing_key.rotated / deleted
+- **ID Token Claims:** sub (user id), email, profile, exp, iss, aud, iat
+- **Partner Consent Screen:** Optional consent flow for user approval of data sharing
+  - Scope descriptions: openid (receive ID token), profile (name, email), email (email address)
+  - Consent audit trail stored in audit_logs with action oauth2.authorization_consent.approved
+- **Refresh Token Reuse Detection:** Detects if refresh token replayed; revokes family on first reuse
+  - Implements refresh token rotation per OAuth 2.0 Sender-Constrained Tokens
+- **Rate Limiting:** K8s NGINX Ingress annotation (10rps, burst=20) on /oauth2/(token|authorize|revoke|introspect)
+- **Configuration:** OAUTH2_ISSUER_URI, SIGNING_KEY_ENCRYPTION_PASSWORD, TOKEN_SIGNING_ALGORITHM (default RS256), JWT_AUDIENCE, ACCESS_TOKEN_TTL_SECONDS, ID_TOKEN_TTL_SECONDS, REFRESH_TOKEN_TTL_SECONDS
+- **Database Migrations:** Flyway auto-applies oauth2_registered_client, oauth2_authorization_consent, signing_keys tables on auth-service startup
+
 ### Movie Ratings & Comments (FR-005)
 - **Star Ratings:** 1-5 point scale per movie, upsert per user
   - POST /api/movies/{movieId}/ratings (authenticated, upsert)
@@ -493,9 +520,11 @@ Response (403 Forbidden):
 - **Trade-off:** Larger token size vs reduced database load; refresh tokens stored in DB for revocation
 
 ### Decision: Symmetric (HS512) vs Asymmetric (RS256) Signing
-**Chosen:** Symmetric HS512
-- **Rationale:** Shared-secret deployment, simpler operations, faster validation
-- **Trade-off:** All instances must protect secret vs distributed trust model
+**Chosen:** Symmetric HS512 for traditional JWT auth; **RS256 for OIDC IdP (Phase 06)**
+- **HS512 Rationale:** Shared-secret deployment, simpler operations, faster validation for internal microservices
+- **RS256 Rationale (Phase 06):** OIDC standard requires asymmetric signing; external partners validate tokens without sharing secrets; public key rotation via JWKS endpoint
+- **Cutover Strategy:** jwt-auth-autoconfigure dual-mode validator accepts both HS512 and RS256 during transition; new ID tokens issued as RS256 while legacy HS512 tokens remain valid
+- **Trade-off:** HS512 simpler but less scalable for external trust; RS256 enables federated SSO but requires key management
 
 ### Decision: Eager vs Lazy Role Loading
 **Chosen:** Eager (FetchType.EAGER)
@@ -560,14 +589,29 @@ Response (403 Forbidden):
 - ✓ Frontend date utilities (timezone-safe formatDate, combineDatetime, parseTime)
 - [ ] Rate limiting on login/forgot-password endpoints
 
-### Phase 4: Security Hardening (Planned)
-- [ ] Audit logging on sensitive actions (IP, timestamp)
-- [ ] JWT claim validation (issuer, audience)
-- [ ] Secret rotation mechanism
+### Phase 4: Security Hardening (PARTIAL)
+- [x] Audit logging on sensitive actions (IP, timestamp) — @Auditable aspect (Jan-Feb 2026)
+- [x] JWT claim validation (issuer, audience) — RS256 ID tokens (Phase 06, May 2026)
+- [x] Secret rotation mechanism — Signing key rotation admin API (Phase 06, May 2026)
 - [ ] IP whitelisting
-- [ ] Token encryption at rest
+- [ ] Token encryption at rest (signing key storage encryption added in Phase 06)
 
-### Phase 5: Operations (PARTIAL)
+### Phase 5/6: SSO Identity Provider (COMPLETE — May 28-29, 2026)
+- [x] Spring Authorization Server 1.3.x OIDC implementation
+- [x] RS256 JWT signing with 90-day key rotation
+- [x] Partner client registration (1-5 B2B clients, redirect URI validation, PKCE mandatory)
+- [x] /.well-known/openid-configuration discovery endpoint
+- [x] /.well-known/jwks.json public key endpoint (auto-rotated)
+- [x] JWT signing key management (encrypt at rest, admin rotate/deactivate/delete APIs)
+- [x] OAuth2 consent screen (openid+profile+email scopes, audit trail)
+- [x] Refresh token reuse detection (revoke family on first replay)
+- [x] Dual-mode JWT validator (HS512 legacy + RS256 OIDC in jwt-auth-autoconfigure)
+- [x] K8s NGINX rate limiting on /oauth2/* (10rps, burst=20)
+- [x] Database migrations (Flyway) for oauth2_registered_client, oauth2_authorization_consent, signing_keys tables
+- [x] Audit integration (oauth2.signing_key.rotated, oauth2.signing_key.deleted, oauth2.authorization_consent.approved)
+- [x] SSO runbooks (sso-partner-integration-guide.md, sso-key-rotation-runbook.md, sso-jwt-rollback-runbook.md)
+
+### Phase 7: Operations (PARTIAL)
 - ✓ Metrics collection (Micrometer/Prometheus) — all 8 services instrumented
 - ✓ Grafana dashboards — JVM Micrometer + Spring Boot HTTP Overview
 - ✓ Custom business counters — auth, booking, payment events

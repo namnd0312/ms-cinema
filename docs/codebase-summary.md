@@ -1,11 +1,12 @@
 # Codebase Summary
 
 **Project:** ms-cinema
-**Generated:** April 2026
+**Generated:** May 2026 (Last Updated: May 29, 2026)
 **Architecture:** 6 Business Services + 2 Shared Libraries + Angular Frontend
 **Java Version:** 21 LTS
 **Spring Boot:** 3.4.3
 **Spring Cloud:** 2024.0.1 (Service Discovery via K8s DNS / Static URIs)
+**SSO IdP:** Spring Authorization Server 1.3.x (RS256 JWT signing, OIDC/OAuth2)
 
 ## Maven Modules Overview
 
@@ -32,7 +33,7 @@ ms-cinema/ (root pom: packaging=pom)
 
 ## auth-service (Port 8081)
 
-**Key Features:** JWT auth, deferred password setup on activation, email activation, account lockout, token rotation, Kafka event publishing
+**Key Features:** JWT auth (HS512), deferred password setup on activation, email activation, account lockout, token rotation, Kafka event publishing, **OIDC/OAuth2 Identity Provider** (RS256 signed tokens, partner consent screen, signing key rotation)
 
 ```
 src/main/java/com/namnd/cinema/
@@ -43,18 +44,50 @@ src/main/java/com/namnd/cinema/
 │   ├── CustomAccesDeniedHandler.java - 403 error responses
 │   ├── OpenApiConfig.java - SpringDoc (Swagger UI)
 │   ├── RedisConfig.java - Token blacklist template
-│   └── RedisKeyPrefix.java - Constants (blacklist:, lock:)
+│   ├── RedisKeyPrefix.java - Constants (blacklist:, lock:)
+│   ├── oauth2/
+│   │   ├── SigningKeyEncryptionConfig.java - RSA encryption for stored keys
+│   │   ├── AuthorizationServerConfig.java - Spring AS bean definitions (OAuth2, OIDC scopes)
+│   │   └── AuditingOAuth2AuthorizationConsentService.java - Consent audit logging
+│   ├── SigningKeyBootstrap.java - Initialize default RS256 signing key
+│   └── (oauth2/ contains OIDC provider configuration)
 ├── controller/
 │   ├── AuthController.java (~230 lines) - login, register, activate, activate-with-password, forgot-password, reset-password, refresh-token, logout
 │   ├── TokenValidationController.java - validate-token (for microservices), /api/users/me
+│   ├── oauth2/
+│   │   └── OAuth2AdminController.java - POST /api/oauth2/admin/signing-key/{id}/rotate, /deactivate, /delete, GET /signing-keys
 │   └── TestController.java - Health check
-├── model/ - User, Role, RefreshToken, PasswordResetToken, ActivationToken
-├── dto/ - LoginRequestDto, JwtResponseDto, RegisterDto, SetupPasswordDto, ForgotPasswordDto, ResetPasswordDto, RefreshTokenRequestDto, TokenRefreshResponseDto, ValidateTokenRequestDto/ResponseDto, UserInfoResponseDto
-├── service/ - JwtService, UserService, RoleService, RefreshTokenService, PasswordResetService, EmailService, ActivationService, BlacklistedTokenService, AccountLockService, RedisService
-├── repository/ - UserRepository, RoleRepository, RefreshTokenRepository, PasswordResetTokenRepository, ActivationTokenRepository
+├── model/
+│   ├── User, Role, RefreshToken, PasswordResetToken, ActivationToken
+│   ├── SigningKey - @Entity id, publicKeyPem, privateKeyPem, keyStatus ENUM, algorithm (RS256), issuedAt, expiresAt, createdBy, createdAt, rotatedAt, @Auditable
+│   └── KeyStatus ENUM [ACTIVE, ROTATED, RETIRED]
+├── dto/
+│   ├── LoginRequestDto, JwtResponseDto, RegisterDto, SetupPasswordDto, ForgotPasswordDto, ResetPasswordDto, RefreshTokenRequestDto, TokenRefreshResponseDto, ValidateTokenRequestDto/ResponseDto, UserInfoResponseDto
+│   └── oauth2/
+│       ├── OAuth2PartnerClientDto - clientId, clientSecret (hashed), redirectUris (validated), scope (openid, profile, email), consentRequired
+│       └── SigningKeyAdminDto - id, publicKey, status, expiresAt, algorithm
+├── service/
+│   ├── JwtService, UserService, RoleService, RefreshTokenService, PasswordResetService, EmailService, ActivationService, BlacklistedTokenService, AccountLockService, RedisService
+│   ├── SigningKeyService (interface) & SigningKeyServiceImpl (~150 lines) - Load active key, rotate() @Auditable, deleteRetired() @Auditable, encrypt/decrypt storage
+│   └── oauth2/
+│       ├── OAuth2PartnerClientService - findByClientId(), validate redirect URIs (case-sensitive, max 5, exact match)
+│       ├── OAuth2ClientSecretService - bcrypt hashing, validation
+│       └── OAuth2TokenExchangeService - Generate OIDC tokens (openid+profile+email scopes, RS256)
+├── repository/
+│   ├── UserRepository, RoleRepository, RefreshTokenRepository, PasswordResetTokenRepository, ActivationTokenRepository
+│   └── SigningKeyRepository - findByStatusAndAlgorithm(), findByKeyStatus()
+├── util/
+│   ├── RsaKeyCryptoUtil.java - RSA 4096 key pair generation, PEM encoding/decoding, encryption/decryption
+│   ├── ClientSecretGenerator.java - Cryptographically secure client secret (32+ chars)
+│   └── RedirectUriValidator.java - PKCE + exact match validation (case-sensitive)
+├── exception/
+│   └── InvalidRedirectUriException.java - Audit-loggable exception for invalid URIs
 └── resources/
-    ├── application.yml - port 8081, k8s profile, static service URIs
-    └── schema.sql - Users, roles, tokens tables (7 tables)
+    ├── application.yml - port 8081, k8s profile, oauth2 config (issuer, signing key password, algorithm)
+    ├── db/migration/
+    │   ├── V202605290001__signing_keys.sql - signing_keys table (public/private keys PEM, status, algorithm, audit fields)
+    │   └── V202605290003__spring_authorization_server_schema.sql - oauth2_registered_client, oauth2_authorization_consent tables
+    └── schema.sql - Users, roles, tokens tables (original 7 tables)
 ```
 
 **Key Services:**
@@ -386,12 +419,14 @@ EventEnvelope<T> {
 
 ## jwt-auth-autoconfigure (Shared Library)
 
-**Purpose:** Reusable JWT validator for downstream services (booking, payment, etc.)
+**Purpose:** Reusable JWT validator for downstream services (booking, payment, etc.). Supports dual-mode validation (HS512 legacy + RS256 OIDC).
 
 **Components:**
 - JwtAutoConfiguration - Spring Boot auto-config (conditional beans)
-- JwtAuthProperties - @ConfigurationProperties(prefix="jwt.auth")
+- JwtAuthProperties - @ConfigurationProperties(prefix="jwt.auth") + dual-mode config (dualModeEnabled, jwksUri, issuer)
 - JwtTokenValidator - Validates HS512 signature, expiration
+- JwtTokenValidatorDualMode - Validates HS512 OR RS256 (via JWKS remote endpoint)
+- RemoteJwksDecoderFactory - Lazy loads JWKS from issuer/.well-known/jwks.json, caches with TTL
 - JwtAuthenticationFilter - Sets SecurityContext from JWT claims (roles, userId)
 - JwtAuthenticatedUser - Principal model
 
@@ -402,13 +437,23 @@ jwt:
     secret: ${namnd.app.jwtSecret}
     publicPaths: ["/actuator/health"]
     enabled: true
+    dualModeEnabled: true                    # NEW: Enable dual-mode validator
+    jwksUri: ${OAUTH2_JWKS_URI}              # NEW: Remote JWKS endpoint (auth-service/.well-known/jwks.json)
+    issuer: ${OAUTH2_ISSUER_URI}             # NEW: Expected issuer claim (http://auth-service:8081)
 ```
 
 **Activation:** @ConditionalOnProperty(name="jwt.auth.enabled", havingValue="true")
 
+**Dual-Mode Behavior:** 
+- If dualModeEnabled=true, validates token against BOTH HS512 (local secret) and RS256 (remote JWKS)
+- First attempts HS512 (fast path), falls back to RS256 if secret fails
+- Used during JWT algorithm cutover: HS512 tokens accepted while issuing new RS256 tokens
+- JWKS cache invalidated after key rotation to fetch fresh keys
+
 **Usage in Downstream Services:**
 - Add jwt-auth-autoconfigure as dependency
 - Configure jwt.auth.secret in application.yml (via JWT_SECRET environment variable)
+- Optional: Enable dualModeEnabled + configure jwksUri/issuer for RS256 support
 - Annotate controller methods with @PreAuthorize("hasRole('ROLE_USER')")
 - JwtAuthenticationFilter auto-wired via auto-config
 
@@ -496,13 +541,20 @@ jwt:
 - **Integration:** Used in showtime-form-dialog and movie-form-dialog for timezone-safe date/time input
 - **Problem Solved:** Prevents timezone offset issues in browser when submitting datetime forms
 
+**OAuth2 Consent Screen (NEW - May 2026, Phase 06):**
+- **oauth-consent.model.ts:** OAuth2ConsentRequest interface (clientName, scopes: ['openid', 'profile', 'email'], requestId)
+- **oauth-consent.service.ts:** Fetches consent details from auth-service (/api/oauth2/consent/{requestId})
+- **oauth-consent.component.ts:** Displays requested scopes, user approves/denies, submits to /api/oauth2/authorize
+- Route: /auth/oauth-consent?requestId=uuid (shown during OIDC authorization code flow)
+- Scope descriptions: openid (receive ID token), profile (name, email), email (email address)
+
 **Lazy-Loaded Routes:**
-- /auth (login, register, setup-password, password reset, OAuth2 callback)
+- /auth (login, register, setup-password, password reset, OAuth2 callback, oauth-consent NEW)
 - /movies (browse, details)
 - /booking (seat selection with grid, real-time updates, suggestions)
 - /payment (Stripe checkout)
 - /profile (user info, bookings, change password)
-- /admin (admin dashboard with tabs, reconciliation tab NEW)
+- /admin (admin dashboard with tabs, reconciliation tab)
 - /notifications (notification history, mark-as-read)
 
 **Password Setup on Activation (Frontend - NEW):**
@@ -613,6 +665,13 @@ docker-compose up --build
 docker build -t auth-service ./auth-service
 docker build -t movie-service ./movie-service
 # ... etc
+
+# Kubernetes Deployment
+kubectl apply -f k8s/configmap.yml
+kubectl apply -f k8s/secrets.yml
+kubectl apply -f k8s/auth-service.yml
+# ... other services
+kubectl apply -f k8s/ingress.yml  # NGINX K8s Ingress with rate-limit on /oauth2/* (10rps, burst=20)
 ```
 
 ## Metrics & Monitoring

@@ -498,7 +498,7 @@ cinema-frontend: Real-Time SSE Connection
 
 ### Audit Logging Flow (@Auditable AOP + @TransactionalEventListener)
 ```
-SERVICE: @Auditable-annotated method (auth/movie/booking/payment)
+SERVICE: @Auditable-annotated method (auth/movie/booking/payment/oauth2)
       ├─ AuditAspect intercepts before method execution
       ├─ Extract userId from JwtAuthenticatedUser principal (reflection-based email())
       ├─ Extract userIp from AuditHttpContext (request IP)
@@ -538,39 +538,6 @@ ADMIN: Query audit logs
               ├─ Query auditdb with indexes (user_id, action, entity_type, created_at)
               ├─ Pagination: 20/page (max 100)
               └─ Return Page<AuditLogResponse> (sorted createdAt DESC)
-```
-
-### Audit Logging Flow (@Auditable AOP)
-```
-SERVICE: @Auditable-annotated method (auth, movie, booking, payment)
-      ├─ Intercept before method execution (AOP aspect)
-      ├─ Capture context (userId from JWT, action type, entityType, entityId)
-      ├─ Execute business logic
-      ├─ Capture afterState (entity post-change)
-      ├─ AuditEventPublisher.publish(AuditEvent)
-      │  └─ KafkaTemplate.send("audit-events", AuditEvent)
-      └─ Return result
-
-audit-service: Kafka Consumer (audit-events topic)
-      ├─ KafkaListener.handleAuditEvent(event)
-      │  ├─ Build AuditLog entity from AuditEvent
-      │  ├─ eventId dedup check (UNIQUE constraint prevents duplicates)
-      │  ├─ Save to auditdb.audit_logs
-      │  └─ Commit Kafka offset
-      │
-      └─ Error Handling: If exception
-         └─ Kafka error handler
-            ├─ 1st retry: 1s delay
-            ├─ 2nd retry: 2s delay
-            ├─ 3rd retry: 4s delay
-            └─ Failure: Send to DLT (audit-events.DLT)
-
-ADMIN: Query audit logs
-      └─► GET /api/audit/logs?userId={id}&action={action}&entityType={type}
-          └─► audit-service AdminAuditLogController
-              ├─ Build Specification from filter params
-              ├─ Query auditdb with indexes (user_id, action, entity_type, created_at)
-              └─ Return Page<AuditLogResponse> (sorted createdAt DESC, max 100/page)
 ```
 
 ## Data Persistence

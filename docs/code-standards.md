@@ -769,6 +769,23 @@ location /ws/ {
 
 **Best Practices:** Chunking (100-1000 records), idempotent processors (safe on restart), SkipListener/RetryListener for failures, @Scheduled cron with spring.batch.job.enabled=false, auto-init with spring.batch.jdbc.initialize-schema=always
 
+## OAuth2 / OIDC Identity Provider Patterns (Phase 06)
+
+**Signing Key Service:** Use @Auditable(action=UPDATE, entityType="SigningKey") on rotate() method. Mark active key ROTATED, mint new ACTIVE key pair (RSA-4096), encrypt private key at rest.
+
+**Partner Client Secrets:** Hash via BCrypt for client_secret_basic HTTP auth. Never log plaintext. Return secret once during registration; cannot be retrieved later.
+
+**Redirect URI Validation:** Enforce exact match (case-sensitive), max 5 URIs per client, PKCE code_challenge mandatory. Throw InvalidRedirectUriException with audit trail on mismatch.
+
+**OAuth2 Consent Audit:** Decorate AuditingOAuth2AuthorizationConsentService.save() with @Auditable(action=CREATE, entityType="oauth2.authorization_consent"). AOP captures consent grant/deny events.
+
+**JWT Algorithm Cutover:** Implement JwtTokenValidatorDualMode in jwt-auth-autoconfigure. Try HS512 first (legacy), fall back to RS256 (OIDC) via JWKS. Enables cutover without downtime.
+
+**Security Standards:**
+- **JWT Signing:** HS512 for legacy internal auth, RS256 for OIDC external partners. Never embed PII. Use JTI for refresh rotation.
+- **Scope Restriction:** OIDC provider issues `openid`, `profile`, `email` only. PKCE mandatory. Refresh token reuse detection: revoke family on replay.
+- **Key Management:** Rotate every 90 days. Encrypt at rest (AES-GCM + PBKDF2). Publish public keys via JWKS (cache 1h, auto-invalidate on rotation). Audit all operations.
+
 ## Deprecated Patterns (Avoid)
 
 | Pattern | Reason | Alternative |

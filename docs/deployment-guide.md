@@ -529,6 +529,22 @@ java -jar /opt/app/auth-service.jar \
 # jdbc:postgresql://prod-db.c123.us-east-1.rds.amazonaws.com:5432/authdb
 ```
 
+### 4a. OAuth2/OIDC Identity Provider Deployment (Phase 06)
+
+**Env Vars (auth-service):** OAUTH2_ISSUER_URI, SIGNING_KEY_ENCRYPTION_PASSWORD (32+ chars), TOKEN_SIGNING_ALGORITHM (RS256), JWT_AUDIENCE, ACCESS_TOKEN_TTL_SECONDS, ID_TOKEN_TTL_SECONDS, REFRESH_TOKEN_TTL_SECONDS (604800).
+
+**Database:** Flyway auto-applies migrations (oauth2_registered_client, oauth2_authorization_consent, signing_keys) on startup. No manual schema setup.
+
+**K8s Ingress Rate Limit:** k8s/ingress.yml annotation (10rps, burst=20) on /oauth2/* endpoints. Returns 429 if exceeded.
+
+**Production SSL:** Enable HTTPS via application-prod.yml: server.ssl.enabled=true, keystore path, secure/httponly/samesite cookies.
+
+**Partner Client Registration:** curl -X POST /api/oauth2/admin/clients (returns clientId + plaintext clientSecret once; store securely).
+
+**Key Rotation:** curl -X POST /api/oauth2/admin/signing-keys/rotate rotates signing key (ACTIVE→ROTATED, mint new). New tokens use new key; existing tokens valid via JWKS cache (1h).
+
+See [sso-key-rotation-runbook.md](./sso-key-rotation-runbook.md) and [sso-jwt-rollback-runbook.md](./sso-jwt-rollback-runbook.md) for procedures.
+
 ### 5. Load Balancer Configuration
 
 **Nginx Reverse Proxy**

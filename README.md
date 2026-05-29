@@ -117,8 +117,12 @@ Error handling: 3 retries, exponential backoff, DLT for failures. Real-time in-a
 - [Code Standards](./docs/code-standards.md) — Spring 3.x patterns, project conventions
 - [System Architecture](./docs/system-architecture.md) — Flows, data model, deployment
 - [API Documentation](./docs/api-documentation.md) — All endpoints & examples
-- [Deployment Guide](./docs/deployment-guide.md) — Docker, AWS, troubleshooting
+- [Deployment Guide](./docs/deployment-guide.md) — Docker, K8s, troubleshooting
 - [Project Roadmap](./docs/project-roadmap.md) — Phases & progress
+- **SSO Identity Provider** (Phase 06, COMPLETE May 29, 2026):
+  - [SSO Partner Integration Guide](./docs/sso-partner-integration-guide.md) — OIDC partner setup, curl/Node/Java examples
+  - [SSO Key Rotation Runbook](./docs/sso-key-rotation-runbook.md) — RS256 signing key lifecycle, rotation procedure
+  - [SSO JWT Rollback Runbook](./docs/sso-jwt-rollback-runbook.md) — Emergency HS512 fallback procedures
 
 ## Configuration
 

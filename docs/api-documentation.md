@@ -142,23 +142,29 @@ Security notes:
 - Password history persisted to `password_history` table with timestamp
 - Initial password seeded to history on user registration
 
-## API Gateway Aggregation
+## Per-Service Swagger / OpenAPI Access via K8s Ingress
 
-The API Gateway (:8080) aggregates OpenAPI docs from all downstream services:
+**Architecture:** No centralized API Gateway. NGINX K8s Ingress routes traffic path-based to individual service instances. Each service publishes its own OpenAPI spec independently.
 
-**How it works:**
-1. API Gateway has its own `OpenApiConfig` (port 8080)
-2. Clients access http://localhost:8080/swagger-ui.html
-3. Gateway's Swagger UI displays routes to each service
-4. Each route shows operations from that service's OpenAPI spec
+**Local Development (Docker Compose):**
+- Nginx reverse proxy (port 80) routes to services by path
+- Access individual Swagger UIs on per-service ports (8081-8086)
+- Example: http://localhost:8081/swagger-ui.html (auth-service)
 
-**Server URLs in Gateway Swagger:**
-- auth-service routes: /api/auth/**, /api/users/**
-- movie-service routes: /api/movies/**
-- booking-service routes: /api/bookings/**
-- payment-service routes: /api/payments/**
-- notification-service routes: /api/notifications/**
-- audit-service routes: /api/audit/** (admin-only)
+**Kubernetes Deployment:**
+- NGINX Ingress Controller (K8s native) routes by path prefix
+- Service URLs via K8s DNS (e.g., auth-service:8081)
+- Per-service Swagger UI accessible via ingress hostname + path
+- Example: https://cinema.example.com/auth/swagger-ui.html (via Ingress rewrite)
+
+**Routing Rules:**
+- `/api/auth/**` → auth-service:8081
+- `/api/movies/**` → movie-service:8082
+- `/api/bookings/**` → booking-service:8083
+- `/api/payments/**` → payment-service:8084
+- `/api/notifications/**` → notification-service:8085
+- `/api/audit/**` → audit-service:8086 (admin-only)
+- `/oauth2/**` → auth-service:8081 (OIDC endpoints, rate-limited 10rps)
 
 ## Service-Specific Documentation
 
@@ -207,6 +213,30 @@ Public, spec-compliant endpoints advertised in `/.well-known/openid-configuratio
 | POST /api/admin/signing-keys/rotate | Bearer JWT, ROLE_ADMIN | Rotate RSA signing key (ACTIVE → RETIRED, mint new ACTIVE) |
 | GET /api/admin/signing-keys | Bearer JWT, ROLE_ADMIN | List ACTIVE + RETIRED keys (metadata only) |
 | DELETE /api/admin/signing-keys/{kid} | Bearer JWT, ROLE_ADMIN | Hard-delete a RETIRED key |
+
+**PKCE Authorization Code Flow Example:**
+```bash
+# 1. Generate PKCE code_challenge (code_challenge_method=S256)
+code_verifier=$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=')
+code_challenge=$(echo -n "$code_verifier" | openssl dgst -sha256 -binary | base64 | tr '+/' '-_' | tr -d '=')
+
+# 2. Redirect user to authorization endpoint
+curl -L "https://auth.example.com/oauth2/authorize?client_id=YOUR_CLIENT_ID&redirect_uri=https://yourapp.com/callback&response_type=code&scope=openid%20profile%20email&code_challenge=$code_challenge&code_challenge_method=S256&state=RANDOM_STATE"
+
+# 3. User grants consent, browser redirects to callback with ?code=AUTH_CODE&state=RANDOM_STATE
+# 4. Exchange auth code for tokens
+curl -X POST https://auth.example.com/oauth2/token \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=authorization_code&code=AUTH_CODE&client_id=YOUR_CLIENT_ID&client_secret=YOUR_CLIENT_SECRET&redirect_uri=https://yourapp.com/callback&code_verifier=$code_verifier"
+
+# Response: { "access_token": "...", "id_token": "...", "refresh_token": "...", "expires_in": 3600 }
+```
+
+**OpenID Configuration Endpoint:**
+```bash
+curl https://auth.example.com/.well-known/openid-configuration | jq
+# Returns: issuer, authorization_endpoint, token_endpoint, userinfo_endpoint, jwks_uri, scopes_supported, etc.
+```
 
 See [sso-partner-integration-guide.md](./sso-partner-integration-guide.md) for the partner-facing flow walkthrough and [sso-key-rotation-runbook.md](./sso-key-rotation-runbook.md) for the rotation procedure.
 
