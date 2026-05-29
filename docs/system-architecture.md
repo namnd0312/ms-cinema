@@ -588,12 +588,84 @@ ADMIN: Query audit logs
 - Redis: token blacklist, seat locks, notification dedup
 - Kafka: event topics (replication factor 3, partitions 1)
 
+## Identity Provider (SSO for B2B Partners) — Phase 06
+
+`auth-service` embeds Spring Authorization Server 1.3.x and acts as an OpenID Connect Identity Provider for 1-5 partner relying parties.
+
+**Public surface (advertised via `/.well-known/openid-configuration`):**
+
+| Endpoint                          | Purpose                                          |
+| --------------------------------- | ------------------------------------------------ |
+| `/oauth2/authorize`               | Authorization-code flow + PKCE                   |
+| `/oauth2/token`                   | Token issuance & refresh                         |
+| `/oauth2/revoke`                  | Token revocation                                 |
+| `/oauth2/jwks`                    | RS256 public keys, cached `max-age=3600`         |
+| `/userinfo`                       | OIDC user-info                                   |
+| `/connect/logout`                 | RP-initiated logout                              |
+| `/oauth/consent`                  | Custom Angular consent screen                    |
+| `/api/admin/oauth-clients/**`     | Admin client lifecycle (PreAuthorize ADMIN)      |
+| `/api/admin/signing-keys/**`      | Admin key rotation (PreAuthorize ADMIN)          |
+
+**Token signing:** RS256, RSA-2048 keys, private key encrypted at rest (AES-GCM + PBKDF2-derived KEK). Rotation via admin endpoint; runbook in [sso-key-rotation-runbook.md](./sso-key-rotation-runbook.md).
+
+**Hardening (Phase 06):**
+
+- PKCE mandatory on every code exchange.
+- Redirect URI strict exact match (case-sensitive, trailing-slash-significant).
+- Refresh-token rotation w/ reuse detection (compromised chain revoked).
+- Per-client-IP NGINX rate limit on `/oauth2/(token|authorize|revoke|introspect)`: 10 rps, burst 20.
+- App-layer HTTPS enforcement in prod profile (defense-in-depth over ingress TLS).
+- CORS allowlist drawn from registered redirect URI origins — no wildcard.
+- Every token issued / revoked / consent grant / consent deny / key rotation → audit event on Kafka topic `audit-events`.
+
+**Partner login sequence:**
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as User
+    participant PA as Partner App
+    participant AS as auth-service (Spring AS)
+    participant DB as Cinema User Store
+    participant RP as Partner Backend
+
+    U->>PA: Click "Login w/ Cinema"
+    PA->>U: 302 to /oauth2/authorize (PKCE challenge)
+    U->>AS: GET /oauth2/authorize
+    AS->>U: Login form (or Google OAuth)
+    U->>AS: Credentials
+    AS->>DB: Validate user
+    DB-->>AS: User profile + roles
+    AS->>U: 302 to /oauth/consent (Angular screen)
+    U->>AS: Approve scopes
+    AS->>U: 302 back to partner redirect_uri w/ code + state
+    U->>PA: callback?code=…&state=…
+    PA->>AS: POST /oauth2/token (code + PKCE verifier + secret)
+    AS-->>PA: id_token + access_token + refresh_token (RS256, signed by ACTIVE kid)
+    PA->>AS: GET /oauth2/jwks  (cache for 1h)
+    PA->>PA: Verify id_token (iss + aud + sig + nonce)
+    PA->>RP: Mint session for user.sub
+```
+
+**Audit event taxonomy (Phase 06):**
+
+| event_type                       | source                                     | when                  |
+| -------------------------------- | ------------------------------------------ | --------------------- |
+| `oauth2.token.issued`            | `OAuth2AuditEventListener`                 | `/oauth2/token` 200   |
+| `oauth2.token.revoked`           | `OAuth2AuditEventListener`                 | `/oauth2/revoke` 200  |
+| `oauth2.consent.granted`         | `AuditingOAuth2AuthorizationConsentService.save`   | Consent persisted     |
+| `oauth2.consent.denied`          | `AuditingOAuth2AuthorizationConsentService.remove` | Consent revoked       |
+| `oauth2.client.created/updated/deleted/secret_rotated` | `OAuth2RegisteredClientServiceImpl` @Auditable | Admin client lifecycle |
+| `oauth2.signing_key.rotated`     | `SigningKeyServiceImpl.rotate` @Auditable          | Key rotation          |
+| `oauth2.signing_key.deleted`     | `SigningKeyServiceImpl.deleteRetired` @Auditable   | RETIRED key deletion  |
+
 ## Security Model
 
-**Authentication:** JWT (JJWT 0.12.6) HS512 symmetric signing
-- Access token: 15 minutes (900000 ms)
-- Refresh token: 7 days (604800000 ms), rotated on each use
-- Token claims: sub (email), roles, userId, iat, exp, jti (unique ID)
+**Authentication:** JWT signed by Spring Authorization Server. **RS256** in default config (RSA-2048, JWKS-published). **HS512** retained as an emergency rollback target via `TOKEN_SIGNING_ALGORITHM=HS512` (dual-mode validator in `jwt-auth-autoconfigure` accepts both).
+- Access token: 15 minutes (900s, configurable `ACCESS_TOKEN_TTL_SECONDS`)
+- ID token: 1 hour (3600s, configurable `ID_TOKEN_TTL_SECONDS`)
+- Refresh token: 14 days (1209600s), rotated on each use, reuse-detected
+- Token claims: sub (email), roles, userId, iss, aud (`JWT_AUDIENCE`), iat, exp, jti
 
 **Authorization:** Spring Security @PreAuthorize method-level
 - Example: `@PreAuthorize("hasRole('ROLE_ADMIN')")`

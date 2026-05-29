@@ -1,0 +1,34 @@
+<div class="consent-container">
+  @if (error(); as e) {
+    <mat-card class="consent-card">
+      <mat-card-content>
+        <p class="error">{{ e }}</p>
+      </mat-card-content>
+    </mat-card>
+  } @else {
+    @if (vm(); as v) {
+      <mat-card class="consent-card">
+        <mat-card-header>
+          <mat-card-title>
+            <strong>{{ v.clientName }}</strong> wants to access your account
+          </mat-card-title>
+          <mat-card-subtitle>Will redirect to: {{ v.redirectHost }}</mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content>
+          <p class="scopes-intro">This app will be able to read:</p>
+          <mat-list>
+            @for (s of v.scopes; track s.id) {
+              <mat-list-item>{{ s.label }}</mat-list-item>
+            }
+          </mat-list>
+        </mat-card-content>
+        <mat-card-actions align="end">
+          <button mat-button (click)="deny()">Deny</button>
+          <button mat-flat-button color="primary" (click)="allow()">Allow</button>
+        </mat-card-actions>
+      </mat-card>
+    } @else {
+      <mat-spinner diameter="48"></mat-spinner>
+    }
+  }
+</div>

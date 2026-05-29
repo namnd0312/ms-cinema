@@ -1,4 +1,6 @@
 spring:
+  flyway:
+    enabled: false
   jpa:
     hibernate:
       ddl-auto: create-drop
@@ -45,6 +47,8 @@ namnd:
     maxFailedAttempts: 5
     lockDurationMs: 900000
     oauth2CallbackUrl: http://localhost:4200/auth/oauth2/callback
+    oauth2IssuerUri: http://localhost:8081
+    signingKeyEncryptionPassword: test-kek-password-not-for-prod-use-32chars
 
 management:
   endpoints:

@@ -32,6 +32,11 @@ spring:
 jwt:
   auth:
     secret: ${JWT_SECRET:kBJb8FEOvTCWEcfZB6RLMM5BLoI8p0FWOWEu7FSZBYn+ItVi7mHRePYCvum5Ic6l4M2nFw+kdl8du99Bxnb7zg==}
+    # Phase 05 cutover: RS256 verification via JWKS; HS512 still accepted during grace.
+    jwks-uri: ${JWT_JWKS_URI:http://auth-service:8081/oauth2/jwks}
+    issuer-uri: ${JWT_ISSUER_URI:http://localhost:8081}
+    audience: ${JWT_AUDIENCE:ms-cinema-internal}
+    dual-mode-enabled: ${JWT_DUAL_MODE_ENABLED:true}
     public-paths:
       - /actuator/health
       - /actuator/prometheus

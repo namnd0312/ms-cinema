@@ -14,6 +14,11 @@ spring:
     url: jdbc:postgresql://localhost:5432/testdb
     username: postgres
     password: postgres
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 0
+    locations: classpath:db/migration
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -48,6 +53,21 @@ namnd:
     maxFailedAttempts: ${MAX_FAILED_ATTEMPTS:5}
     lockDurationMs: ${LOCK_DURATION_MS:900000}
     oauth2CallbackUrl: ${OAUTH2_CALLBACK_URL:http://localhost:4200/auth/oauth2/callback}
+    # OIDC issuer URI advertised to partner relying parties (token `iss` claim, discovery doc).
+    # Used in Phase 02+ (Spring AS); set here for env wiring consistency.
+    oauth2IssuerUri: ${OAUTH2_ISSUER_URI:http://localhost:8081}
+    # KEK password for AES-GCM encrypting RSA private keys at rest. PBKDF2-derived.
+    # MUST be a strong random string in production (32+ chars). Rotate by re-encrypting all keys.
+    signingKeyEncryptionPassword: ${SIGNING_KEY_ENCRYPTION_PASSWORD:dev-kek-change-me-in-production-min-32-chars}
+    # OAuth2/OIDC token TTLs (Phase 02). Applied as defaults to new RegisteredClients.
+    accessTokenTtlSeconds: ${ACCESS_TOKEN_TTL_SECONDS:900}
+    idTokenTtlSeconds: ${ID_TOKEN_TTL_SECONDS:3600}
+    refreshTokenTtlSeconds: ${REFRESH_TOKEN_TTL_SECONDS:1209600}
+    # Phase 05 cutover: RS256 default; emergency rollback override = HS512.
+    # Resource services accept BOTH algs via the dual-mode shared lib (Phase 01).
+    tokenSigningAlgorithm: ${TOKEN_SIGNING_ALGORITHM:RS256}
+    # Audience claim added to RS256-issued internal tokens. Resource services should validate against this.
+    jwtAudience: ${JWT_AUDIENCE:ms-cinema-internal}
 
 management:
   endpoints:

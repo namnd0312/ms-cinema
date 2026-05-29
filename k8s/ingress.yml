@@ -13,6 +13,16 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-send-timeout: "86400"
     # SSE: disable buffering for streaming responses
     nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    # Phase 06 hardening: per-client-IP rate limit for OAuth2 sensitive endpoints.
+    # NGINX-level guard is sufficient for 1-5 partners; revisit Bucket4j if/when fleet grows.
+    # Defaults: 10 rps sustained, burst 20 without delay. Tune via Helm values in higher envs.
+    nginx.ingress.kubernetes.io/server-snippet: |
+      limit_req_zone $binary_remote_addr zone=oauth_sensitive:10m rate=10r/s;
+      location ~* ^/oauth2/(token|authorize|revoke|introspect) {
+        limit_req zone=oauth_sensitive burst=20 nodelay;
+        limit_req_status 429;
+        proxy_pass http://upstream_balancer;
+      }
 spec:
   ingressClassName: nginx
   rules:

@@ -179,6 +179,37 @@ The API Gateway (:8080) aggregates OpenAPI docs from all downstream services:
 | POST /api/auth/validate-token | none | Validate JWT (for downstream services) |
 | GET /api/users/me | Bearer JWT | Get current user profile |
 
+#### auth-service — OAuth2 / OIDC Identity Provider (Phase 02-06)
+
+Public, spec-compliant endpoints advertised in `/.well-known/openid-configuration`.
+
+| Endpoint | Auth | Description |
+|----------|------|-------------|
+| GET /.well-known/openid-configuration | public | OIDC discovery document |
+| GET /oauth2/authorize | session | Authorization-code + PKCE flow entry point |
+| POST /oauth2/token | client_secret_basic | Token issuance (auth-code, refresh) |
+| POST /oauth2/revoke | client_secret_basic | Token revocation |
+| GET /oauth2/jwks | public | RS256 public keys (Cache-Control max-age=3600) |
+| GET /userinfo | Bearer (id_token) | OIDC user-info |
+| GET /connect/logout | session | RP-initiated logout |
+| GET /oauth/consent | session | Consent screen view-model (Angular) |
+| GET /api/oauth/consent | session | Consent view-model JSON for the Angular SPA |
+
+#### auth-service — OAuth2 Admin (Phase 03 + 06)
+
+| Endpoint | Auth | Description |
+|----------|------|-------------|
+| POST /api/admin/oauth-clients | Bearer JWT, ROLE_ADMIN | Register a partner client (returns plaintext secret ONCE) |
+| GET /api/admin/oauth-clients/{clientId} | Bearer JWT, ROLE_ADMIN | View client (no secret) |
+| PATCH /api/admin/oauth-clients/{clientId} | Bearer JWT, ROLE_ADMIN | Patch metadata |
+| POST /api/admin/oauth-clients/{clientId}/rotate-secret | Bearer JWT, ROLE_ADMIN | Rotate client_secret |
+| DELETE /api/admin/oauth-clients/{clientId} | Bearer JWT, ROLE_ADMIN | Disable client |
+| POST /api/admin/signing-keys/rotate | Bearer JWT, ROLE_ADMIN | Rotate RSA signing key (ACTIVE → RETIRED, mint new ACTIVE) |
+| GET /api/admin/signing-keys | Bearer JWT, ROLE_ADMIN | List ACTIVE + RETIRED keys (metadata only) |
+| DELETE /api/admin/signing-keys/{kid} | Bearer JWT, ROLE_ADMIN | Hard-delete a RETIRED key |
+
+See [sso-partner-integration-guide.md](./sso-partner-integration-guide.md) for the partner-facing flow walkthrough and [sso-key-rotation-runbook.md](./sso-key-rotation-runbook.md) for the rotation procedure.
+
 ### movie-service (/api/movies, /api/comments)
 
 **Movie Management:**

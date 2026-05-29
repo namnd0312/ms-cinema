@@ -13,6 +13,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.core.Ordered;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
@@ -30,10 +31,48 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @EnableConfigurationProperties(JwtAuthProperties.class)
 public class JwtAutoConfiguration {
 
-    @Bean
-    @ConditionalOnMissingBean
-    public JwtTokenValidator jwtTokenValidator(JwtAuthProperties properties) {
+    /**
+     * Legacy HS512 validator -- always created so the v0.0.1 contract is preserved
+     * regardless of whether jwks-uri is configured.
+     */
+    @Bean(name = "legacyHs512Validator")
+    @ConditionalOnMissingBean(name = "legacyHs512Validator")
+    public JwtTokenValidator legacyHs512Validator(JwtAuthProperties properties) {
         return new JwtTokenValidator(properties.getSecret());
+    }
+
+    /**
+     * RS256 verifier — only present when {@code jwt.auth.jwks-uri} is set.
+     * Without it the dual-mode dispatcher behaves like pure HS512.
+     */
+    @Bean
+    @ConditionalOnMissingBean(NimbusJwtDecoder.class)
+    @ConditionalOnProperty(prefix = "jwt.auth", name = "jwks-uri")
+    public NimbusJwtDecoder rs256JwtDecoder(JwtAuthProperties properties) {
+        return RemoteJwksDecoderFactory.build(
+                properties.getJwksUri(),
+                properties.getIssuerUri(),
+                properties.getAudience());
+    }
+
+    /**
+     * Primary {@link JwtTokenValidator} bean is the dual-mode dispatcher.
+     * Marked {@code @Primary} so the filter receives it (not the legacy delegate)
+     * when both beans coexist in the context.
+     */
+    @Bean(name = "jwtTokenValidator")
+    @org.springframework.context.annotation.Primary
+    @ConditionalOnMissingBean(name = "jwtTokenValidator")
+    public JwtTokenValidator jwtTokenValidator(
+            JwtAuthProperties properties,
+            JwtTokenValidator legacyHs512Validator,
+            org.springframework.beans.factory.ObjectProvider<NimbusJwtDecoder> rs256DecoderProvider) {
+        NimbusJwtDecoder rs256 = rs256DecoderProvider.getIfAvailable();
+        return new JwtTokenValidatorDualMode(
+                legacyHs512Validator,
+                rs256,
+                properties.isDualModeEnabled(),
+                properties.getSecret());
     }
 
     @Bean

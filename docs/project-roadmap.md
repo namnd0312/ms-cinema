@@ -317,6 +317,20 @@ MS Cinema is a comprehensive cinema ticket booking platform built on Spring Boot
 - **Priority:** Was LOW, now COMPLETE
 - **Implementation Time:** ~7 days
 
+**FR-4.3b: SSO Identity Provider for B2B Partners (COMPLETE ✓ May 29, 2026)**
+- ✓ Spring Authorization Server 1.3.x embedded in `auth-service` — OIDC-only (openid+profile+email)
+- ✓ RSA-2048 signing keys; private key encrypted at rest (AES-GCM + PBKDF2-derived KEK)
+- ✓ JWT migration HS512 → RS256 via dual-mode validator in `jwt-auth-autoconfigure` shared lib
+- ✓ Admin REST API for partner client lifecycle (BCrypt secret, strict redirect URI validation)
+- ✓ Angular Material consent screen w/ anti-spoofing (display values from DB only)
+- ✓ Phase 06 hardening: PKCE mandatory, refresh-token reuse detection, NGINX rate-limit (10rps), HTTPS-enforced prod profile, CORS allowlist from registered redirects
+- ✓ Admin signing-key rotation endpoint (`/api/admin/signing-keys/rotate`) + runbook
+- ✓ Audit events for token-issued/revoked, consent grant/deny, client + key lifecycle
+- ✓ Partner integration guide w/ curl + Node + Java samples
+- **Status:** COMPLETE (May 29, 2026) — operational items (conformance suite run, staging drill, partner pilot) tracked separately
+- **Priority:** P1
+- **Implementation Time:** ~3-4 weeks (6 phases)
+
 **FR-4.4: Distributed Tracing**
 - OpenTelemetry integration
 - Correlation IDs on all requests (X-Correlation-ID)

@@ -1,0 +1,28 @@
+# Production profile overrides (Phase 06 hardening).
+# Activate with SPRING_PROFILES_ACTIVE=prod on the K8s deployment.
+#
+# - HTTPS enforced at the application layer via SecurityConfig (requiresSecure()) in addition
+#   to TLS termination at the NGINX ingress (defense-in-depth).
+# - Session cookie marked secure + same-site=lax so it never traverses an http:// request.
+# - forward-headers-strategy=framework so Spring honours X-Forwarded-Proto from the ingress
+#   when computing redirect URIs and Authorization Server discovery URLs.
+server:
+  forward-headers-strategy: framework
+  servlet:
+    session:
+      cookie:
+        secure: true
+        http-only: true
+        same-site: lax
+
+# Hibernate must NOT auto-mutate the schema in prod; rely on Flyway only.
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+
+namnd:
+  app:
+    # Enforce HTTPS-only token endpoints. Read by SecurityConfig.
+    requireSsl: true

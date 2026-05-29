@@ -8,7 +8,10 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import com.namnd.cinema.exception.InvalidRedirectUriException;
+
 import java.util.Map;
+import java.util.NoSuchElementException;
 
 /**
  * Catches unhandled exceptions and logs them at ERROR level.
@@ -37,5 +40,29 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(Map.of("status", 404, "error", "Not Found",
                         "message", "No endpoint mapped for: " + ex.getResourcePath()));
+    }
+
+    /** Strict redirect_uri policy rejection (Phase 03 admin client management). */
+    @ExceptionHandler(InvalidRedirectUriException.class)
+    public ResponseEntity<Map<String, Object>> handleInvalidRedirectUri(InvalidRedirectUriException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(Map.of("status", 400, "error", "invalid_redirect_uri",
+                        "message", ex.getMessage()));
+    }
+
+    /** Missing OAuth2 client (or any other missing-element domain miss). */
+    @ExceptionHandler(NoSuchElementException.class)
+    public ResponseEntity<Map<String, Object>> handleNoSuchElement(NoSuchElementException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(Map.of("status", 404, "error", "not_found",
+                        "message", ex.getMessage()));
+    }
+
+    /** Validation errors raised by service layer (e.g. scope subset checks). */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, Object>> handleIllegalArg(IllegalArgumentException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(Map.of("status", 400, "error", "bad_request",
+                        "message", ex.getMessage()));
     }
 }

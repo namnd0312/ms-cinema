@@ -31,5 +31,11 @@ export const routes: Routes = [
     path: 'notifications',
     loadChildren: () => import('./features/notifications/notifications.routes').then(m => m.NOTIFICATIONS_ROUTES)
   },
+  {
+    // OAuth2/OIDC consent screen — Spring AS redirects here when user-consent is required.
+    path: 'oauth/consent',
+    loadComponent: () =>
+      import('./features/oauth-consent/oauth-consent.component').then(m => m.OauthConsentComponent)
+  },
   { path: '**', component: NotFoundComponent }
 ];

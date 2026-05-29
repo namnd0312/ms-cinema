@@ -1,11 +1,41 @@
 # Project Changelog
 
 **Project:** ms-cinema
-**Updated:** May 9, 2026
+**Updated:** May 29, 2026
 
 ## Version 0.0.1-SNAPSHOT
 
 ### [Unreleased]
+
+#### SSO Identity Provider — Phase 06: Hardening + Partner Onboarding (COMPLETE ✓) — May 29, 2026
+- **Feature complete:** Spring Authorization Server 1.3.x embedded in `auth-service` now serves as production OIDC IdP for B2B partners.
+- **BREAKING (shared lib):** `jwt-auth-autoconfigure` bumped to v0.1.0 — dual-mode validator (HS512 + RS256) replaces HS512-only path. Resource services must re-build to consume; runtime behavior is backward compatible (HS512 tokens still accepted until rollback flag flipped).
+- **New admin endpoints:**
+  - `POST /api/admin/signing-keys/rotate` — mint new ACTIVE RSA-2048, retire current
+  - `GET /api/admin/signing-keys` — list ACTIVE + RETIRED
+  - `DELETE /api/admin/signing-keys/{kid}` — hard-delete RETIRED key
+- **Hardening applied:**
+  - Refresh-token rotation w/ reuse detection (`reuseRefreshTokens=false`)
+  - Per-client-IP NGINX rate limit (10 rps, burst 20) on `/oauth2/(token|authorize|revoke|introspect)`
+  - App-layer HTTPS enforcement in `application-prod.yml` (defense-in-depth over ingress TLS)
+  - CORS allowlist drawn from registered redirect URI origins (no wildcard)
+  - Secure + HttpOnly + SameSite=lax session cookie in prod
+  - `forward-headers-strategy=framework` so AS honours `X-Forwarded-Proto`
+- **Audit trail wired:** `oauth2.token.issued`, `oauth2.token.revoked`, `oauth2.consent.granted`, `oauth2.consent.denied`, `oauth2.signing_key.rotated`, `oauth2.signing_key.deleted` flow to Kafka topic `audit-events`.
+- **New files:**
+  - `auth-service/.../controller/oauth2/SigningKeyAdminController.java`
+  - `auth-service/.../config/oauth2/OAuth2AuditEventListener.java`
+  - `auth-service/.../config/oauth2/AuditingOAuth2AuthorizationConsentService.java`
+  - `auth-service/.../config/oauth2/OAuth2CorsConfigurationSource.java`
+  - `auth-service/src/main/resources/application-prod.yml`
+- **K8s:** `k8s/ingress.yml` — added rate-limit `server-snippet` annotation.
+- **Docs added:**
+  - `docs/sso-key-rotation-runbook.md` — quarterly rotation + emergency procedure
+  - `docs/sso-partner-integration-guide.md` — copy-pasteable partner onboarding
+- **Docs updated:**
+  - `docs/system-architecture.md` — Identity Provider section + sequence diagram + audit taxonomy
+  - `docs/api-documentation.md` — OAuth2 + admin endpoint tables
+- **Deferred (operational):** OIDC Conformance Suite run, staging rotation drill, NGINX rate-limit load test, trusted partner pilot — tracked in Phase 06 Todo list.
 
 #### Distributed Tracing Migration: Zipkin → OpenTelemetry + Grafana Tempo (COMPLETE ✓) — May 9, 2026
 - **Pipeline Change:** Replaced legacy Zipkin tracing with industry-standard OTel pipeline
